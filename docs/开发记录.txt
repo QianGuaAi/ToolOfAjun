@@ -1,0 +1,56 @@
+# 开发记录
+
+## [2026-04-17] 项目初始化
+- **需求摘要**: 初始化个人常用功能小工具项目。
+- **实际修改**:
+    - 确定技术栈为 .NET Framework 4.8 + WPF + Material Design。
+    - 在 `c:\exe` 目录下创建 `AGENTS.md` 规范文档。
+    - 建立基础项目目录结构 (`src`, `docs`, `data`)。
+- **涉及文件**:
+    - `c:\exe\AGENTS.md`
+    - `c:\exe\docs\开发记录.txt`
+
+## [2026-04-17] 项目编译与打包
+- **需求摘要**: 将项目编译为单一可执行文件（Single EXE）。
+- **实际修改**:
+    - 配置 `FodyWeavers.xml` 并启用 `Costura.Fody` 插件。
+    - 修改 `.csproj` 以将 SQLite 原生 DLL (`SQLite.Interop.dll`) 嵌入为资源。
+    - 使用 MSBuild 18.0 (VS 2026) 成功完成 Release 模式编译。
+- **涉及文件**:
+    - `src/MyTools/MyTools.csproj`
+    - `src/MyTools/FodyWeavers.xml`
+    - `src/MyTools/bin/Release/net48/MyTools.exe`
+- **结果**: 生成了包含所有依赖的单文件 EXE（约 10.6MB）。
+
+## [2026-04-17] 新增 WireGuard 连接功能
+- **需求摘要**: 添加 WireGuard 客户端功能，支持配置导入和连接控制。
+- **实际修改**:
+    - 创建 `WireGuardService.cs`，实现基于 `wireguard.exe` 的服务管理。
+    - 更新 `MainViewModel.cs`，添加连接状态管理逻辑。
+    - 更新 `MainWindow.xaml`，设计现代化的 VPN 控制面板，增加高级设置弹窗。
+    - 在 `docs/功能说明.md` 中补充 VPN 逻辑和集成模式说明。
+    - 增加 `NativeBinaries` 目录支持，实现不依赖系统安装的“绿色版”VPN 模式。
+- **涉及文件**:
+    - `src/MyTools/Services/WireGuardService.cs`
+    - `src/MyTools/ViewModels/MainViewModel.cs`
+    - `src/MyTools/MainWindow.xaml`
+    - `src/MyTools/NativeBinaries/README.txt`
+    - `docs/功能说明.md`
+
+## [2026-04-20] 新增系统托盘与最小化至托盘功能
+- **需求摘要**: 点击窗口关闭按钮时不退出程序，而是隐藏到系统托盘。
+- **实际修改**:
+    - 引入 `Hardcodet.NotifyIcon.Wpf` 库，实现 WPF 原生托盘图标。
+    - 生成并嵌入 `AppIcon.png` 作为程序资源和托盘图标。
+    - 修改 `App.xaml.cs`，增加 `IsExiting` 全局标志位。
+    - 重写 `MainWindow.xaml.cs` 中的 `OnClosing` 事件，实现点击 "X" 时隐藏窗口的功能。
+    - 更新 `MainWindow.xaml`，添加 `TaskbarIcon` 组件及配套的托盘右键菜单（支持显示/退出）。
+    - 更新 `MainViewModel.cs`，添加 `RestoreCommand` 和 `ExitCommand` 逻辑。
+- **涉及文件**:
+    - `src/MyTools/MyTools.csproj`
+    - `src/MyTools/App.xaml.cs`
+    - `src/MyTools/MainWindow.xaml`
+    - `src/MyTools/MainWindow.xaml.cs`
+    - `src/MyTools/ViewModels/MainViewModel.cs`
+    - `src/MyTools/Resources/AppIcon.png`
+    - `docs/功能说明.md`

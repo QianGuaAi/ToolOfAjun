@@ -1,0 +1,454 @@
+<mah:MetroWindow x:Class="MyTools.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:mah="http://metro.mahapps.com/winfx/xaml/controls"
+        xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+        xmlns:viewModels="clr-namespace:MyTools.ViewModels"
+        xmlns:tb="clr-namespace:Hardcodet.Wpf.TaskbarNotification;assembly=Hardcodet.NotifyIcon.Wpf"
+        Title="阿君的工具" Height="500" Width="700"
+        WindowStartupLocation="CenterScreen"
+        GlowBrush="{DynamicResource MahApps.Brushes.Accent}"
+        Background="{DynamicResource MaterialDesignPaper}"
+        Icon="/Resources/AppIcon.png">
+    
+    <Window.DataContext>
+        <viewModels:MainViewModel />
+    </Window.DataContext>
+
+    <Window.Resources>
+        <viewModels:StatusToColorConverter x:Key="StatusToColorConverter" />
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+        
+        <!-- Tray Context Menu -->
+        <ContextMenu x:Key="TrayMenu" materialDesign:MenuAssist.TopLevelMenuItemHeight="40">
+            <MenuItem Header="显示窗口" Command="{Binding RestoreCommand}">
+                <MenuItem.Icon>
+                    <materialDesign:PackIcon Kind="WindowMaximize" />
+                </MenuItem.Icon>
+            </MenuItem>
+            <Separator />
+            <MenuItem Header="退出程序" Command="{Binding ExitCommand}">
+                <MenuItem.Icon>
+                    <materialDesign:PackIcon Kind="ExitToApp" Foreground="Red" />
+                </MenuItem.Icon>
+            </MenuItem>
+        </ContextMenu>
+
+        <ContentControl x:Key="HomeView">
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                <materialDesign:PackIcon Kind="ViewDashboard" Width="64" Height="64" HorizontalAlignment="Center" Opacity="0.3"/>
+                <TextBlock Text="欢迎使用 MyTools" Style="{StaticResource MaterialDesignHeadline4TextBlock}" Margin="0,20" Opacity="0.5"/>
+                <TextBlock Text="从左侧菜单选择功能以开始" HorizontalAlignment="Center" Opacity="0.5"/>
+            </StackPanel>
+        </ContentControl>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="200"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- Taskbar Icon -->
+        <tb:TaskbarIcon ToolTipText="阿君的工具"
+                        Visibility="Visible"
+                        ContextMenu="{StaticResource TrayMenu}"
+                        DoubleClickCommand="{Binding RestoreCommand}">
+            <tb:TaskbarIcon.IconSource>
+                <DrawingImage>
+                    <DrawingImage.Drawing>
+                        <GeometryDrawing Brush="#673AB7" Geometry="M12,2L4.5,20.29L5.21,21L12,18L18.79,21L19.5,20.29L12,2Z" />
+                    </DrawingImage.Drawing>
+                </DrawingImage>
+            </tb:TaskbarIcon.IconSource>
+        </tb:TaskbarIcon>
+
+        <!-- Sidebar -->
+        <Border Background="{DynamicResource MaterialDesignPaper}" BorderBrush="{DynamicResource MaterialDesignDivider}" BorderThickness="0,0,1,0">
+            <StackPanel Margin="0,20">
+                <TextBlock Text="阿君的工具" Margin="20,0,0,30" FontWeight="Bold" Foreground="{DynamicResource PrimaryHueMidBrush}" FontSize="18"/>
+                
+                <Button Style="{StaticResource MaterialDesignFlatButton}" 
+                        Command="{Binding ShowNetworkCommand}"
+                        HorizontalContentAlignment="Left" Height="50">
+                    <StackPanel Orientation="Horizontal">
+                        <materialDesign:PackIcon Kind="Lan" Margin="0,0,15,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="当前网络" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+
+                <Button Style="{StaticResource MaterialDesignFlatButton}" 
+                        Command="{Binding ShowStartupCommand}"
+                        HorizontalContentAlignment="Left" Height="50">
+                    <StackPanel Orientation="Horizontal">
+                        <materialDesign:PackIcon Kind="RocketLaunch" Margin="0,0,15,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="自启管理" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+
+                <Button Style="{StaticResource MaterialDesignFlatButton}" 
+                        Command="{Binding ShowWireGuardCommand}"
+                        HorizontalContentAlignment="Left" Height="50">
+                    <StackPanel Orientation="Horizontal">
+                        <materialDesign:PackIcon Kind="ShieldLock" Margin="0,0,15,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="VPN" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+
+                <Button Style="{StaticResource MaterialDesignFlatButton}" 
+                        Command="{Binding ShowSystemCommand}"
+                        HorizontalContentAlignment="Left" Height="50">
+                    <StackPanel Orientation="Horizontal">
+                        <materialDesign:PackIcon Kind="AutoFix" Margin="0,0,15,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="系统优化" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+        </Border>
+
+        <!-- Main Content -->
+        <Grid Grid.Column="1" Background="{DynamicResource MaterialDesignFlatBackground}">
+            <!-- Home View -->
+            <ContentControl Content="{StaticResource HomeView}">
+                <ContentControl.Style>
+                    <Style TargetType="ContentControl">
+                        <Setter Property="Visibility" Value="Collapsed"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding CurrentModule}" Value="Home">
+                                <Setter Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </ContentControl.Style>
+            </ContentControl>
+
+            <!-- Network View -->
+            <Grid Margin="20">
+                <Grid.Style>
+                    <Style TargetType="Grid">
+                        <Setter Property="Visibility" Value="Collapsed"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding CurrentModule}" Value="Network">
+                                <Setter Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Grid.Style>
+                
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <StackPanel Orientation="Horizontal" Grid.Row="0" Margin="0,0,0,20">
+                    <TextBlock Text="当前网络信息" Style="{StaticResource MaterialDesignHeadline5TextBlock}" VerticalAlignment="Center"/>
+                    <Button Style="{StaticResource MaterialDesignFloatingActionMiniButton}" 
+                            Command="{Binding RefreshCommand}"
+                            Margin="20,0,0,0" ToolTip="刷新">
+                        <materialDesign:PackIcon Kind="Refresh"/>
+                    </Button>
+                </StackPanel>
+
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                    <ItemsControl ItemsSource="{Binding NetworkList}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <materialDesign:Card Margin="0,0,0,15" Padding="15" materialDesign:ElevationAssist.Elevation="Dp2">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        
+                                        <materialDesign:PackIcon Kind="Lan" Width="32" Height="32" 
+                                                              VerticalAlignment="Top" HorizontalAlignment="Center"
+                                                              Foreground="{Binding Status, Converter={StaticResource StatusToColorConverter}}" />
+
+                                        <StackPanel Grid.Column="1" Margin="15,0,0,0">
+                                            <TextBlock Text="{Binding Name}" Style="{StaticResource MaterialDesignSubtitle1TextBlock}" FontWeight="Bold"/>
+                                            <TextBlock Text="{Binding Description}" Style="{StaticResource MaterialDesignCaptionTextBlock}" Opacity="0.6" Margin="0,2,0,10"/>
+                                            
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto"/>
+                                                    <RowDefinition Height="Auto"/>
+                                                    <RowDefinition Height="Auto"/>
+                                                </Grid.RowDefinitions>
+
+                                                <TextBlock Text="IP 地址:" Grid.Row="0" Style="{StaticResource MaterialDesignCaptionTextBlock}" Margin="0,0,10,0"/>
+                                                <TextBlock Text="{Binding IpAddress}" Grid.Row="0" Grid.Column="1" TextWrapping="Wrap" Margin="0,0,0,5"/>
+
+                                                <TextBlock Text="网关:" Grid.Row="1" Style="{StaticResource MaterialDesignCaptionTextBlock}" Margin="0,0,10,0"/>
+                                                <TextBlock Text="{Binding Gateway}" Grid.Row="1" Grid.Column="1" TextWrapping="Wrap" Margin="0,0,0,5"/>
+
+                                                <TextBlock Text="DNS:" Grid.Row="2" Style="{StaticResource MaterialDesignCaptionTextBlock}" Margin="0,0,10,0"/>
+                                                <TextBlock Text="{Binding Dns}" Grid.Row="2" Grid.Column="1" TextWrapping="Wrap"/>
+                                            </Grid>
+                                        </StackPanel>
+                                    </Grid>
+                                </materialDesign:Card>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Grid>
+
+            <!-- Startup View -->
+            <Grid Margin="20">
+                <Grid.Style>
+                    <Style TargetType="Grid">
+                        <Setter Property="Visibility" Value="Collapsed"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding CurrentModule}" Value="Startup">
+                                <Setter Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Grid.Style>
+
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <StackPanel Orientation="Horizontal" Grid.Row="0" Margin="0,0,0,20">
+                    <TextBlock Text="开机启动管理" Style="{StaticResource MaterialDesignHeadline5TextBlock}" VerticalAlignment="Center"/>
+                    <Button Style="{StaticResource MaterialDesignFloatingActionMiniButton}" 
+                            Command="{Binding RefreshCommand}"
+                            Margin="20,0,0,0" ToolTip="刷新">
+                        <materialDesign:PackIcon Kind="Refresh"/>
+                    </Button>
+                </StackPanel>
+
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                    <ItemsControl ItemsSource="{Binding StartupList}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <materialDesign:Card Margin="0,0,0,10" Padding="15">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding Name}" Style="{StaticResource MaterialDesignSubtitle1TextBlock}" FontWeight="Bold"/>
+                                            <TextBlock Text="{Binding Command}" Style="{StaticResource MaterialDesignCaptionTextBlock}" Opacity="0.6" Margin="0,5"/>
+                                            <TextBlock Text="{Binding Location}" Style="{StaticResource MaterialDesignCaptionTextBlock}" Foreground="{DynamicResource PrimaryHueMidBrush}"/>
+                                        </StackPanel>
+
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Orientation="Horizontal">
+                                            <Button Command="{Binding DataContext.ToggleStartupCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                    CommandParameter="{Binding}"
+                                                    Width="80" Margin="0,0,10,0">
+                                                <Button.Style>
+                                                    <Style TargetType="Button" BasedOn="{StaticResource MaterialDesignOutlinedButton}">
+                                                        <Setter Property="Content" Value="禁用"/>
+                                                        <Setter Property="Foreground" Value="Red"/>
+                                                        <Setter Property="BorderBrush" Value="Red"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsEnabled}" Value="False">
+                                                                <Setter Property="Content" Value="启用"/>
+                                                                <Setter Property="Foreground" Value="Green"/>
+                                                                <Setter Property="BorderBrush" Value="Green"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Button.Style>
+                                            </Button>
+
+                                            <Button Style="{StaticResource MaterialDesignIconButton}" 
+                                                    Command="{Binding DataContext.DeleteStartupCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                    CommandParameter="{Binding}"
+                                                    ToolTip="永久删除">
+                                                <materialDesign:PackIcon Kind="Delete" Foreground="Gray"/>
+                                            </Button>
+                                        </StackPanel>
+                                    </Grid>
+                                </materialDesign:Card>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Grid>
+
+            <!-- WireGuard View -->
+            <Grid Margin="20">
+                <Grid.Style>
+                    <Style TargetType="Grid">
+                        <Setter Property="Visibility" Value="Collapsed"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding CurrentModule}" Value="WireGuard">
+                                <Setter Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Grid.Style>
+
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <StackPanel Orientation="Horizontal" Grid.Row="0" Margin="0,0,0,20">
+                    <TextBlock Text="VPN 连接" Style="{StaticResource MaterialDesignHeadline5TextBlock}" VerticalAlignment="Center"/>
+                    <Border Background="{DynamicResource PrimaryHueLightBrush}" 
+                            CornerRadius="4" Padding="8,4" Margin="20,0,0,0"
+                            VerticalAlignment="Center">
+                        <TextBlock Text="{Binding WgStatusText}" Foreground="White" FontWeight="Bold"/>
+                    </Border>
+                    <Button Style="{StaticResource MaterialDesignIconButton}" 
+                            Command="{Binding ToggleWgSettingsCommand}"
+                            Margin="10,0,0,0" ToolTip="设置">
+                        <materialDesign:PackIcon Kind="Settings"/>
+                    </Button>
+                </StackPanel>
+
+                <Grid Grid.Row="1">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <materialDesign:Card Padding="15" Margin="0,0,0,15">
+                        <StackPanel>
+                            <TextBox materialDesign:HintAssist.Hint="接口名称 (e.g. wg0)" 
+                                     Text="{Binding WgInterfaceName}"
+                                     Style="{StaticResource MaterialDesignFloatingHintTextBox}"
+                                     Margin="0,0,0,10"/>
+                            <TextBlock Text="配置内容 (.conf):" Style="{StaticResource MaterialDesignCaptionTextBlock}" Margin="0,10,0,5"/>
+                            <TextBox Text="{Binding WgConfig, UpdateSourceTrigger=PropertyChanged}"
+                                     AcceptsReturn="True"
+                                     TextWrapping="Wrap"
+                                     Height="200"
+                                     VerticalScrollBarVisibility="Auto"
+                                     FontFamily="Consolas"
+                                     Style="{StaticResource MaterialDesignOutlinedTextBox}"
+                                     materialDesign:HintAssist.Hint="[Interface]&#x0a;PrivateKey = ...&#x0a;Address = ...&#x0a;&#x0a;[Peer]&#x0a;PublicKey = ...&#x0a;Endpoint = ..."/>
+                        </StackPanel>
+                    </materialDesign:Card>
+
+                    <Button Grid.Row="2" 
+                            Command="{Binding ToggleWireGuardCommand}"
+                            Height="50">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource MaterialDesignRaisedButton}">
+                                <Setter Property="Content" Value="启动连接"/>
+                                <Setter Property="Background" Value="{DynamicResource PrimaryHueMidBrush}"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsWgConnected}" Value="True">
+                                        <Setter Property="Content" Value="断开连接"/>
+                                        <Setter Property="Background" Value="#E53935"/>
+                                        <Setter Property="BorderBrush" Value="#E53935"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+
+                    <!-- Settings Overlay -->
+                    <materialDesign:Card Grid.Row="0" Grid.RowSpan="3" 
+                                        Background="{DynamicResource MaterialDesignPaper}"
+                                        Visibility="{Binding IsWgSettingsOpen, Converter={StaticResource BoolToVis}}"
+                                        materialDesign:ElevationAssist.Elevation="Dp8"
+                                        Margin="0,0,0,0">
+                        <Grid Margin="20">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,20">
+                                <Button Style="{StaticResource MaterialDesignIconButton}" 
+                                        Command="{Binding ToggleWgSettingsCommand}">
+                                    <materialDesign:PackIcon Kind="ArrowLeft"/>
+                                </Button>
+                                <TextBlock Text="VPN 高级设置" Style="{StaticResource MaterialDesignHeadline6TextBlock}" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                            </StackPanel>
+
+                            <StackPanel Grid.Row="1">
+                                <TextBox materialDesign:HintAssist.Hint="服务器 Endpoint (IP:Port)" 
+                                         Text="{Binding WgEndpoint}"
+                                         Style="{StaticResource MaterialDesignFloatingHintTextBox}"
+                                         Margin="0,0,0,20"/>
+                                <TextBox materialDesign:HintAssist.Hint="本地 Address (e.g. 10.0.0.2/32)" 
+                                         Text="{Binding WgAddress}"
+                                         Style="{StaticResource MaterialDesignFloatingHintTextBox}"
+                                         Margin="0,0,0,20"/>
+                                <TextBox materialDesign:HintAssist.Hint="服务器 Public Key" 
+                                         Text="{Binding WgServerPublicKey}"
+                                         Style="{StaticResource MaterialDesignFloatingHintTextBox}"
+                                         Margin="0,0,0,20"/>
+                                
+                                <TextBlock Text="* 点击生成将自动填充主配置框，您仍需手动补充 PrivateKey。" 
+                                           Style="{StaticResource MaterialDesignCaptionTextBlock}" 
+                                           Foreground="Orange" TextWrapping="Wrap"/>
+                            </StackPanel>
+
+                            <Button Grid.Row="2" Content="生成并应用配置" 
+                                    Command="{Binding GenerateConfigCommand}"
+                                    Style="{StaticResource MaterialDesignRaisedAccentButton}"
+                                    Height="45"/>
+                        </Grid>
+                    </materialDesign:Card>
+                </Grid>
+            </Grid>
+
+            <!-- System View -->
+            <Grid Margin="20">
+                <Grid.Style>
+                    <Style TargetType="Grid">
+                        <Setter Property="Visibility" Value="Collapsed"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding CurrentModule}" Value="System">
+                                <Setter Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Grid.Style>
+
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Text="系统优化与增强" Style="{StaticResource MaterialDesignHeadline5TextBlock}" Grid.Row="0" Margin="0,0,0,20"/>
+
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <materialDesign:Card Padding="20" Margin="0,0,0,20">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Text="锁定 Windows 10 版本 (22H2)" Style="{StaticResource MaterialDesignSubtitle1TextBlock}" FontWeight="Bold"/>
+                                    <TextBlock Text="防止系统自动升级到 Windows 11 或更高版本。适用于希望保持在 Win10 22H2 的用户。" 
+                                               Style="{StaticResource MaterialDesignBody2TextBlock}" Opacity="0.6" TextWrapping="Wrap" Margin="0,5,20,0"/>
+                                </StackPanel>
+                                <Button Grid.Column="1" Content="执行锁定" 
+                                        Command="{Binding LockWin10Command}"
+                                        Style="{StaticResource MaterialDesignRaisedButton}"/>
+                            </Grid>
+                        </materialDesign:Card>
+
+                        <materialDesign:Card Padding="20" Background="{DynamicResource PrimaryHueLightBrush}">
+                            <StackPanel>
+                                <TextBlock Text="温馨提示" Style="{StaticResource MaterialDesignSubtitle1TextBlock}" Foreground="White" FontWeight="Bold"/>
+                                <TextBlock Text="部分优化操作需要管理员权限。执行过程中请留意系统的 UAC 弹窗授权。" 
+                                           Style="{StaticResource MaterialDesignBody2TextBlock}" Foreground="White" Opacity="0.9" TextWrapping="Wrap" Margin="0,5,0,0"/>
+                            </StackPanel>
+                        </materialDesign:Card>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+        </Grid>
+    </Grid>
+</mah:MetroWindow>
