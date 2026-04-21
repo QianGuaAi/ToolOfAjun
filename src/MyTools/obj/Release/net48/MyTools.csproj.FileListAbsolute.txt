@@ -19,3 +19,4 @@ C:\exe\src\MyTools\obj\Release\net48\MyTools.pdb
 C:\exe\src\MyTools\obj\Release\net48\MyTools.csproj.Fody.CopyLocal.cache
 C:\exe\src\MyTools\bin\Release\net48\NativeBinaries\README.txt
 C:\exe\src\MyTools\bin\Release\net48\LockWin10_22H2.ps1
+C:\exe\src\MyTools\obj\Release\net48\MyTools.sourcelink.json

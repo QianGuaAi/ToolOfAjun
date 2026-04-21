@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Drawing;
 using System.Windows;
 using MahApps.Metro.Controls;
 
@@ -9,6 +10,22 @@ namespace MyTools
         public MainWindow()
         {
             InitializeComponent();
+            InitializeTrayIcon();
+        }
+
+        private void InitializeTrayIcon()
+        {
+            var executablePath = System.Reflection.Assembly.GetEntryAssembly()?.Location;
+            if (string.IsNullOrWhiteSpace(executablePath))
+            {
+                return;
+            }
+
+            var icon = System.Drawing.Icon.ExtractAssociatedIcon(executablePath);
+            if (icon != null)
+            {
+                TrayIcon.Icon = icon;
+            }
         }
 
         protected override void OnClosing(CancelEventArgs e)

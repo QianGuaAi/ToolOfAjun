@@ -50,18 +50,11 @@
         </Grid.ColumnDefinitions>
 
         <!-- Taskbar Icon -->
-        <tb:TaskbarIcon ToolTipText="阿君的工具"
+        <tb:TaskbarIcon x:Name="TrayIcon"
+                        ToolTipText="阿君的工具"
                         Visibility="Visible"
                         ContextMenu="{StaticResource TrayMenu}"
-                        DoubleClickCommand="{Binding RestoreCommand}">
-            <tb:TaskbarIcon.IconSource>
-                <DrawingImage>
-                    <DrawingImage.Drawing>
-                        <GeometryDrawing Brush="#673AB7" Geometry="M12,2L4.5,20.29L5.21,21L12,18L18.79,21L19.5,20.29L12,2Z" />
-                    </DrawingImage.Drawing>
-                </DrawingImage>
-            </tb:TaskbarIcon.IconSource>
-        </tb:TaskbarIcon>
+                        DoubleClickCommand="{Binding RestoreCommand}" />
 
         <!-- Sidebar -->
         <Border Background="{DynamicResource MaterialDesignPaper}" BorderBrush="{DynamicResource MaterialDesignDivider}" BorderThickness="0,0,1,0">
