@@ -1,5 +1,8 @@
+using System;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Threading.Tasks;
+using System.Windows;
 using System.Windows.Input;
 using MyTools.Services;
 
@@ -97,6 +100,8 @@ namespace MyTools.ViewModels
         public ICommand LockWin10Command { get; }
         public ICommand ExitCommand { get; }
         public ICommand RestoreCommand { get; }
+        public ICommand ShowScreenshotCommand { get; }
+        public ICommand StartScreenshotCommand { get; }
 
         public MainViewModel()
         {
@@ -126,6 +131,8 @@ namespace MyTools.ViewModels
             LockWin10Command = new RelayCommand(LockWin10Version);
             ExitCommand = new RelayCommand(ExitApplication);
             RestoreCommand = new RelayCommand(RestoreWindow);
+            ShowScreenshotCommand = new RelayCommand(() => { CurrentModule = "Screenshot"; });
+            StartScreenshotCommand = new AsyncRelayCommand(StartScreenshotAsync);
             
             CurrentModule = "Home"; 
         }
@@ -242,6 +249,58 @@ namespace MyTools.ViewModels
             }
         }
 
+        private async Task StartScreenshotAsync()
+        {
+            var window = Application.Current?.MainWindow;
+            var dispatcher = Application.Current?.Dispatcher;
+            if (dispatcher == null)
+            {
+                return;
+            }
+
+            try
+            {
+                if (window != null)
+                {
+                    await dispatcher.InvokeAsync(() => window.Hide());
+                }
+
+                string path = null;
+                try
+                {
+                    path = await ScreenshotService.CaptureRegionInteractiveAsync().ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    await dispatcher.InvokeAsync(() =>
+                        MessageBox.Show("截图失败: " + ex.Message, "错误", MessageBoxButton.OK, MessageBoxImage.Error));
+                    return;
+                }
+
+                if (!string.IsNullOrEmpty(path))
+                {
+                    await dispatcher.InvokeAsync(() =>
+                        MessageBox.Show("已保存到：\n" + path, "截图完成", MessageBoxButton.OK, MessageBoxImage.Information));
+                }
+            }
+            finally
+            {
+                if (window != null)
+                {
+                    await dispatcher.InvokeAsync(() =>
+                    {
+                        window.Show();
+                        if (window.WindowState == WindowState.Minimized)
+                        {
+                            window.WindowState = WindowState.Normal;
+                        }
+
+                        window.Activate();
+                    });
+                }
+            }
+        }
+
         public event PropertyChangedEventHandler PropertyChanged;
         protected virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
         {
@@ -265,5 +324,45 @@ namespace MyTools.ViewModels
         public bool CanExecute(object parameter) => true;
         public void Execute(object parameter) => _execute(parameter);
         public event System.EventHandler CanExecuteChanged;
+    }
+
+    public sealed class AsyncRelayCommand : ICommand
+    {
+        private readonly Func<Task> _execute;
+        private bool _isRunning;
+
+        public AsyncRelayCommand(Func<Task> execute)
+        {
+            _execute = execute ?? throw new ArgumentNullException(nameof(execute));
+        }
+
+        public bool CanExecute(object parameter) => !_isRunning;
+
+        public async void Execute(object parameter)
+        {
+            if (_isRunning)
+            {
+                return;
+            }
+
+            _isRunning = true;
+            RaiseCanExecuteChanged();
+            try
+            {
+                await _execute().ConfigureAwait(true);
+            }
+            finally
+            {
+                _isRunning = false;
+                RaiseCanExecuteChanged();
+            }
+        }
+
+        public event EventHandler CanExecuteChanged;
+
+        private void RaiseCanExecuteChanged()
+        {
+            CanExecuteChanged?.Invoke(this, EventArgs.Empty);
+        }
     }
 }
