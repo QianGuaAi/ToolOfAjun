@@ -23,3 +23,7 @@
 - 去掉 `StartupUri`，改为在 `App.xaml.cs` 中显式创建主窗口。
 - 增加 UI 线程、`AppDomain`、`Task` 级别的全局异常处理。
 - 启动失败时写入 `MyTools.startup.log`，并弹窗提示日志位置。
+
+## [2026-04-23] 区域截图
+- 新增 `ScreenshotService` 与 `RegionPickerForm`，支持全屏拖选矩形区域并保存 PNG 到 `Screenshots`。
+- 主界面侧栏增加「截图」入口与说明页；截图时临时隐藏主窗口，完成后提示保存路径。

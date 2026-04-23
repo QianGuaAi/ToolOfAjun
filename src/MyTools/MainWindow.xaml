@@ -96,6 +96,15 @@
                         <TextBlock Text="系统优化" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Button>
+
+                <Button Style="{StaticResource MaterialDesignFlatButton}" 
+                        Command="{Binding ShowScreenshotCommand}"
+                        HorizontalContentAlignment="Left" Height="50">
+                    <StackPanel Orientation="Horizontal">
+                        <materialDesign:PackIcon Kind="Camera" Margin="0,0,15,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="截图" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
             </StackPanel>
         </Border>
 
@@ -391,6 +400,43 @@
                         </Grid>
                     </materialDesign:Card>
                 </Grid>
+            </Grid>
+
+            <!-- Screenshot View -->
+            <Grid Margin="20">
+                <Grid.Style>
+                    <Style TargetType="Grid">
+                        <Setter Property="Visibility" Value="Collapsed"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding CurrentModule}" Value="Screenshot">
+                                <Setter Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Grid.Style>
+
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Text="区域截图" Style="{StaticResource MaterialDesignHeadline5TextBlock}" Grid.Row="0" Margin="0,0,0,20"/>
+
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <materialDesign:Card Padding="20" Margin="0,0,0,20">
+                            <StackPanel>
+                                <TextBlock Text="截取屏幕任意矩形区域" Style="{StaticResource MaterialDesignSubtitle1TextBlock}" FontWeight="Bold"/>
+                                <TextBlock Text="点击开始后主窗口会暂时隐藏，请按住鼠标左键拖选区域；按 Esc 取消。截图以 PNG 保存在程序目录下的 Screenshots 文件夹。" 
+                                           Style="{StaticResource MaterialDesignBody2TextBlock}" Opacity="0.7" TextWrapping="Wrap" Margin="0,10,0,20"/>
+                                <Button Content="开始区域截图" 
+                                        Command="{Binding StartScreenshotCommand}"
+                                        Style="{StaticResource MaterialDesignRaisedButton}"
+                                        Height="48" HorizontalAlignment="Left"/>
+                            </StackPanel>
+                        </materialDesign:Card>
+                    </StackPanel>
+                </ScrollViewer>
             </Grid>
 
             <!-- System View -->
