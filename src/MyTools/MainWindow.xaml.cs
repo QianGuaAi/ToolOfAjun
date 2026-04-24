@@ -1,7 +1,8 @@
 using System.ComponentModel;
-using System.Drawing;
 using System.Windows;
+using System.Windows.Controls;
 using MahApps.Metro.Controls;
+using MyTools.ViewModels;
 
 namespace MyTools
 {
@@ -11,6 +12,10 @@ namespace MyTools
         {
             InitializeComponent();
             InitializeTrayIcon();
+            if (DataContext is MainViewModel viewModel)
+            {
+                viewModel.PropertyChanged += ViewModel_OnPropertyChanged;
+            }
         }
 
         private void InitializeTrayIcon()
@@ -28,17 +33,53 @@ namespace MyTools
             }
         }
 
+        private void SqlPasswordBox_OnPasswordChanged(object sender, RoutedEventArgs e)
+        {
+            if (DataContext is MainViewModel viewModel && sender is PasswordBox passwordBox)
+            {
+                viewModel.SqlPassword = passwordBox.Password;
+            }
+        }
+
+        private void SqlPasswordHistoryButton_OnClick(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button button && button.ContextMenu != null)
+            {
+                button.ContextMenu.PlacementTarget = button;
+                button.ContextMenu.IsOpen = true;
+            }
+        }
+
+        private void SqlPasswordHistoryMenuItem_OnClick(object sender, RoutedEventArgs e)
+        {
+            if (DataContext is MainViewModel viewModel && sender is MenuItem menuItem && menuItem.DataContext is string password)
+            {
+                viewModel.SqlPassword = password;
+                SqlPasswordBox.Password = password;
+            }
+        }
+
+        private void ViewModel_OnPropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName != nameof(MainViewModel.SqlPassword) || !(sender is MainViewModel viewModel))
+            {
+                return;
+            }
+
+            if (SqlPasswordBox.Password != (viewModel.SqlPassword ?? string.Empty))
+            {
+                SqlPasswordBox.Password = viewModel.SqlPassword ?? string.Empty;
+            }
+        }
+
         protected override void OnClosing(CancelEventArgs e)
         {
-            try { System.IO.File.AppendAllText("debug.log", "OnClosing hit. IsExiting: " + App.IsExiting + "\n"); } catch {}
-            
-            // 如果程序不是正在从托盘退出，则隐藏窗口并取消关闭
             if (!App.IsExiting)
             {
                 e.Cancel = true;
-                this.Hide();
-                try { System.IO.File.AppendAllText("debug.log", "Window hidden.\n"); } catch {}
+                Hide();
             }
+
             base.OnClosing(e);
         }
     }

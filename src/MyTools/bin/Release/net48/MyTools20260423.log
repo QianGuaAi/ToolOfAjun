@@ -1,0 +1,32 @@
+﻿2026-04-23 16:26:28.671 +08:00 [INF] Application starting
+2026-04-23 16:26:45.878 +08:00 [INF] Testing SQL Server connection to 192.168.2.6:1433
+2026-04-23 16:26:45.934 +08:00 [INF] sys.databases is unavailable on 192.168.2.6; falling back to sp_databases.
+2026-04-23 16:26:46.466 +08:00 [INF] Loaded 48 SQL Server databases from 192.168.2.6
+2026-04-23 16:26:58.406 +08:00 [INF] Loaded 1085 tables from UFDATA_666_2026
+2026-04-23 16:31:07.714 +08:00 [INF] Application exiting with code 0
+﻿2026-04-23 16:35:18.298 +08:00 [INF] Application starting
+2026-04-23 16:35:36.504 +08:00 [INF] Testing SQL Server connection to 192.168.2.6:1433
+2026-04-23 16:35:36.741 +08:00 [INF] sys.databases is unavailable on 192.168.2.6; falling back to sp_databases.
+2026-04-23 16:35:37.209 +08:00 [INF] Loaded 48 SQL Server databases from 192.168.2.6
+2026-04-23 16:35:49.811 +08:00 [INF] Loaded 1085 tables from UFDATA_666_2025
+2026-04-23 16:36:45.835 +08:00 [INF] Starting SQL export from 192.168.2.6, database UFDATA_666_2025, table dbo.WA_psn
+2026-04-23 16:36:45.920 +08:00 [INF] SQL export completed for UFDATA_666_2025.dbo.WA_psn with 622 rows
+2026-04-23 16:37:24.528 +08:00 [INF] Starting SQL export from 192.168.2.6, database UFDATA_666_2025, table dbo.WA_GZData
+2026-04-23 16:37:24.925 +08:00 [INF] SQL export completed for UFDATA_666_2025.dbo.WA_GZData with 7321 rows
+2026-04-23 16:37:45.953 +08:00 [INF] Starting SQL export from 192.168.2.6, database UFDATA_666_2025, table dbo.WA_GZItem
+2026-04-23 16:37:45.957 +08:00 [INF] SQL export completed for UFDATA_666_2025.dbo.WA_GZItem with 59 rows
+2026-04-23 16:37:57.948 +08:00 [INF] Starting SQL export from 192.168.2.6, database UFDATA_666_2025, table dbo.WA_formula
+2026-04-23 16:37:57.952 +08:00 [INF] SQL export completed for UFDATA_666_2025.dbo.WA_formula with 6 rows
+﻿2026-04-23 16:38:20.999 +08:00 [INF] Application starting
+2026-04-23 16:39:36.407 +08:00 [INF] Application exiting with code 0
+2026-04-23 16:39:37.550 +08:00 [INF] Application exiting with code 0
+﻿2026-04-23 16:47:02.935 +08:00 [INF] Application starting
+2026-04-23 16:47:12.176 +08:00 [INF] Testing SQL Server connection to 192.168.2.6:1433
+2026-04-23 16:47:12.271 +08:00 [INF] sys.databases is unavailable on 192.168.2.6; falling back to sp_databases.
+2026-04-23 16:47:12.734 +08:00 [INF] Loaded 48 SQL Server databases from 192.168.2.6
+2026-04-23 16:47:27.340 +08:00 [INF] Loaded 1085 tables from UFDATA_666_2025
+2026-04-23 16:47:54.782 +08:00 [INF] Starting SQL export from 192.168.2.6, database UFDATA_666_2025, table dbo.WA_GZNameList
+2026-04-23 16:47:54.801 +08:00 [INF] SQL export completed for UFDATA_666_2025.dbo.WA_GZNameList with 30 rows
+2026-04-23 16:48:05.340 +08:00 [INF] Starting SQL export from 192.168.2.6, database UFDATA_666_2025, table dbo.WA_GZtblset
+2026-04-23 16:48:05.344 +08:00 [INF] SQL export completed for UFDATA_666_2025.dbo.WA_GZtblset with 34 rows
+2026-04-23 17:40:03.340 +08:00 [INF] Application exiting with code 0

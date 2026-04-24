@@ -4,6 +4,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
+using MyTools.Services;
 
 namespace MyTools
 {
@@ -22,6 +23,9 @@ namespace MyTools
         {
             try
             {
+                AppLogService.Initialize();
+                AppLogService.Information("Application starting");
+
                 base.OnStartup(e);
 
                 var mainWindow = new MainWindow();
@@ -34,6 +38,13 @@ namespace MyTools
             }
         }
 
+        protected override void OnExit(ExitEventArgs e)
+        {
+            AppLogService.Information("Application exiting with code {ExitCode}", e.ApplicationExitCode);
+            AppLogService.CloseAndFlush();
+            base.OnExit(e);
+        }
+
         private void RegisterGlobalExceptionHandlers()
         {
             DispatcherUnhandledException += OnDispatcherUnhandledException;
@@ -44,7 +55,7 @@ namespace MyTools
         private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
         {
             LogException("UI 线程未处理异常", e.Exception);
-            MessageBox.Show(BuildUserMessage(e.Exception), "MyTools 启动错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(BuildUserMessage(e.Exception), "MyTools 运行错误", MessageBoxButton.OK, MessageBoxImage.Error);
             e.Handled = true;
             Shutdown(-1);
         }
@@ -70,7 +81,7 @@ namespace MyTools
 
         private static string BuildUserMessage(Exception ex)
         {
-            return "程序启动时发生异常，详细信息已写入同目录日志文件：\n"
+            return "程序运行时发生异常，详细信息已写入同目录日志文件：\n"
                 + LogPath
                 + "\n\n异常类型："
                 + ex.GetType().FullName
@@ -82,6 +93,7 @@ namespace MyTools
         {
             try
             {
+                AppLogService.Error(ex, "{Title}", title);
                 Directory.CreateDirectory(Path.GetDirectoryName(LogPath) ?? AppDomain.CurrentDomain.BaseDirectory);
                 File.AppendAllText(
                     LogPath,
@@ -90,7 +102,6 @@ namespace MyTools
             }
             catch
             {
-                // Avoid secondary failures while reporting startup issues.
             }
         }
     }

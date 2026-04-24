@@ -5403,7 +5403,7 @@
     ]
   },
   "packageFolders": {
-    "C:\\Users\\QianGuaAI\\.nuget\\packages\\": {},
+    "C:\\exe\\.dotnet\\.nuget\\packages\\": {},
     "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages": {}
   },
   "project": {
@@ -5412,7 +5412,7 @@
       "projectUniqueName": "C:\\exe\\src\\MyTools\\MyTools.csproj",
       "projectName": "MyTools",
       "projectPath": "C:\\exe\\src\\MyTools\\MyTools.csproj",
-      "packagesPath": "C:\\Users\\QianGuaAI\\.nuget\\packages\\",
+      "packagesPath": "C:\\exe\\.dotnet\\.nuget\\packages\\",
       "outputPath": "C:\\exe\\src\\MyTools\\obj\\",
       "projectStyle": "PackageReference",
       "fallbackFolders": [
