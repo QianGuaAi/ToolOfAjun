@@ -1,0 +1,5 @@
+﻿2026-04-28 12:04:53.561 +08:00 [INF] Application starting
+2026-04-28 12:29:07.303 +08:00 [INF] Testing SQL Server connection to 192.168.2.6:1433
+2026-04-28 12:29:07.471 +08:00 [INF] sys.databases is unavailable on 192.168.2.6; falling back to sp_databases.
+2026-04-28 12:29:07.977 +08:00 [INF] Loaded 48 SQL Server databases from 192.168.2.6
+2026-04-28 12:29:17.117 +08:00 [INF] Application exiting with code 0
