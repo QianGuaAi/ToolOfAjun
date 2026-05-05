@@ -1,0 +1,60 @@
+# ===== Build outputs =====
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+[Ll]og/
+[Ll]ogs/
+
+# ===== Visual Studio / Rider / VS Code =====
+.vs/
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.userprefs
+
+# ===== Repo-embedded .NET SDK (do not track) =====
+.dotnet/
+
+# ===== NuGet =====
+*.nupkg
+*.snupkg
+**/packages/*
+!**/packages/build/
+.nuget/
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# ===== Costura / Fody temp =====
+FodyWeavers.xsd
+
+# ===== Build logs =====
+build.log
+msbuild.log
+msbuild.err
+msbuild.wrn
+
+# ===== OS junk =====
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+.DS_Store
+
+# ===== Local dev outputs / runtime artifacts =====
+*.pdb
+*.cache
+*.tmp
+*.tlog
+*.bak
+*.swp
+*~
+
+# ===== App runtime files (生成在程序同目录) =====
+MyTools.startup.log
+MyTools.sqlhistory.json
+Configs/
