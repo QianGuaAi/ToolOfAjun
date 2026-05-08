@@ -35,3 +35,30 @@
 - 重新设计现代科技感应用图标，并将 `Resources\AppIcon.ico` 配置为程序图标。
 ## [2026-04-23] 图标配色调整
 - 将应用图标调整为红蓝科技风格，加入星条旗暗纹、星形节点和红色能量线，减少大面积蓝色占比。
+## [2026-05-08] 截图工具模块
+- 新增 AppSettingsService：读写 MyTools.settings.json，存储截图快捷键（Modifiers/Key/DisplayText）和截图行为开关，使用 async 文件 IO。
+- 新增 ScreenshotService：调用 System.Drawing.Graphics.CopyFromScreen 捕获全虚拟屏幕，返回 WPF BitmapSource，支持多显示器。
+- 新增 HotkeyService：通过 RegisterHotKey/UnregisterHotKey Win32 API 注册全局热键，加 MOD_NOREPEAT 防重复触发，提供 BuildDisplayText 方法格式化显示。
+- 新增 ScreenshotEditorWindow：截图编辑窗口（无边框、最大化），底层 Image + 上层透明 InkCanvas 叠加实现画笔标注；工具栏含 9 色画笔、粗细滑块、橡皮擦、撤销、清除、复制到剪贴板（Ctrl+C）、另存为 PNG/JPG/BMP（Ctrl+S）、关闭（Esc）。
+- MainViewModel 新增截图设置属性（ShowEditorAfterCapture、ScreenshotHotkeyText、IsCapturingHotkey）和命令（TakeScreenshotNowCommand、StartCaptureHotkeyCommand、CancelCaptureHotkeyCommand、SaveScreenshotSettingsCommand）。
+- TriggerScreenshotAsync：隐藏主窗口 → 等 150ms → 捕获 → 按设置打开编辑器或直接写剪贴板；编辑器关闭后恢复主窗口显示状态。
+- MainWindow.xaml 新增"截图工具"导航项（CameraOutline 图标）和 Screenshot 设置面板（快捷键卡片 + 行为开关卡片 + 保存按钮）。
+- MainWindow.xaml.cs 在 OnSourceInitialized 中初始化 HotkeyService 并挂接 HwndSource Hook；WndProc 捕获 WM_HOTKEY 触发截图；PreviewKeyDown 在 IsCapturingHotkey 模式下捕获新快捷键组合（需含 Ctrl 或 Alt）。
+- 默认快捷键 Ctrl+Shift+Z，全局生效，包括主窗口隐藏到托盘期间。
+
+## [2026-05-08] 性能修复 + 单实例 + UI 全面优化
+- 性能修复：移除 MetroWindow 的 GlowBrush（该效果会创建 4 个后台透明叠层窗口持续重绘，导致系统长期卡顿），改为 GlowBrush="{x:Null}"。
+- 单实例保护：App.xaml.cs 通过 Mutex 防止重复启动，已运行时通过 EventWaitHandle 信号激活已有窗口并带到前台。
+- 侧边栏重设计：深色背景（#172030），自定义 NavItemStyle 含左侧高亮条指示器，DataTrigger 联动 CurrentModule 实现选中状态。
+- 所有页面标题统一风格：加底部分隔线 Border，刷新按钮从 FloatingActionMiniButton 改为 IconButton，与页面视觉语言一致。
+- SQL 工具面板标题更新为"SQL Server 工具 / 表导出 + SQL 查询"，反映新增的查询功能。
+- TitleCharacterCasing="Normal" 防止 MahApps 强制全大写标题栏。
+
+## [2026-05-08] Defender 与 Windows Update 控制
+- 新增 WindowsSecurityService，提供 Defender 实时防护和 Windows 自动更新的状态读取与控制。
+- Defender 控制：通过 Set-MpPreference 关闭/恢复实时防护、行为监控、脚本扫描等；Win11 需先在安全中心关闭篡改保护。
+- 更新控制：通过注册表策略键停止/恢复自动更新，同时控制 wuauserv / UsoSvc 服务。
+- 立即更新：调用 UsoClient.exe StartInteractiveScan/StartDownload/StartInstall（前台最高优先级），并自动打开 Windows Update 设置页。
+- 所有操作均通过临时 .ps1 脚本 + runas UAC 提权执行，操作结束后自动删除临时文件。
+- 系统优化面板新增 Defender 卡片和 Windows Update 卡片，带状态徽章（防护中/已关闭/自动更新中/已停止）。
+- 新增 SystemStatusMessage 反馈条，实时显示操作进度和结果。

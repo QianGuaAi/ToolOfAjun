@@ -21,6 +21,18 @@ namespace MyTools.Services
         private static readonly string WgExePath = GetWireGuardPath();
         private static readonly string ConfigDir = Path.Combine(AppDir, "Configs");
 
+        public static bool IsExeAvailable => WgExePath != "wireguard.exe";
+
+        public static string GetSavedConfig(string interfaceName)
+        {
+            try
+            {
+                string configPath = Path.Combine(ConfigDir, $"{interfaceName}.conf");
+                return File.Exists(configPath) ? File.ReadAllText(configPath) : null;
+            }
+            catch { return null; }
+        }
+
         private static string GetWireGuardPath()
         {
             // 1. Check local app bin directory (Integrated mode)

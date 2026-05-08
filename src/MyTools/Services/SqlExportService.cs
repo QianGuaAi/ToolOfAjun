@@ -226,6 +226,67 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME;";
             return $"{serverPart}_{databasePart}_{tablePart}_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx";
         }
 
+        public static async Task<DataTable> ExecuteQueryAsync(
+            SqlServerConnectionOptions options,
+            string databaseName,
+            string sql,
+            CancellationToken cancellationToken)
+        {
+            ValidateConnectionOptions(options);
+            ValidateDatabaseName(databaseName);
+
+            if (string.IsNullOrWhiteSpace(sql))
+                throw new InvalidOperationException("请输入 SQL 语句。");
+
+            AppLogService.Information(
+                "Executing SQL query on {ServerAddress}/{DatabaseName}",
+                options.ServerAddress,
+                databaseName);
+
+            var table = new DataTable();
+            using (var connection = new SqlConnection(BuildDatabaseConnectionString(options, databaseName)))
+            using (var command = new SqlCommand(sql, connection) { CommandTimeout = 120 })
+            {
+                await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+                using (var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    table.Load(reader);
+                }
+            }
+
+            AppLogService.Information(
+                "SQL query returned {RowCount} rows and {ColCount} columns",
+                table.Rows.Count,
+                table.Columns.Count);
+
+            return table;
+        }
+
+        public static async Task<ExportResult> ExportDataTableAsync(
+            DataTable dataTable,
+            string sheetName,
+            string filePath,
+            CancellationToken cancellationToken)
+        {
+            if (dataTable == null) throw new ArgumentNullException(nameof(dataTable));
+            if (string.IsNullOrWhiteSpace(filePath))
+                throw new ArgumentException("导出文件路径不能为空。", nameof(filePath));
+
+            Directory.CreateDirectory(
+                Path.GetDirectoryName(filePath) ?? AppDomain.CurrentDomain.BaseDirectory);
+
+            await XlsxStreamWriter
+                .WriteFromDataTableAsync(filePath, sheetName, dataTable, cancellationToken)
+                .ConfigureAwait(false);
+
+            AppLogService.Information(
+                "DataTable exported to {FilePath} with {RowCount} rows",
+                filePath,
+                dataTable.Rows.Count);
+
+            return new ExportResult { FilePath = filePath, RowCount = dataTable.Rows.Count };
+        }
+
         private static void ValidateConnectionOptions(SqlServerConnectionOptions options)
         {
             if (options == null)
@@ -415,9 +476,15 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME;";
 
             private static void WriteCell(XmlWriter writer, IDataRecord record, int columnIndex, int rowIndex)
             {
-                var cellReference = GetCellReference(columnIndex, rowIndex);
+                WriteValueCell(
+                    writer,
+                    GetCellReference(columnIndex, rowIndex),
+                    record.IsDBNull(columnIndex) ? null : record.GetValue(columnIndex));
+            }
 
-                if (record.IsDBNull(columnIndex))
+            private static void WriteValueCell(XmlWriter writer, string cellReference, object value)
+            {
+                if (value == null)
                 {
                     writer.WriteStartElement("c");
                     writer.WriteAttributeString("r", cellReference);
@@ -425,7 +492,6 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME;";
                     return;
                 }
 
-                var value = record.GetValue(columnIndex);
                 switch (value)
                 {
                     case bool boolValue:
@@ -470,6 +536,79 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME;";
                         WriteInlineStringCell(writer, cellReference, Convert.ToString(value, CultureInfo.CurrentCulture));
                         return;
                 }
+            }
+
+            public static async Task WriteFromDataTableAsync(
+                string filePath,
+                string sheetName,
+                DataTable dataTable,
+                CancellationToken cancellationToken)
+            {
+                using (var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.ReadWrite, FileShare.None))
+                using (var archive = new ZipArchive(fileStream, ZipArchiveMode.Create, leaveOpen: false))
+                {
+                    WriteEntry(archive, "[Content_Types].xml", BuildContentTypesXml());
+                    WriteEntry(archive, "_rels/.rels", BuildRootRelsXml());
+                    WriteEntry(archive, "docProps/app.xml", BuildAppXml());
+                    WriteEntry(archive, "docProps/core.xml", BuildCoreXml());
+                    WriteEntry(archive, "xl/workbook.xml", BuildWorkbookXml(sheetName));
+                    WriteEntry(archive, "xl/_rels/workbook.xml.rels", BuildWorkbookRelsXml());
+                    WriteEntry(archive, "xl/styles.xml", BuildStylesXml());
+
+                    var worksheetEntry = archive.CreateEntry("xl/worksheets/sheet1.xml", CompressionLevel.Fastest);
+                    using (var stream = worksheetEntry.Open())
+                    using (var writer = XmlWriter.Create(stream, new XmlWriterSettings
+                    {
+                        Async = true,
+                        Encoding = new UTF8Encoding(false),
+                        CloseOutput = false
+                    }))
+                    {
+                        await WriteWorksheetFromDataTableAsync(writer, dataTable, cancellationToken)
+                            .ConfigureAwait(false);
+                    }
+                }
+            }
+
+            private static async Task WriteWorksheetFromDataTableAsync(
+                XmlWriter writer,
+                DataTable dataTable,
+                CancellationToken cancellationToken)
+            {
+                writer.WriteStartDocument(true);
+                writer.WriteStartElement("worksheet", "http://schemas.openxmlformats.org/spreadsheetml/2006/main");
+                writer.WriteAttributeString("xmlns", "r", null, "http://schemas.openxmlformats.org/officeDocument/2006/relationships");
+                writer.WriteStartElement("sheetData");
+
+                writer.WriteStartElement("row");
+                writer.WriteAttributeString("r", "1");
+                for (var colIdx = 0; colIdx < dataTable.Columns.Count; colIdx++)
+                {
+                    WriteInlineStringCell(writer, GetCellReference(colIdx, 1), dataTable.Columns[colIdx].ColumnName);
+                }
+                writer.WriteEndElement();
+
+                var rowIndex = 1;
+                foreach (DataRow row in dataTable.Rows)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    rowIndex++;
+                    writer.WriteStartElement("row");
+                    writer.WriteAttributeString("r", rowIndex.ToString(CultureInfo.InvariantCulture));
+                    for (var colIdx = 0; colIdx < dataTable.Columns.Count; colIdx++)
+                    {
+                        WriteValueCell(
+                            writer,
+                            GetCellReference(colIdx, rowIndex),
+                            row.IsNull(colIdx) ? null : row[colIdx]);
+                    }
+                    writer.WriteEndElement();
+                }
+
+                writer.WriteEndElement();
+                writer.WriteEndElement();
+                writer.WriteEndDocument();
+                await writer.FlushAsync().ConfigureAwait(false);
             }
 
             private static void WriteInlineStringCell(XmlWriter writer, string cellReference, string text)

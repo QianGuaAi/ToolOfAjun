@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
@@ -11,6 +12,9 @@ namespace MyTools
     public partial class App : Application
     {
         private static readonly string LogPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "MyTools.startup.log");
+
+        private static Mutex _singleInstanceMutex;
+        private static EventWaitHandle _activationEvent;
 
         public static bool IsExiting { get; set; }
 
@@ -23,6 +27,46 @@ namespace MyTools
         {
             try
             {
+                bool isNewInstance;
+                _singleInstanceMutex = new Mutex(true, @"Local\MyTools_SingleInstance", out isNewInstance);
+                if (!isNewInstance)
+                {
+                    try
+                    {
+                        using (var ev = EventWaitHandle.OpenExisting(@"Local\MyTools_Activate"))
+                            ev.Set();
+                    }
+                    catch { }
+                    Shutdown(0);
+                    return;
+                }
+
+                _activationEvent = new EventWaitHandle(false, EventResetMode.AutoReset, @"Local\MyTools_Activate");
+                var listenerThread = new Thread(() =>
+                {
+                    while (!IsExiting)
+                    {
+                        try
+                        {
+                            if (_activationEvent.WaitOne(500))
+                            {
+                                Dispatcher.InvokeAsync(() =>
+                                {
+                                    var win = MainWindow;
+                                    if (win == null) return;
+                                    win.Show();
+                                    if (win.WindowState == WindowState.Minimized)
+                                        win.WindowState = WindowState.Normal;
+                                    win.Activate();
+                                    win.Focus();
+                                });
+                            }
+                        }
+                        catch { }
+                    }
+                }) { IsBackground = true, Name = "ActivationListener" };
+                listenerThread.Start();
+
                 AppLogService.Initialize();
                 AppLogService.Information("Application starting");
 
@@ -40,6 +84,11 @@ namespace MyTools
 
         protected override void OnExit(ExitEventArgs e)
         {
+            IsExiting = true;
+            _activationEvent?.Set();
+            _activationEvent?.Dispose();
+            try { _singleInstanceMutex?.ReleaseMutex(); } catch { }
+            _singleInstanceMutex?.Dispose();
             AppLogService.Information("Application exiting with code {ExitCode}", e.ApplicationExitCode);
             AppLogService.CloseAndFlush();
             base.OnExit(e);

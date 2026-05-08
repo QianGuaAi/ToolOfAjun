@@ -56,9 +56,9 @@
 - 日志严禁记录密码或完整连接字符串，仅记录服务器/用户名/操作步骤等非敏感信息。
 
 ## 五、构建与分发
-- **推荐构建命令**（使用仓库内置 SDK）：
+- **推荐构建命令**：
   ```powershell
-  .dotnet\dotnet.exe build src\MyTools\MyTools.csproj -c Release
+  dotnet build src\MyTools\MyTools.csproj -c Release
   ```
 - Release 产物为单一 `MyTools.exe`，须确认 Costura.Fody 已合并全部托管 DLL，且 `SQLite.Interop.dll` 通过 `EmbeddedResource` 嵌入。
 - 应用图标固定为 `src/MyTools/Resources/AppIcon.ico`（在 csproj 中通过 `<ApplicationIcon>` 指定）。

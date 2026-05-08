@@ -11,9 +11,11 @@
                  MinWidth="1080"
                  MinHeight="700"
                  WindowStartupLocation="CenterScreen"
-                 GlowBrush="{DynamicResource MahApps.Brushes.Accent}"
+                 GlowBrush="{x:Null}"
+                 TitleCharacterCasing="Normal"
                  Background="{DynamicResource MaterialDesignPaper}"
-                 Icon="/Resources/AppIcon.png">
+                 Icon="/Resources/AppIcon.png"
+                 PreviewKeyDown="Window_PreviewKeyDown">
 
     <Window.DataContext>
         <viewModels:MainViewModel />
@@ -22,6 +24,46 @@
     <Window.Resources>
         <viewModels:StatusToColorConverter x:Key="StatusToColorConverter" />
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
+
+        <Style x:Key="NavItemStyle" TargetType="Button">
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="Height" Value="54" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="#8FA8C0" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Root" Background="{TemplateBinding Background}" SnapsToDevicePixels="True">
+                            <Grid>
+                                <Rectangle x:Name="ActiveBar" Width="3" HorizontalAlignment="Left"
+                                           Fill="{DynamicResource PrimaryHueLightBrush}" Visibility="Collapsed" />
+                                <ContentPresenter Margin="22,0,12,0"
+                                                  HorizontalAlignment="Left"
+                                                  VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Root" Property="Background" Value="#1F3347" />
+                                <Setter Property="Foreground" Value="#C8DCF0" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Root" Property="Background" Value="#253F58" />
+                            </Trigger>
+                            <Trigger Property="Tag" Value="Active">
+                                <Setter TargetName="Root" Property="Background" Value="#1A3048" />
+                                <Setter Property="Foreground" Value="White" />
+                                <Setter TargetName="ActiveBar" Property="Visibility" Value="Visible" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
 
         <ContextMenu x:Key="TrayMenu" materialDesign:MenuAssist.TopLevelMenuItemHeight="40">
             <MenuItem Header="显示窗口" Command="{Binding RestoreCommand}">
@@ -58,45 +100,125 @@
                         ContextMenu="{StaticResource TrayMenu}"
                         DoubleClickCommand="{Binding RestoreCommand}" />
 
-        <Border Background="{DynamicResource MaterialDesignPaper}" BorderBrush="{DynamicResource MaterialDesignDivider}" BorderThickness="0,0,1,0">
-            <StackPanel Margin="0,20">
-                <TextBlock Text="MyTools" Margin="20,0,0,30" FontWeight="Bold" Foreground="{DynamicResource PrimaryHueMidBrush}" FontSize="18" />
+        <Border Background="#172030">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
 
-                <Button Style="{StaticResource MaterialDesignFlatButton}" Command="{Binding ShowNetworkCommand}" HorizontalContentAlignment="Left" Height="50">
+                <Border Grid.Row="0" Padding="20,22,20,18"
+                        BorderBrush="#253347" BorderThickness="0,0,0,1">
                     <StackPanel Orientation="Horizontal">
-                        <materialDesign:PackIcon Kind="Lan" Margin="0,0,15,0" VerticalAlignment="Center" />
-                        <TextBlock Text="当前网络" VerticalAlignment="Center" />
+                        <Image Source="/Resources/AppIcon.png" Width="26" Height="26"
+                               RenderOptions.BitmapScalingMode="HighQuality"
+                               VerticalAlignment="Center" />
+                        <TextBlock Text="MyTools" FontWeight="Bold" FontSize="17"
+                                   Foreground="White" VerticalAlignment="Center"
+                                   Margin="10,0,0,0" />
                     </StackPanel>
-                </Button>
+                </Border>
 
-                <Button Style="{StaticResource MaterialDesignFlatButton}" Command="{Binding ShowStartupCommand}" HorizontalContentAlignment="Left" Height="50">
-                    <StackPanel Orientation="Horizontal">
-                        <materialDesign:PackIcon Kind="RocketLaunch" Margin="0,0,15,0" VerticalAlignment="Center" />
-                        <TextBlock Text="启动管理" VerticalAlignment="Center" />
-                    </StackPanel>
-                </Button>
+                <StackPanel Grid.Row="1" Margin="0,8,0,0">
 
-                <Button Style="{StaticResource MaterialDesignFlatButton}" Command="{Binding ShowWireGuardCommand}" HorizontalContentAlignment="Left" Height="50">
-                    <StackPanel Orientation="Horizontal">
-                        <materialDesign:PackIcon Kind="ShieldLock" Margin="0,0,15,0" VerticalAlignment="Center" />
-                        <TextBlock Text="VPN" VerticalAlignment="Center" />
-                    </StackPanel>
-                </Button>
+                    <Button Command="{Binding ShowNetworkCommand}">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource NavItemStyle}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding CurrentModule}" Value="Network">
+                                        <Setter Property="Tag" Value="Active" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                        <StackPanel Orientation="Horizontal">
+                            <materialDesign:PackIcon Kind="Lan" Width="20" Height="20" Margin="0,0,12,0" VerticalAlignment="Center" />
+                            <TextBlock Text="当前网络" VerticalAlignment="Center" FontSize="13" />
+                        </StackPanel>
+                    </Button>
 
-                <Button Style="{StaticResource MaterialDesignFlatButton}" Command="{Binding ShowSystemCommand}" HorizontalContentAlignment="Left" Height="50">
-                    <StackPanel Orientation="Horizontal">
-                        <materialDesign:PackIcon Kind="AutoFix" Margin="0,0,15,0" VerticalAlignment="Center" />
-                        <TextBlock Text="系统优化" VerticalAlignment="Center" />
-                    </StackPanel>
-                </Button>
+                    <Button Command="{Binding ShowStartupCommand}">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource NavItemStyle}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding CurrentModule}" Value="Startup">
+                                        <Setter Property="Tag" Value="Active" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                        <StackPanel Orientation="Horizontal">
+                            <materialDesign:PackIcon Kind="RocketLaunch" Width="20" Height="20" Margin="0,0,12,0" VerticalAlignment="Center" />
+                            <TextBlock Text="启动管理" VerticalAlignment="Center" FontSize="13" />
+                        </StackPanel>
+                    </Button>
 
-                <Button Style="{StaticResource MaterialDesignFlatButton}" Command="{Binding ShowSqlExportCommand}" HorizontalContentAlignment="Left" Height="50">
-                    <StackPanel Orientation="Horizontal">
-                        <materialDesign:PackIcon Kind="DatabaseExportOutline" Margin="0,0,15,0" VerticalAlignment="Center" />
-                        <TextBlock Text="SQL 导出" VerticalAlignment="Center" />
-                    </StackPanel>
-                </Button>
-            </StackPanel>
+                    <Button Command="{Binding ShowWireGuardCommand}">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource NavItemStyle}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding CurrentModule}" Value="WireGuard">
+                                        <Setter Property="Tag" Value="Active" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                        <StackPanel Orientation="Horizontal">
+                            <materialDesign:PackIcon Kind="ShieldLock" Width="20" Height="20" Margin="0,0,12,0" VerticalAlignment="Center" />
+                            <TextBlock Text="VPN" VerticalAlignment="Center" FontSize="13" />
+                        </StackPanel>
+                    </Button>
+
+                    <Button Command="{Binding ShowSystemCommand}">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource NavItemStyle}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding CurrentModule}" Value="System">
+                                        <Setter Property="Tag" Value="Active" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                        <StackPanel Orientation="Horizontal">
+                            <materialDesign:PackIcon Kind="AutoFix" Width="20" Height="20" Margin="0,0,12,0" VerticalAlignment="Center" />
+                            <TextBlock Text="系统优化" VerticalAlignment="Center" FontSize="13" />
+                        </StackPanel>
+                    </Button>
+
+                    <Button Command="{Binding ShowSqlExportCommand}">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource NavItemStyle}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding CurrentModule}" Value="SqlExport">
+                                        <Setter Property="Tag" Value="Active" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                        <StackPanel Orientation="Horizontal">
+                            <materialDesign:PackIcon Kind="DatabaseExportOutline" Width="20" Height="20" Margin="0,0,12,0" VerticalAlignment="Center" />
+                            <TextBlock Text="SQL 导出" VerticalAlignment="Center" FontSize="13" />
+                        </StackPanel>
+                    </Button>
+
+                    <Button Command="{Binding ShowScreenshotCommand}">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource NavItemStyle}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding CurrentModule}" Value="Screenshot">
+                                        <Setter Property="Tag" Value="Active" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                        <StackPanel Orientation="Horizontal">
+                            <materialDesign:PackIcon Kind="CameraOutline" Width="20" Height="20" Margin="0,0,12,0" VerticalAlignment="Center" />
+                            <TextBlock Text="截图工具" VerticalAlignment="Center" FontSize="13" />
+                        </StackPanel>
+                    </Button>
+
+                </StackPanel>
+            </Grid>
         </Border>
 
         <Grid Grid.Column="1" Background="{DynamicResource MaterialDesignFlatBackground}">
@@ -130,12 +252,20 @@
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
-                <StackPanel Orientation="Horizontal" Grid.Row="0" Margin="0,0,0,20">
-                    <TextBlock Text="当前网络信息" Style="{StaticResource MaterialDesignHeadline5TextBlock}" VerticalAlignment="Center" />
-                    <Button Style="{StaticResource MaterialDesignFloatingActionMiniButton}" Command="{Binding RefreshCommand}" Margin="20,0,0,0" ToolTip="刷新">
-                        <materialDesign:PackIcon Kind="Refresh" />
-                    </Button>
-                </StackPanel>
+                <Border Grid.Row="0" Margin="0,0,0,20"
+                        BorderBrush="{DynamicResource MaterialDesignDivider}" BorderThickness="0,0,0,1"
+                        Padding="0,0,0,14">
+                    <DockPanel>
+                        <Button DockPanel.Dock="Right"
+                                Style="{StaticResource MaterialDesignIconButton}"
+                                Command="{Binding RefreshCommand}" ToolTip="刷新">
+                            <materialDesign:PackIcon Kind="Refresh" Width="22" Height="22" />
+                        </Button>
+                        <TextBlock Text="当前网络信息"
+                                   Style="{StaticResource MaterialDesignHeadline5TextBlock}"
+                                   VerticalAlignment="Center" />
+                    </DockPanel>
+                </Border>
 
                 <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
                     <ItemsControl ItemsSource="{Binding NetworkList}">
@@ -205,64 +335,102 @@
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
-                <StackPanel Orientation="Horizontal" Grid.Row="0" Margin="0,0,0,20">
-                    <TextBlock Text="开机启动管理" Style="{StaticResource MaterialDesignHeadline5TextBlock}" VerticalAlignment="Center" />
-                    <Button Style="{StaticResource MaterialDesignFloatingActionMiniButton}" Command="{Binding RefreshCommand}" Margin="20,0,0,0" ToolTip="刷新">
-                        <materialDesign:PackIcon Kind="Refresh" />
-                    </Button>
-                </StackPanel>
+                <Border Grid.Row="0" Margin="0,0,0,20"
+                        BorderBrush="{DynamicResource MaterialDesignDivider}" BorderThickness="0,0,0,1"
+                        Padding="0,0,0,14">
+                    <DockPanel>
+                        <Button DockPanel.Dock="Right"
+                                Style="{StaticResource MaterialDesignIconButton}"
+                                Command="{Binding RefreshCommand}" ToolTip="刷新">
+                            <materialDesign:PackIcon Kind="Refresh" Width="22" Height="22" />
+                        </Button>
+                        <TextBlock Text="开机启动管理"
+                                   Style="{StaticResource MaterialDesignHeadline5TextBlock}"
+                                   VerticalAlignment="Center" />
+                    </DockPanel>
+                </Border>
 
-                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-                    <ItemsControl ItemsSource="{Binding StartupList}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <materialDesign:Card Margin="0,0,0,10" Padding="15">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
+                <Grid Grid.Row="1">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding StartupList}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <materialDesign:Card Margin="0,0,0,10" Padding="0"
+                                                        materialDesign:ElevationAssist.Elevation="Dp1">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="5" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
 
-                                        <StackPanel>
-                                            <TextBlock Text="{Binding Name}" Style="{StaticResource MaterialDesignSubtitle1TextBlock}" FontWeight="Bold" />
-                                            <TextBlock Text="{Binding Command}" Style="{StaticResource MaterialDesignCaptionTextBlock}" Opacity="0.6" Margin="0,5" />
-                                            <TextBlock Text="{Binding Location}" Style="{StaticResource MaterialDesignCaptionTextBlock}" Foreground="{DynamicResource PrimaryHueMidBrush}" />
-                                        </StackPanel>
-
-                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Orientation="Horizontal">
-                                            <Button Command="{Binding DataContext.ToggleStartupCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                    CommandParameter="{Binding}"
-                                                    Width="80"
-                                                    Margin="0,0,10,0">
-                                                <Button.Style>
-                                                    <Style TargetType="Button" BasedOn="{StaticResource MaterialDesignOutlinedButton}">
-                                                        <Setter Property="Content" Value="禁用" />
-                                                        <Setter Property="Foreground" Value="Red" />
-                                                        <Setter Property="BorderBrush" Value="Red" />
+                                            <Border Grid.Column="0" CornerRadius="4,0,0,4">
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Setter Property="Background" Value="#2E7D32" />
                                                         <Style.Triggers>
                                                             <DataTrigger Binding="{Binding IsEnabled}" Value="False">
-                                                                <Setter Property="Content" Value="启用" />
-                                                                <Setter Property="Foreground" Value="Green" />
-                                                                <Setter Property="BorderBrush" Value="Green" />
+                                                                <Setter Property="Background" Value="#9E9E9E" />
                                                             </DataTrigger>
                                                         </Style.Triggers>
                                                     </Style>
-                                                </Button.Style>
-                                            </Button>
+                                                </Border.Style>
+                                            </Border>
 
-                                            <Button Style="{StaticResource MaterialDesignIconButton}"
-                                                    Command="{Binding DataContext.DeleteStartupCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                    CommandParameter="{Binding}"
-                                                    ToolTip="永久删除">
-                                                <materialDesign:PackIcon Kind="Delete" Foreground="Gray" />
-                                            </Button>
-                                        </StackPanel>
-                                    </Grid>
-                                </materialDesign:Card>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </ScrollViewer>
+                                            <StackPanel Grid.Column="1" Margin="12,12,8,12">
+                                                <TextBlock Text="{Binding Name}" Style="{StaticResource MaterialDesignSubtitle1TextBlock}" FontWeight="Bold" />
+                                                <TextBlock Text="{Binding Command}" Style="{StaticResource MaterialDesignCaptionTextBlock}" Opacity="0.6" Margin="0,4,0,4"
+                                                           TextTrimming="CharacterEllipsis" ToolTip="{Binding Command}" />
+                                                <StackPanel Orientation="Horizontal">
+                                                    <materialDesign:PackIcon Kind="AccountCircle" Width="12" Height="12" VerticalAlignment="Center" Opacity="0.5" />
+                                                    <TextBlock Text="{Binding Location}" Style="{StaticResource MaterialDesignCaptionTextBlock}" Foreground="{DynamicResource PrimaryHueMidBrush}" Margin="4,0,0,0" />
+                                                </StackPanel>
+                                            </StackPanel>
+
+                                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Orientation="Horizontal" Margin="0,0,8,0">
+                                                <Button Command="{Binding DataContext.ToggleStartupCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                        CommandParameter="{Binding}"
+                                                        Width="80"
+                                                        Margin="0,0,8,0">
+                                                    <Button.Style>
+                                                        <Style TargetType="Button" BasedOn="{StaticResource MaterialDesignOutlinedButton}">
+                                                            <Setter Property="Content" Value="禁用" />
+                                                            <Setter Property="Foreground" Value="#C62828" />
+                                                            <Setter Property="BorderBrush" Value="#C62828" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsEnabled}" Value="False">
+                                                                    <Setter Property="Content" Value="启用" />
+                                                                    <Setter Property="Foreground" Value="#2E7D32" />
+                                                                    <Setter Property="BorderBrush" Value="#2E7D32" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Button.Style>
+                                                </Button>
+
+                                                <Button Style="{StaticResource MaterialDesignIconButton}"
+                                                        Command="{Binding DataContext.DeleteStartupCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                        CommandParameter="{Binding}"
+                                                        ToolTip="永久删除（需确认）">
+                                                    <materialDesign:PackIcon Kind="DeleteOutline" Foreground="#9E9E9E" />
+                                                </Button>
+                                            </StackPanel>
+                                        </Grid>
+                                    </materialDesign:Card>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+
+                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center"
+                                Visibility="{Binding HasNoStartupItems, Converter={StaticResource BoolToVis}}">
+                        <materialDesign:PackIcon Kind="RocketLaunchOutline" Width="48" Height="48" HorizontalAlignment="Center" Opacity="0.25" />
+                        <TextBlock Text="未发现开机启动项" Style="{StaticResource MaterialDesignSubtitle1TextBlock}"
+                                   HorizontalAlignment="Center" Opacity="0.4" Margin="0,12,0,0" />
+                        <TextBlock Text="点击刷新按钮重新扫描" Style="{StaticResource MaterialDesignCaptionTextBlock}"
+                                   HorizontalAlignment="Center" Opacity="0.3" Margin="0,4,0,0" />
+                    </StackPanel>
+                </Grid>
             </Grid>
 
             <Grid Margin="20">
@@ -282,24 +450,60 @@
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
-                <StackPanel Orientation="Horizontal" Grid.Row="0" Margin="0,0,0,20">
+                <Border Grid.Row="0" Margin="0,0,0,20"
+                        BorderBrush="{DynamicResource MaterialDesignDivider}" BorderThickness="0,0,0,1"
+                        Padding="0,0,0,14">
+                    <StackPanel Orientation="Horizontal">
                     <TextBlock Text="VPN 连接" Style="{StaticResource MaterialDesignHeadline5TextBlock}" VerticalAlignment="Center" />
-                    <Border Background="{DynamicResource PrimaryHueLightBrush}" CornerRadius="4" Padding="8,4" Margin="20,0,0,0" VerticalAlignment="Center">
+                    <Border CornerRadius="4" Padding="8,4" Margin="20,0,0,0" VerticalAlignment="Center">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Background" Value="#757575" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsWgConnected}" Value="True">
+                                        <Setter Property="Background" Value="#2E7D32" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding IsWgBusy}" Value="True">
+                                        <Setter Property="Background" Value="#E65100" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
                         <TextBlock Text="{Binding WgStatusText}" Foreground="White" FontWeight="Bold" />
                     </Border>
-                    <Button Style="{StaticResource MaterialDesignIconButton}" Command="{Binding ToggleWgSettingsCommand}" Margin="10,0,0,0" ToolTip="设置">
+                    <ProgressBar Style="{StaticResource MaterialDesignCircularProgressBar}"
+                                 IsIndeterminate="True"
+                                 Width="20" Height="20"
+                                 Margin="12,0,0,0"
+                                 VerticalAlignment="Center"
+                                 Visibility="{Binding IsWgBusy, Converter={StaticResource BoolToVis}}" />
+                    <Button Style="{StaticResource MaterialDesignIconButton}" Command="{Binding ToggleWgSettingsCommand}" Margin="6,0,0,0" ToolTip="设置">
                         <materialDesign:PackIcon Kind="Settings" />
                     </Button>
-                </StackPanel>
+                    </StackPanel>
+                </Border>
 
                 <Grid Grid.Row="1">
                     <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
-                    <materialDesign:Card Padding="15" Margin="0,0,0,15">
+                    <materialDesign:Card Grid.Row="0" Padding="12,10" Margin="0,0,0,10"
+                                         Background="#FFF3E0"
+                                         Visibility="{Binding WgExeNotFound, Converter={StaticResource BoolToVis}}">
+                        <StackPanel Orientation="Horizontal">
+                            <materialDesign:PackIcon Kind="AlertCircleOutline" Foreground="#E65100" Width="20" Height="20" VerticalAlignment="Center" />
+                            <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap" Foreground="#BF360C">
+                                <Run FontWeight="Bold" Text="WireGuard 未安装" />
+                                <Run Text="— 请先安装 WireGuard for Windows，下载地址：https://www.wireguard.com/install/" />
+                            </TextBlock>
+                        </StackPanel>
+                    </materialDesign:Card>
+
+                    <materialDesign:Card Grid.Row="1" Padding="15" Margin="0,0,0,15">
                         <StackPanel>
                             <TextBox materialDesign:HintAssist.Hint="接口名称 (例如 wg0)"
                                      Text="{Binding WgInterfaceName}"
@@ -317,7 +521,7 @@
                         </StackPanel>
                     </materialDesign:Card>
 
-                    <Button Grid.Row="2" Command="{Binding ToggleWireGuardCommand}" Height="50">
+                    <Button Grid.Row="3" Command="{Binding ToggleWireGuardCommand}" Height="50">
                         <Button.Style>
                             <Style TargetType="Button" BasedOn="{StaticResource MaterialDesignRaisedButton}">
                                 <Setter Property="Content" Value="启动连接" />
@@ -334,7 +538,7 @@
                     </Button>
 
                     <materialDesign:Card Grid.Row="0"
-                                         Grid.RowSpan="3"
+                                         Grid.RowSpan="4"
                                          Background="{DynamicResource MaterialDesignPaper}"
                                          Visibility="{Binding IsWgSettingsOpen, Converter={StaticResource BoolToVis}}"
                                          materialDesign:ElevationAssist.Elevation="Dp8">
@@ -399,7 +603,11 @@
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
-                <TextBlock Text="系统优化与增强" Style="{StaticResource MaterialDesignHeadline5TextBlock}" Grid.Row="0" Margin="0,0,0,20" />
+                <Border Grid.Row="0" Margin="0,0,0,20"
+                        BorderBrush="{DynamicResource MaterialDesignDivider}" BorderThickness="0,0,0,1"
+                        Padding="0,0,0,14">
+                    <TextBlock Text="系统优化与增强" Style="{StaticResource MaterialDesignHeadline5TextBlock}" />
+                </Border>
 
                 <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
                     <StackPanel>
@@ -423,6 +631,149 @@
                                         Style="{StaticResource MaterialDesignRaisedButton}" />
                             </Grid>
                         </materialDesign:Card>
+
+                        <materialDesign:Card Padding="20" Margin="0,0,0,20">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                        <TextBlock Text="Windows Defender 实时防护"
+                                                   Style="{StaticResource MaterialDesignSubtitle1TextBlock}"
+                                                   FontWeight="Bold"
+                                                   VerticalAlignment="Center" />
+                                        <Border CornerRadius="4" Padding="8,2" Margin="12,0,0,0" VerticalAlignment="Center">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Setter Property="Background" Value="#2E7D32" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsDefenderEnabled}" Value="False">
+                                                            <Setter Property="Background" Value="#757575" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                            <TextBlock Foreground="White" FontWeight="Bold" FontSize="11">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Text" Value="防护中" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsDefenderEnabled}" Value="False">
+                                                                <Setter Property="Text" Value="已关闭" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </Border>
+                                    </StackPanel>
+                                    <TextBlock Text="关闭或恢复 Windows 安全中心的实时防护。Win11 需先在安全中心手动关闭「篡改保护」，否则命令将被拒绝。"
+                                               Style="{StaticResource MaterialDesignBody2TextBlock}"
+                                               Opacity="0.6"
+                                               TextWrapping="Wrap"
+                                               Margin="0,0,20,0" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Button Width="90" Margin="0,0,8,0" Command="{Binding ToggleDefenderCommand}">
+                                        <Button.Style>
+                                            <Style TargetType="Button" BasedOn="{StaticResource MaterialDesignOutlinedButton}">
+                                                <Setter Property="Content" Value="关闭防护" />
+                                                <Setter Property="Foreground" Value="#C62828" />
+                                                <Setter Property="BorderBrush" Value="#C62828" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsDefenderEnabled}" Value="False">
+                                                        <Setter Property="Content" Value="恢复防护" />
+                                                        <Setter Property="Foreground" Value="#2E7D32" />
+                                                        <Setter Property="BorderBrush" Value="#2E7D32" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
+                                    <Button Style="{StaticResource MaterialDesignIconButton}"
+                                            Command="{Binding RefreshSystemStatusCommand}"
+                                            ToolTip="刷新状态">
+                                        <materialDesign:PackIcon Kind="Refresh" />
+                                    </Button>
+                                </StackPanel>
+                            </Grid>
+                        </materialDesign:Card>
+
+                        <materialDesign:Card Padding="20" Margin="0,0,0,20">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                        <TextBlock Text="Windows 自动更新"
+                                                   Style="{StaticResource MaterialDesignSubtitle1TextBlock}"
+                                                   FontWeight="Bold"
+                                                   VerticalAlignment="Center" />
+                                        <Border CornerRadius="4" Padding="8,2" Margin="12,0,0,0" VerticalAlignment="Center">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Setter Property="Background" Value="#1565C0" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsAutoUpdateEnabled}" Value="False">
+                                                            <Setter Property="Background" Value="#757575" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                            <TextBlock Foreground="White" FontWeight="Bold" FontSize="11">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Text" Value="自动更新中" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsAutoUpdateEnabled}" Value="False">
+                                                                <Setter Property="Text" Value="已停止" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </Border>
+                                    </StackPanel>
+                                    <TextBlock Text="停止 Windows 后台自动更新，或手动触发立即检查并安装所有可用更新（以前台最高优先级下载安装，速度最快）。"
+                                               Style="{StaticResource MaterialDesignBody2TextBlock}"
+                                               Opacity="0.6"
+                                               TextWrapping="Wrap"
+                                               Margin="0,0,20,0" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,0,0">
+                                    <Button Width="90" Margin="0,0,0,8" Command="{Binding ToggleAutoUpdateCommand}">
+                                        <Button.Style>
+                                            <Style TargetType="Button" BasedOn="{StaticResource MaterialDesignOutlinedButton}">
+                                                <Setter Property="Content" Value="停止更新" />
+                                                <Setter Property="Foreground" Value="#C62828" />
+                                                <Setter Property="BorderBrush" Value="#C62828" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsAutoUpdateEnabled}" Value="False">
+                                                        <Setter Property="Content" Value="恢复更新" />
+                                                        <Setter Property="Foreground" Value="#1565C0" />
+                                                        <Setter Property="BorderBrush" Value="#1565C0" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
+                                    <Button Width="90"
+                                            Content="立即更新"
+                                            Command="{Binding TriggerUpdateNowCommand}"
+                                            Style="{StaticResource MaterialDesignRaisedButton}" />
+                                </StackPanel>
+                            </Grid>
+                        </materialDesign:Card>
+
+                        <TextBlock Text="{Binding SystemStatusMessage}"
+                                   Style="{StaticResource MaterialDesignCaptionTextBlock}"
+                                   Opacity="0.7"
+                                   TextWrapping="Wrap"
+                                   Margin="4,0,0,16" />
 
                         <materialDesign:Card Padding="20" Background="{DynamicResource PrimaryHueLightBrush}">
                             <StackPanel>
@@ -456,16 +807,20 @@
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
-                <StackPanel Orientation="Horizontal" Grid.Row="0" Margin="0,0,0,20">
-                    <TextBlock Text="SQL Server 表导出 Excel" Style="{StaticResource MaterialDesignHeadline5TextBlock}" VerticalAlignment="Center" />
-                    <Border Margin="16,0,0,0"
-                            Padding="10,4"
-                            CornerRadius="12"
-                            Background="#1F1976D2"
-                            VerticalAlignment="Center">
-                        <TextBlock Text=".xlsx / 单表导出" Foreground="#1976D2" FontWeight="SemiBold" />
-                    </Border>
-                </StackPanel>
+                <Border Grid.Row="0" Margin="0,0,0,20"
+                        BorderBrush="{DynamicResource MaterialDesignDivider}" BorderThickness="0,0,0,1"
+                        Padding="0,0,0,14">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="SQL Server 工具" Style="{StaticResource MaterialDesignHeadline5TextBlock}" VerticalAlignment="Center" />
+                        <Border Margin="16,0,0,0"
+                                Padding="10,4"
+                                CornerRadius="12"
+                                Background="#1F1976D2"
+                                VerticalAlignment="Center">
+                            <TextBlock Text="表导出 + SQL 查询" Foreground="#1976D2" FontWeight="SemiBold" />
+                        </Border>
+                    </StackPanel>
+                </Border>
 
                 <Grid Grid.Row="1">
                     <Grid.RowDefinitions>
@@ -613,22 +968,288 @@
                         </Grid>
                     </materialDesign:Card>
 
-                    <materialDesign:Card Grid.Row="2" Padding="20">
-                        <StackPanel>
-                            <TextBlock Text="使用说明" Style="{StaticResource MaterialDesignSubtitle1TextBlock}" FontWeight="Bold" />
-                            <TextBlock Margin="0,10,0,0" TextWrapping="Wrap">
-                                当前版本仅支持 SQL Server 账号密码连接，并按“选择数据库 -> 选择表 -> 导出整表”的流程工作。
-                            </TextBlock>
-                            <TextBlock Margin="0,6,0,0" TextWrapping="Wrap">
-                                为了保证安全性和稳定性，暂不支持自定义 SQL，也不会把密码或完整连接字符串写入日志。
-                            </TextBlock>
-                            <TextBlock Margin="0,6,0,0" TextWrapping="Wrap">
-                                如果目标表超过 Excel 单工作表上限 1,048,576 行，程序会阻止导出并给出提示。
-                            </TextBlock>
-                        </StackPanel>
-                    </materialDesign:Card>
+                    <TabControl Grid.Row="2"
+                                Style="{StaticResource MaterialDesignTabControl}"
+                                materialDesign:ColorZoneAssist.Mode="PrimaryMid">
+
+                        <TabItem Header="使用说明">
+                            <materialDesign:Card Padding="20" Margin="0,10,0,0">
+                                <StackPanel>
+                                    <TextBlock Text="使用说明" Style="{StaticResource MaterialDesignSubtitle1TextBlock}" FontWeight="Bold" />
+                                    <TextBlock Margin="0,10,0,0" TextWrapping="Wrap">
+                                        仅支持 SQL Server 账号密码连接。流程：测试连接 → 选择数据库 → 选择表 → 导出整表。
+                                    </TextBlock>
+                                    <TextBlock Margin="0,6,0,0" TextWrapping="Wrap">
+                                        SQL 查询标签页支持执行任意 SELECT / DDL 语句，结果可直接导出 Excel。
+                                    </TextBlock>
+                                    <TextBlock Margin="0,6,0,0" TextWrapping="Wrap">
+                                        目标表超过 Excel 单工作表上限 1,048,576 行时，程序会阻止导出并给出提示。
+                                    </TextBlock>
+                                </StackPanel>
+                            </materialDesign:Card>
+                        </TabItem>
+
+                        <TabItem Header="SQL 查询">
+                            <Grid Margin="0,10,0,0">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                </Grid.RowDefinitions>
+
+                                <materialDesign:Card Grid.Row="0" Padding="16" Margin="0,0,0,8">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="130" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                        <TextBox Grid.Row="0"
+                                                 Text="{Binding SqlQueryText, UpdateSourceTrigger=PropertyChanged}"
+                                                 AcceptsReturn="True"
+                                                 TextWrapping="NoWrap"
+                                                 HorizontalScrollBarVisibility="Auto"
+                                                 VerticalScrollBarVisibility="Auto"
+                                                 FontFamily="Consolas"
+                                                 FontSize="13"
+                                                 Style="{StaticResource MaterialDesignOutlinedTextBox}"
+                                                 materialDesign:HintAssist.Hint="输入 SQL 语句，例如：SELECT TOP 100 * FROM dbo.TableName" />
+
+                                        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,10,0,0">
+                                            <Button Width="110" Height="38"
+                                                    Margin="0,0,10,0"
+                                                    Content="执行查询"
+                                                    Command="{Binding ExecuteSqlQueryCommand}"
+                                                    Style="{StaticResource MaterialDesignRaisedButton}">
+                                                <Button.ContentTemplate>
+                                                    <DataTemplate>
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <materialDesign:PackIcon Kind="Play" VerticalAlignment="Center" Margin="0,0,6,0" />
+                                                            <TextBlock Text="{Binding}" VerticalAlignment="Center" />
+                                                        </StackPanel>
+                                                    </DataTemplate>
+                                                </Button.ContentTemplate>
+                                            </Button>
+                                            <Button Width="130" Height="38"
+                                                    Margin="0,0,16,0"
+                                                    Content="导出结果"
+                                                    Command="{Binding ExportQueryResultCommand}"
+                                                    Style="{StaticResource MaterialDesignOutlinedButton}">
+                                                <Button.ContentTemplate>
+                                                    <DataTemplate>
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <materialDesign:PackIcon Kind="FileExcel" VerticalAlignment="Center" Margin="0,0,6,0" />
+                                                            <TextBlock Text="{Binding}" VerticalAlignment="Center" />
+                                                        </StackPanel>
+                                                    </DataTemplate>
+                                                </Button.ContentTemplate>
+                                            </Button>
+                                            <ProgressBar Style="{StaticResource MaterialDesignCircularProgressBar}"
+                                                         IsIndeterminate="True"
+                                                         Width="20" Height="20"
+                                                         VerticalAlignment="Center"
+                                                         Margin="0,0,12,0"
+                                                         Visibility="{Binding IsQueryBusy, Converter={StaticResource BoolToVis}}" />
+                                            <TextBlock Text="{Binding QueryStatusMessage}"
+                                                       Style="{StaticResource MaterialDesignCaptionTextBlock}"
+                                                       VerticalAlignment="Center"
+                                                       Opacity="0.7" />
+                                        </StackPanel>
+                                    </Grid>
+                                </materialDesign:Card>
+
+                                <DataGrid Grid.Row="2"
+                                          ItemsSource="{Binding SqlQueryResult}"
+                                          AutoGenerateColumns="True"
+                                          IsReadOnly="True"
+                                          CanUserAddRows="False"
+                                          CanUserDeleteRows="False"
+                                          CanUserSortColumns="True"
+                                          VerticalScrollBarVisibility="Auto"
+                                          HorizontalScrollBarVisibility="Auto"
+                                          SelectionMode="Extended"
+                                          Style="{StaticResource MaterialDesignDataGrid}"
+                                          materialDesign:DataGridAssist.CellPadding="8 4 8 4"
+                                          materialDesign:DataGridAssist.ColumnHeaderPadding="8 4 8 4" />
+                            </Grid>
+                        </TabItem>
+
+                    </TabControl>
                 </Grid>
             </Grid>
+
+            <!-- Screenshot Settings panel -->
+            <Grid Margin="20">
+                <Grid.Style>
+                    <Style TargetType="Grid">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding CurrentModule}" Value="Screenshot">
+                                <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Grid.Style>
+
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <Border Grid.Row="0" Margin="0,0,0,20"
+                        BorderBrush="{DynamicResource MaterialDesignDivider}" BorderThickness="0,0,0,1"
+                        Padding="0,0,0,14">
+                    <DockPanel>
+                        <Button DockPanel.Dock="Right"
+                                Style="{StaticResource MaterialDesignRaisedButton}"
+                                Command="{Binding TakeScreenshotNowCommand}"
+                                Height="36" Padding="12,0"
+                                ToolTip="立即截图">
+                            <StackPanel Orientation="Horizontal">
+                                <materialDesign:PackIcon Kind="Camera" Width="16" Height="16" Margin="0,0,6,0"/>
+                                <TextBlock Text="立即截图"/>
+                            </StackPanel>
+                        </Button>
+                        <TextBlock Text="截图工具"
+                                   Style="{StaticResource MaterialDesignHeadline5TextBlock}"
+                                   VerticalAlignment="Center" />
+                    </DockPanel>
+                </Border>
+
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+
+                        <!-- Hotkey card -->
+                        <materialDesign:Card Padding="20" Margin="0,0,0,16">
+                            <StackPanel>
+                                <TextBlock Text="快捷键设置" Style="{StaticResource MaterialDesignSubtitle1TextBlock}" FontWeight="Bold" Margin="0,0,0,12"/>
+
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <Border Grid.Column="0" BorderBrush="{DynamicResource MaterialDesignDivider}"
+                                            BorderThickness="1" CornerRadius="4" Padding="14,10"
+                                            Margin="0,0,12,0">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Background" Value="{DynamicResource MaterialDesignTextFieldBoxBackground}"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsCapturingHotkey}" Value="True">
+                                                        <Setter Property="BorderBrush" Value="{DynamicResource PrimaryHueMidBrush}"/>
+                                                        <Setter Property="BorderThickness" Value="2"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <StackPanel Orientation="Horizontal">
+                                            <materialDesign:PackIcon Kind="Keyboard" Width="18" Height="18"
+                                                                     VerticalAlignment="Center" Margin="0,0,10,0"
+                                                                     Foreground="{DynamicResource PrimaryHueMidBrush}"/>
+                                            <TextBlock VerticalAlignment="Center" FontSize="14">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Text" Value="{Binding ScreenshotHotkeyText}"/>
+                                                        <Setter Property="Foreground" Value="{DynamicResource MaterialDesignBody}"/>
+                                                        <Setter Property="FontWeight" Value="Medium"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsCapturingHotkey}" Value="True">
+                                                                <Setter Property="Text" Value="请按下新快捷键组合..."/>
+                                                                <Setter Property="Foreground" Value="{DynamicResource PrimaryHueMidBrush}"/>
+                                                                <Setter Property="FontWeight" Value="Normal"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                        <Button Height="42" Padding="14,0" Margin="0,0,8,0"
+                                                Command="{Binding StartCaptureHotkeyCommand}">
+                                            <Button.Style>
+                                                <Style TargetType="Button" BasedOn="{StaticResource MaterialDesignOutlinedButton}">
+                                                    <Setter Property="Content" Value="修改快捷键"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsCapturingHotkey}" Value="True">
+                                                            <Setter Property="Content" Value="监听中..."/>
+                                                            <Setter Property="IsEnabled" Value="False"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                        </Button>
+                                        <Button Content="取消" Height="42" Padding="14,0"
+                                                Command="{Binding CancelCaptureHotkeyCommand}">
+                                            <Button.Style>
+                                                <Style TargetType="Button" BasedOn="{StaticResource MaterialDesignOutlinedButton}">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsCapturingHotkey}" Value="True">
+                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                        </Button>
+                                    </StackPanel>
+                                </Grid>
+
+                                <TextBlock Text="注意：快捷键需包含 Ctrl 或 Alt 之一，避免与系统快捷键冲突。快捷键在全局生效，包括窗口隐藏期间。"
+                                           Style="{StaticResource MaterialDesignCaptionTextBlock}"
+                                           Opacity="0.55" TextWrapping="Wrap" Margin="0,10,0,0"/>
+                            </StackPanel>
+                        </materialDesign:Card>
+
+                        <!-- Behavior card -->
+                        <materialDesign:Card Padding="20" Margin="0,0,0,16">
+                            <StackPanel>
+                                <TextBlock Text="截图行为" Style="{StaticResource MaterialDesignSubtitle1TextBlock}" FontWeight="Bold" Margin="0,0,0,12"/>
+
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Text="截图后打开编辑器"
+                                                   Style="{StaticResource MaterialDesignSubtitle2TextBlock}" FontWeight="Medium"/>
+                                        <TextBlock Margin="0,4,20,0" Opacity="0.6" TextWrapping="Wrap">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock" BasedOn="{StaticResource MaterialDesignBody2TextBlock}">
+                                                    <Setter Property="Text" Value="\u622a\u56fe\u540e\u81ea\u52a8\u6253\u5f00\u7f16\u8f91\u5668\u7a97\u53e3\uff0c\u53ef\u7528\u5212\u7b14\u6807\u6ce8\u5e76\u4fdd\u5b58\u3002"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding ShowEditorAfterCapture}" Value="False">
+                                                            <Setter Property="Text" Value="\u622a\u56fe\u540e\u76f4\u63a5\u5c06\u56fe\u7247\u590d\u5236\u5230\u526a\u8d34\u677f\uff0c\u4e0d\u6253\u5f00\u7f16\u8f91\u5668\u3002"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </StackPanel>
+                                    <ToggleButton Grid.Column="1" VerticalAlignment="Center"
+                                                  IsChecked="{Binding ShowEditorAfterCapture}" />
+                                </Grid>
+                            </StackPanel>
+                        </materialDesign:Card>
+
+                        <!-- Save button -->
+                        <Button Style="{StaticResource MaterialDesignRaisedButton}"
+                                Command="{Binding SaveScreenshotSettingsCommand}"
+                                Height="44" Width="160"
+                                HorizontalAlignment="Left">
+                            <StackPanel Orientation="Horizontal">
+                                <materialDesign:PackIcon Kind="ContentSaveOutline" Width="18" Height="18" Margin="0,0,8,0"/>
+                                <TextBlock Text="保存设置"/>
+                            </StackPanel>
+                        </Button>
+
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+
         </Grid>
     </Grid>
 </mah:MetroWindow>

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Data;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
@@ -44,9 +45,29 @@ namespace MyTools.ViewModels
         private string _sqlStatusMessage = "请输入 SQL Server 连接信息后测试连接。";
         private bool _isSqlBusy;
         private CancellationTokenSource _loadTablesCancellationTokenSource;
+        private bool _isDefenderEnabled = true;
+        private bool _isAutoUpdateEnabled = true;
+        private string _systemStatusMessage = string.Empty;
+        private bool _isWgBusy;
+        private string _sqlQueryText = string.Empty;
+        private DataView _sqlQueryResult;
+        private bool _isQueryBusy;
+        private string _queryStatusMessage = string.Empty;
+
+        private bool _showEditorAfterCapture = true;
+        private string _screenshotHotkeyText = "Ctrl+Shift+Z";
+        private bool _isCapturingHotkey;
+        private uint _pendingModifiers;
+        private uint _pendingKey;
+
+        private readonly AsyncRelayCommand _executeQueryCommand;
+        private readonly AsyncRelayCommand _exportQueryResultCommand;
 
         private readonly AsyncRelayCommand _testSqlConnectionCommand;
         private readonly AsyncRelayCommand _exportSqlTableCommand;
+        private readonly AsyncRelayCommand _toggleDefenderCommand;
+        private readonly AsyncRelayCommand _toggleAutoUpdateCommand;
+        private readonly AsyncRelayCommand _triggerUpdateNowCommand;
 
         public MainViewModel()
         {
@@ -77,7 +98,13 @@ namespace MyTools.ViewModels
             });
             DeleteStartupCommand = new RelayParameterCommand(obj =>
             {
-                if (obj is StartupItem item)
+                if (!(obj is StartupItem item)) return;
+                var confirm = MessageBox.Show(
+                    $"确定要永久删除启动项 \"{item.Name}\" 吗？\n此操作不可恢复。",
+                    "确认删除",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Warning);
+                if (confirm == MessageBoxResult.Yes)
                 {
                     StartupService.DeleteStartupItem(item);
                     Refresh();
@@ -90,13 +117,33 @@ namespace MyTools.ViewModels
             ExitCommand = new RelayCommand(ExitApplication);
             RestoreCommand = new RelayCommand(RestoreWindow);
 
+            _toggleDefenderCommand = new AsyncRelayCommand(ToggleDefenderAsync);
+            _toggleAutoUpdateCommand = new AsyncRelayCommand(ToggleAutoUpdateAsync);
+            _triggerUpdateNowCommand = new AsyncRelayCommand(TriggerUpdateNowAsync);
+            ToggleDefenderCommand = _toggleDefenderCommand;
+            ToggleAutoUpdateCommand = _toggleAutoUpdateCommand;
+            TriggerUpdateNowCommand = _triggerUpdateNowCommand;
+            RefreshSystemStatusCommand = new RelayCommand(RefreshSystemStatus);
+
+            _executeQueryCommand = new AsyncRelayCommand(ExecuteSqlQueryAsync, CanExecuteSqlQuery);
+            _exportQueryResultCommand = new AsyncRelayCommand(ExportQueryResultAsync, CanExportQueryResult);
+            ExecuteSqlQueryCommand = _executeQueryCommand;
+            ExportQueryResultCommand = _exportQueryResultCommand;
+
             _testSqlConnectionCommand = new AsyncRelayCommand(TestSqlConnectionAsync, () => !IsSqlBusy);
             _exportSqlTableCommand = new AsyncRelayCommand(ExportSelectedTableAsync, CanExportSqlTable);
             TestSqlConnectionCommand = _testSqlConnectionCommand;
             ExportSqlTableCommand = _exportSqlTableCommand;
 
+            ShowScreenshotCommand = new RelayCommand(() => { CurrentModule = "Screenshot"; });
+            TakeScreenshotNowCommand = new AsyncRelayCommand(TriggerScreenshotAsync);
+            StartCaptureHotkeyCommand = new RelayCommand(() => IsCapturingHotkey = true);
+            CancelCaptureHotkeyCommand = new RelayCommand(() => IsCapturingHotkey = false);
+            SaveScreenshotSettingsCommand = new AsyncRelayCommand(SaveScreenshotSettingsAsync);
+
             CurrentModule = "Home";
             _ = LoadSqlConnectionHistoryAsync();
+            _ = LoadScreenshotSettingsAsync();
         }
 
         public ObservableCollection<NetworkData> NetworkList
@@ -315,11 +362,184 @@ namespace MyTools.ViewModels
         public ICommand ToggleWireGuardCommand { get; }
         public ICommand ToggleWgSettingsCommand { get; }
         public ICommand GenerateConfigCommand { get; }
+        public bool IsWgBusy
+        {
+            get => _isWgBusy;
+            set { _isWgBusy = value; OnPropertyChanged(); }
+        }
+
+        public bool HasNoStartupItems => StartupList.Count == 0;
+
+        public bool WgExeFound => WireGuardService.IsExeAvailable;
+        public bool WgExeNotFound => !WireGuardService.IsExeAvailable;
+
+        public string SqlQueryText
+        {
+            get => _sqlQueryText;
+            set { _sqlQueryText = value; OnPropertyChanged(); _executeQueryCommand?.RaiseCanExecuteChanged(); }
+        }
+
+        public DataView SqlQueryResult
+        {
+            get => _sqlQueryResult;
+            set { _sqlQueryResult = value; OnPropertyChanged(); _exportQueryResultCommand?.RaiseCanExecuteChanged(); }
+        }
+
+        public bool IsQueryBusy
+        {
+            get => _isQueryBusy;
+            set { _isQueryBusy = value; OnPropertyChanged(); _executeQueryCommand?.RaiseCanExecuteChanged(); _exportQueryResultCommand?.RaiseCanExecuteChanged(); }
+        }
+
+        public string QueryStatusMessage
+        {
+            get => _queryStatusMessage;
+            set { _queryStatusMessage = value; OnPropertyChanged(); }
+        }
+
+        public ICommand ExecuteSqlQueryCommand { get; }
+        public ICommand ExportQueryResultCommand { get; }
+
+        public bool IsDefenderEnabled
+        {
+            get => _isDefenderEnabled;
+            set { _isDefenderEnabled = value; OnPropertyChanged(); }
+        }
+
+        public bool IsAutoUpdateEnabled
+        {
+            get => _isAutoUpdateEnabled;
+            set { _isAutoUpdateEnabled = value; OnPropertyChanged(); }
+        }
+
+        public string SystemStatusMessage
+        {
+            get => _systemStatusMessage;
+            set { _systemStatusMessage = value; OnPropertyChanged(); }
+        }
+
+        public bool ShowEditorAfterCapture
+        {
+            get => _showEditorAfterCapture;
+            set { _showEditorAfterCapture = value; OnPropertyChanged(); }
+        }
+
+        public string ScreenshotHotkeyText
+        {
+            get => _screenshotHotkeyText;
+            set { _screenshotHotkeyText = value; OnPropertyChanged(); }
+        }
+
+        public bool IsCapturingHotkey
+        {
+            get => _isCapturingHotkey;
+            set { _isCapturingHotkey = value; OnPropertyChanged(); }
+        }
+
+        public ICommand ShowScreenshotCommand { get; }
+        public ICommand TakeScreenshotNowCommand { get; }
+        public ICommand StartCaptureHotkeyCommand { get; }
+        public ICommand CancelCaptureHotkeyCommand { get; }
+        public ICommand SaveScreenshotSettingsCommand { get; }
+
         public ICommand LockWin10Command { get; }
         public ICommand ExitCommand { get; }
         public ICommand RestoreCommand { get; }
         public ICommand TestSqlConnectionCommand { get; }
         public ICommand ExportSqlTableCommand { get; }
+        public ICommand ToggleDefenderCommand { get; }
+        public ICommand ToggleAutoUpdateCommand { get; }
+        public ICommand TriggerUpdateNowCommand { get; }
+        public ICommand RefreshSystemStatusCommand { get; }
+
+        public void ApplyPendingHotkey(uint modifiers, uint key)
+        {
+            _pendingModifiers = modifiers;
+            _pendingKey = key;
+            ScreenshotHotkeyText = HotkeyService.BuildDisplayText(modifiers, key);
+            IsCapturingHotkey = false;
+        }
+
+        public async Task TriggerScreenshotAsync()
+        {
+            try
+            {
+                var mainWin = Application.Current?.MainWindow;
+                var wasVisible = mainWin?.IsVisible == true;
+                if (wasVisible) mainWin.Hide();
+                await Task.Delay(150);
+
+                var screenshot = ScreenshotService.CaptureFullScreen();
+
+                if (wasVisible && !ShowEditorAfterCapture) mainWin?.Show();
+
+                if (ShowEditorAfterCapture)
+                {
+                    Application.Current?.Dispatcher.Invoke(() =>
+                    {
+                        var editor = new ScreenshotEditorWindow();
+                        editor.LoadScreenshot(screenshot);
+                        editor.Closed += (s, e) =>
+                        {
+                            if (wasVisible) mainWin?.Show();
+                        };
+                        editor.Show();
+                    });
+                }
+                else
+                {
+                    Application.Current?.Dispatcher.Invoke(() =>
+                    {
+                        System.Windows.Clipboard.SetImage(screenshot);
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "Screenshot failed");
+            }
+        }
+
+        private async Task LoadScreenshotSettingsAsync()
+        {
+            try
+            {
+                var settings = await AppSettingsService.LoadAsync().ConfigureAwait(false);
+                _pendingModifiers = settings.ScreenshotHotkey.Modifiers;
+                _pendingKey       = settings.ScreenshotHotkey.Key;
+                ShowEditorAfterCapture = settings.ShowEditorAfterCapture;
+                ScreenshotHotkeyText = settings.ScreenshotHotkey.DisplayText;
+                HotkeyService.Register(settings.ScreenshotHotkey.Modifiers, settings.ScreenshotHotkey.Key);
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "LoadScreenshotSettings failed");
+            }
+        }
+
+        private async Task SaveScreenshotSettingsAsync()
+        {
+            try
+            {
+                if (_pendingKey == 0) return;
+                var settings = await AppSettingsService.LoadAsync().ConfigureAwait(false);
+                settings.ScreenshotHotkey = new HotkeySettings
+                {
+                    Modifiers   = _pendingModifiers,
+                    Key         = _pendingKey,
+                    DisplayText = ScreenshotHotkeyText
+                };
+                settings.ShowEditorAfterCapture = ShowEditorAfterCapture;
+                await AppSettingsService.SaveAsync(settings).ConfigureAwait(false);
+                HotkeyService.Register(_pendingModifiers, _pendingKey);
+                Application.Current?.Dispatcher.Invoke(() =>
+                    MessageBox.Show("设置已保存", "完成", MessageBoxButton.OK, MessageBoxImage.Information));
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "SaveScreenshotSettings failed");
+            }
+        }
 
         private void Refresh()
         {
@@ -340,10 +560,16 @@ namespace MyTools.ViewModels
                 {
                     StartupList.Add(item);
                 }
+                OnPropertyChanged(nameof(HasNoStartupItems));
             }
             else if (CurrentModule == "WireGuard")
             {
                 UpdateWgStatus();
+                if (string.IsNullOrWhiteSpace(WgConfig))
+                {
+                    var saved = WireGuardService.GetSavedConfig(WgInterfaceName);
+                    if (saved != null) WgConfig = saved;
+                }
             }
             else if (CurrentModule == "SqlExport")
             {
@@ -351,6 +577,10 @@ namespace MyTools.ViewModels
                 {
                     _ = LoadTablesForSelectedDatabaseAsync();
                 }
+            }
+            else if (CurrentModule == "System")
+            {
+                RefreshSystemStatus();
             }
         }
 
@@ -379,25 +609,30 @@ namespace MyTools.ViewModels
 
         private async Task ToggleWireGuardAsync()
         {
-            if (IsWgConnected)
+            IsWgBusy = true;
+            try
             {
-                await WireGuardService.DisconnectAsync(WgInterfaceName);
+                if (IsWgConnected)
+                {
+                    WgStatusText = "正在断开...";
+                    await WireGuardService.DisconnectAsync(WgInterfaceName);
+                }
+                else
+                {
+                    if (string.IsNullOrWhiteSpace(WgConfig)) return;
+                    WgStatusText = "正在连接...";
+                    var status = await WireGuardService.ConnectAsync(WgInterfaceName, WgConfig);
+                    if (!string.IsNullOrEmpty(status.ErrorMessage))
+                    {
+                        MessageBox.Show(status.ErrorMessage, "WireGuard 连接失败", MessageBoxButton.OK, MessageBoxImage.Error);
+                    }
+                }
             }
-            else
+            finally
             {
-                if (string.IsNullOrWhiteSpace(WgConfig))
-                {
-                    return;
-                }
-
-                var status = await WireGuardService.ConnectAsync(WgInterfaceName, WgConfig);
-                if (!string.IsNullOrEmpty(status.ErrorMessage))
-                {
-                    MessageBox.Show(status.ErrorMessage, "WireGuard Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                }
+                IsWgBusy = false;
+                UpdateWgStatus();
             }
-
-            UpdateWgStatus();
         }
 
         private async Task TestSqlConnectionAsync()
@@ -672,6 +907,76 @@ namespace MyTools.ViewModels
             Application.Current.Shutdown();
         }
 
+        private void RefreshSystemStatus()
+        {
+            IsDefenderEnabled = WindowsSecurityService.GetDefenderRealtimeStatus();
+            IsAutoUpdateEnabled = WindowsSecurityService.GetAutoUpdateStatus();
+        }
+
+        private async Task ToggleDefenderAsync()
+        {
+            bool target = !IsDefenderEnabled;
+            SystemStatusMessage = target ? "正在恢复实时防护，请在 UAC 弹窗中确认..." : "正在关闭实时防护，请在 UAC 弹窗中确认...";
+            try
+            {
+                await WindowsSecurityService.SetDefenderRealtimeAsync(target);
+                await Task.Delay(1500);
+                RefreshSystemStatus();
+                SystemStatusMessage = target ? "实时防护已恢复。" : "实时防护已关闭。";
+            }
+            catch (OperationCanceledException)
+            {
+                SystemStatusMessage = "操作已取消（UAC 未授权）。";
+            }
+            catch (Exception ex)
+            {
+                SystemStatusMessage = "操作失败：" + ex.Message;
+                MessageBox.Show(ex.Message, "操作失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private async Task ToggleAutoUpdateAsync()
+        {
+            bool target = !IsAutoUpdateEnabled;
+            SystemStatusMessage = target ? "正在恢复自动更新，请在 UAC 弹窗中确认..." : "正在停止自动更新，请在 UAC 弹窗中确认...";
+            try
+            {
+                await WindowsSecurityService.SetAutoUpdateAsync(target);
+                await Task.Delay(1500);
+                RefreshSystemStatus();
+                SystemStatusMessage = target ? "自动更新已恢复。" : "自动更新已停止。";
+            }
+            catch (OperationCanceledException)
+            {
+                SystemStatusMessage = "操作已取消（UAC 未授权）。";
+            }
+            catch (Exception ex)
+            {
+                SystemStatusMessage = "操作失败：" + ex.Message;
+                MessageBox.Show(ex.Message, "操作失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private async Task TriggerUpdateNowAsync()
+        {
+            SystemStatusMessage = "正在触发立即更新，请在 UAC 弹窗中确认...";
+            try
+            {
+                await WindowsSecurityService.TriggerImmediateUpdateAsync();
+                RefreshSystemStatus();
+                SystemStatusMessage = "更新任务已下发，Windows Update 设置页已打开，可在其中查看进度。";
+            }
+            catch (OperationCanceledException)
+            {
+                SystemStatusMessage = "操作已取消（UAC 未授权）。";
+            }
+            catch (Exception ex)
+            {
+                SystemStatusMessage = "操作失败：" + ex.Message;
+                MessageBox.Show(ex.Message, "操作失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
         private void LockWin10Version()
         {
             try
@@ -703,10 +1008,90 @@ namespace MyTools.ViewModels
             }
         }
 
+        private bool CanExecuteSqlQuery()
+            => !IsQueryBusy && SelectedSqlDatabase != null && !string.IsNullOrWhiteSpace(SqlQueryText);
+
+        private bool CanExportQueryResult()
+            => !IsQueryBusy && SqlQueryResult != null && SqlQueryResult.Count > 0;
+
+        private async Task ExecuteSqlQueryAsync()
+        {
+            IsQueryBusy = true;
+            QueryStatusMessage = "正在执行查询...";
+            SqlQueryResult = null;
+            try
+            {
+                var options = BuildSqlConnectionOptions();
+                var table = await SqlExportService.ExecuteQueryAsync(
+                    options,
+                    SelectedSqlDatabase.Name,
+                    SqlQueryText,
+                    CancellationToken.None);
+
+                SqlQueryResult = table.DefaultView;
+                QueryStatusMessage = $"共 {table.Rows.Count} 行、{table.Columns.Count} 列。";
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "SQL query execution failed");
+                QueryStatusMessage = "执行失败：" + ex.Message;
+                MessageBox.Show(ex.Message, "SQL 执行失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                IsQueryBusy = false;
+            }
+        }
+
+        private async Task ExportQueryResultAsync()
+        {
+            if (SqlQueryResult == null) return;
+            var dialog = new SaveFileDialog
+            {
+                Filter = "Excel 工作簿 (*.xlsx)|*.xlsx",
+                FileName = $"QueryResult_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx",
+                DefaultExt = ".xlsx",
+                AddExtension = true,
+                OverwritePrompt = true
+            };
+            if (dialog.ShowDialog() != true) return;
+
+            IsQueryBusy = true;
+            QueryStatusMessage = "正在导出 Excel...";
+            try
+            {
+                var table = SqlQueryResult.Table;
+                var result = await SqlExportService.ExportDataTableAsync(
+                    table,
+                    "QueryResult",
+                    dialog.FileName,
+                    CancellationToken.None);
+
+                QueryStatusMessage = $"导出完成，共 {result.RowCount} 行。";
+                MessageBox.Show(
+                    $"导出成功。\n文件路径：{result.FilePath}",
+                    "导出完成",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "Query result export failed");
+                QueryStatusMessage = "导出失败：" + ex.Message;
+                MessageBox.Show(ex.Message, "导出失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                IsQueryBusy = false;
+            }
+        }
+
         private void TriggerCommandRequery()
         {
             _testSqlConnectionCommand?.RaiseCanExecuteChanged();
             _exportSqlTableCommand?.RaiseCanExecuteChanged();
+            _executeQueryCommand?.RaiseCanExecuteChanged();
+            _exportQueryResultCommand?.RaiseCanExecuteChanged();
         }
 
         public event PropertyChangedEventHandler PropertyChanged;

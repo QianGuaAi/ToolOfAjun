@@ -1,0 +1,137 @@
+<Window x:Class="MyTools.ScreenshotEditorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+        Title="截图编辑"
+        WindowState="Maximized"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        ShowInTaskbar="True"
+        Background="#1A1A2E"
+        TextElement.Foreground="{DynamicResource MaterialDesignBody}"
+        TextElement.FontFamily="{DynamicResource MaterialDesignFont}"
+        KeyDown="Window_KeyDown">
+
+    <Window.Resources>
+        <Style x:Key="ColorBtnStyle" TargetType="Button">
+            <Setter Property="Width" Value="28"/>
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="BorderThickness" Value="2"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="14">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="BorderBrush" Value="White"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="ToolBtnStyle" TargetType="Button" BasedOn="{StaticResource MaterialDesignIconButton}">
+            <Setter Property="Foreground" Value="#AABDD0"/>
+            <Setter Property="Width" Value="36"/>
+            <Setter Property="Height" Value="36"/>
+        </Style>
+    </Window.Resources>
+
+    <DockPanel>
+        <!-- Toolbar -->
+        <Border DockPanel.Dock="Top" Background="#0F1923" Padding="10,6" Height="54">
+            <DockPanel>
+                <!-- Right actions -->
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                    <Button x:Name="BtnCopyClipboard" Style="{StaticResource MaterialDesignRaisedButton}"
+                            Background="#1565C0" BorderBrush="#1565C0"
+                            Margin="4,0" Padding="12,0" Height="36"
+                            Click="BtnCopyClipboard_Click" ToolTip="复制到剪贴板 (Ctrl+C)">
+                        <StackPanel Orientation="Horizontal">
+                            <materialDesign:PackIcon Kind="ContentCopy" Width="16" Height="16" Margin="0,0,6,0"/>
+                            <TextBlock Text="复制"/>
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="BtnSaveAs" Style="{StaticResource MaterialDesignRaisedButton}"
+                            Background="#2E7D32" BorderBrush="#2E7D32"
+                            Margin="4,0" Padding="12,0" Height="36"
+                            Click="BtnSaveAs_Click" ToolTip="另存为图片文件 (Ctrl+S)">
+                        <StackPanel Orientation="Horizontal">
+                            <materialDesign:PackIcon Kind="ContentSave" Width="16" Height="16" Margin="0,0,6,0"/>
+                            <TextBlock Text="另存为"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource ToolBtnStyle}"
+                            Margin="8,0,0,0" Click="BtnClose_Click" ToolTip="关闭 (Esc)">
+                        <materialDesign:PackIcon Kind="Close" Width="20" Height="20" Foreground="#EF5350"/>
+                    </Button>
+                </StackPanel>
+
+                <!-- Left tools -->
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <!-- Color palette -->
+                    <TextBlock Text="颜色:" Foreground="#778899" VerticalAlignment="Center" Margin="0,0,8,0" FontSize="12"/>
+                    <Button x:Name="BtnColorRed"    Style="{StaticResource ColorBtnStyle}" Background="#EF5350" Margin="3,0" Click="ColorBtn_Click" Tag="#EF5350"/>
+                    <Button x:Name="BtnColorOrange" Style="{StaticResource ColorBtnStyle}" Background="#FF9800" Margin="3,0" Click="ColorBtn_Click" Tag="#FF9800"/>
+                    <Button x:Name="BtnColorYellow" Style="{StaticResource ColorBtnStyle}" Background="#FFEB3B" Margin="3,0" Click="ColorBtn_Click" Tag="#FFEB3B"/>
+                    <Button x:Name="BtnColorGreen"  Style="{StaticResource ColorBtnStyle}" Background="#4CAF50" Margin="3,0" Click="ColorBtn_Click" Tag="#4CAF50"/>
+                    <Button x:Name="BtnColorCyan"   Style="{StaticResource ColorBtnStyle}" Background="#00BCD4" Margin="3,0" Click="ColorBtn_Click" Tag="#00BCD4"/>
+                    <Button x:Name="BtnColorBlue"   Style="{StaticResource ColorBtnStyle}" Background="#2196F3" Margin="3,0" Click="ColorBtn_Click" Tag="#2196F3"/>
+                    <Button x:Name="BtnColorPurple" Style="{StaticResource ColorBtnStyle}" Background="#9C27B0" Margin="3,0" Click="ColorBtn_Click" Tag="#9C27B0"/>
+                    <Button x:Name="BtnColorWhite"  Style="{StaticResource ColorBtnStyle}" Background="White"   Margin="3,0" Click="ColorBtn_Click" Tag="#FFFFFF"/>
+                    <Button x:Name="BtnColorBlack"  Style="{StaticResource ColorBtnStyle}" Background="#212121" Margin="3,0" Click="ColorBtn_Click" Tag="#212121"/>
+
+                    <Rectangle Width="1" Fill="#334" Margin="12,6"/>
+
+                    <!-- Brush size -->
+                    <TextBlock Text="粗细:" Foreground="#778899" VerticalAlignment="Center" Margin="0,0,6,0" FontSize="12"/>
+                    <Slider x:Name="SldBrushSize" Minimum="1" Maximum="30" Value="3"
+                            Width="90" VerticalAlignment="Center"
+                            ValueChanged="SldBrushSize_ValueChanged"/>
+                    <TextBlock x:Name="TxtBrushSize" Text="3" Foreground="#AABDD0"
+                               VerticalAlignment="Center" Margin="6,0,0,0" MinWidth="20" FontSize="12"/>
+
+                    <Rectangle Width="1" Fill="#334" Margin="12,6"/>
+
+                    <!-- Mode buttons -->
+                    <ToggleButton x:Name="TglEraser" Style="{StaticResource MaterialDesignActionToggleButton}"
+                                  Width="36" Height="36" Margin="4,0"
+                                  ToolTip="橡皮擦 (E)"
+                                  Checked="TglEraser_Checked" Unchecked="TglEraser_Unchecked">
+                        <materialDesign:PackIcon Kind="Eraser"/>
+                    </ToggleButton>
+
+                    <Button Style="{StaticResource ToolBtnStyle}" Margin="4,0"
+                            Click="BtnUndo_Click" ToolTip="撤销 (Ctrl+Z)">
+                        <materialDesign:PackIcon Kind="Undo"/>
+                    </Button>
+
+                    <Button Style="{StaticResource ToolBtnStyle}" Margin="4,0"
+                            Click="BtnClear_Click" ToolTip="清除所有标注">
+                        <materialDesign:PackIcon Kind="DeleteSweep"/>
+                    </Button>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <!-- Canvas area -->
+        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
+                      Background="#111827">
+            <Grid x:Name="CanvasContainer" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <Image x:Name="ScreenshotImage" Stretch="None" SnapsToDevicePixels="True"
+                       RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                <InkCanvas x:Name="DrawingCanvas" Background="Transparent"
+                           EditingMode="Ink"/>
+            </Grid>
+        </ScrollViewer>
+    </DockPanel>
+</Window>
