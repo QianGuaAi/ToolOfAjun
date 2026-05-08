@@ -57,8 +57,8 @@ namespace MyTools.ViewModels
         private bool _showEditorAfterCapture = true;
         private string _screenshotHotkeyText = "Ctrl+Shift+Z";
         private bool _isCapturingHotkey;
-        private uint _pendingModifiers;
-        private uint _pendingKey;
+        private uint _pendingModifiers = 0x0006;
+        private uint _pendingKey = 0x5A;
 
         private readonly AsyncRelayCommand _executeQueryCommand;
         private readonly AsyncRelayCommand _exportQueryResultCommand;
@@ -140,6 +140,7 @@ namespace MyTools.ViewModels
             StartCaptureHotkeyCommand = new RelayCommand(() => IsCapturingHotkey = true);
             CancelCaptureHotkeyCommand = new RelayCommand(() => IsCapturingHotkey = false);
             SaveScreenshotSettingsCommand = new AsyncRelayCommand(SaveScreenshotSettingsAsync);
+            EditClipboardImageCommand = new RelayCommand(EditClipboardImage);
 
             CurrentModule = "Home";
             _ = LoadSqlConnectionHistoryAsync();
@@ -441,6 +442,7 @@ namespace MyTools.ViewModels
         public ICommand StartCaptureHotkeyCommand { get; }
         public ICommand CancelCaptureHotkeyCommand { get; }
         public ICommand SaveScreenshotSettingsCommand { get; }
+        public ICommand EditClipboardImageCommand { get; }
 
         public ICommand LockWin10Command { get; }
         public ICommand ExitCommand { get; }
@@ -451,6 +453,25 @@ namespace MyTools.ViewModels
         public ICommand ToggleAutoUpdateCommand { get; }
         public ICommand TriggerUpdateNowCommand { get; }
         public ICommand RefreshSystemStatusCommand { get; }
+
+        private void EditClipboardImage()
+        {
+            var image = System.Windows.Clipboard.GetImage();
+            if (image == null)
+            {
+                MessageBox.Show("剪贴板中没有图片", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+            var editor = new ScreenshotEditorWindow();
+            editor.LoadScreenshot(image);
+            editor.Show();
+        }
+
+        public void ReRegisterHotkey()
+        {
+            if (_pendingKey != 0)
+                HotkeyService.Register(_pendingModifiers, _pendingKey);
+        }
 
         public void ApplyPendingHotkey(uint modifiers, uint key)
         {
@@ -471,27 +492,18 @@ namespace MyTools.ViewModels
 
                 var screenshot = ScreenshotService.CaptureFullScreen();
 
-                if (wasVisible && !ShowEditorAfterCapture) mainWin?.Show();
+                System.Windows.Clipboard.SetImage(screenshot);
 
                 if (ShowEditorAfterCapture)
                 {
-                    Application.Current?.Dispatcher.Invoke(() =>
-                    {
-                        var editor = new ScreenshotEditorWindow();
-                        editor.LoadScreenshot(screenshot);
-                        editor.Closed += (s, e) =>
-                        {
-                            if (wasVisible) mainWin?.Show();
-                        };
-                        editor.Show();
-                    });
+                    var editor = new ScreenshotEditorWindow();
+                    editor.LoadScreenshot(screenshot);
+                    editor.Closed += (s, e) => { if (wasVisible) mainWin?.Show(); };
+                    editor.Show();
                 }
                 else
                 {
-                    Application.Current?.Dispatcher.Invoke(() =>
-                    {
-                        System.Windows.Clipboard.SetImage(screenshot);
-                    });
+                    if (wasVisible) mainWin?.Show();
                 }
             }
             catch (Exception ex)

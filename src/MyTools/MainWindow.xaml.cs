@@ -83,6 +83,8 @@ namespace MyTools
             var handle = new WindowInteropHelper(this).Handle;
             HotkeyService.Initialize(handle);
             HwndSource.FromHwnd(handle)?.AddHook(WndProc);
+            if (DataContext is MainViewModel vm)
+                vm.ReRegisterHotkey();
         }
 
         private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)

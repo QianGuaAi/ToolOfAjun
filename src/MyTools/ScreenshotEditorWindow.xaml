@@ -102,13 +102,36 @@
 
                     <Rectangle Width="1" Fill="#334" Margin="12,6"/>
 
-                    <!-- Mode buttons -->
+                    <!-- Drawing tools -->
+                    <ToggleButton x:Name="TglPen" Style="{StaticResource MaterialDesignActionToggleButton}"
+                                  Width="36" Height="36" Margin="4,0"
+                                  IsChecked="True" ToolTip="画笔 (P)"
+                                  Checked="TglPen_Checked">
+                        <materialDesign:PackIcon Kind="Pen"/>
+                    </ToggleButton>
+
+                    <ToggleButton x:Name="TglRect" Style="{StaticResource MaterialDesignActionToggleButton}"
+                                  Width="36" Height="36" Margin="4,0"
+                                  ToolTip="矩形 (R)"
+                                  Checked="TglRect_Checked">
+                        <materialDesign:PackIcon Kind="RectangleOutline"/>
+                    </ToggleButton>
+
+                    <ToggleButton x:Name="TglLine" Style="{StaticResource MaterialDesignActionToggleButton}"
+                                  Width="36" Height="36" Margin="4,0"
+                                  ToolTip="直线 (L)"
+                                  Checked="TglLine_Checked">
+                        <materialDesign:PackIcon Kind="VectorLine"/>
+                    </ToggleButton>
+
                     <ToggleButton x:Name="TglEraser" Style="{StaticResource MaterialDesignActionToggleButton}"
                                   Width="36" Height="36" Margin="4,0"
                                   ToolTip="橡皮擦 (E)"
                                   Checked="TglEraser_Checked" Unchecked="TglEraser_Unchecked">
                         <materialDesign:PackIcon Kind="Eraser"/>
                     </ToggleButton>
+
+                    <Rectangle Width="1" Fill="#334" Margin="12,6"/>
 
                     <Button Style="{StaticResource ToolBtnStyle}" Margin="4,0"
                             Click="BtnUndo_Click" ToolTip="撤销 (Ctrl+Z)">
@@ -129,6 +152,10 @@
             <Grid x:Name="CanvasContainer" HorizontalAlignment="Center" VerticalAlignment="Center">
                 <Image x:Name="ScreenshotImage" Stretch="None" SnapsToDevicePixels="True"
                        RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                <Canvas x:Name="ShapesCanvas" Background="Transparent" IsHitTestVisible="False"
+                        MouseDown="ShapesCanvas_MouseDown"
+                        MouseMove="ShapesCanvas_MouseMove"
+                        MouseUp="ShapesCanvas_MouseUp"/>
                 <InkCanvas x:Name="DrawingCanvas" Background="Transparent"
                            EditingMode="Ink"/>
             </Grid>

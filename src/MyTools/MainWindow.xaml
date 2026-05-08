@@ -1099,16 +1099,26 @@
                         BorderBrush="{DynamicResource MaterialDesignDivider}" BorderThickness="0,0,0,1"
                         Padding="0,0,0,14">
                     <DockPanel>
-                        <Button DockPanel.Dock="Right"
-                                Style="{StaticResource MaterialDesignRaisedButton}"
-                                Command="{Binding TakeScreenshotNowCommand}"
-                                Height="36" Padding="12,0"
-                                ToolTip="立即截图">
-                            <StackPanel Orientation="Horizontal">
-                                <materialDesign:PackIcon Kind="Camera" Width="16" Height="16" Margin="0,0,6,0"/>
-                                <TextBlock Text="立即截图"/>
-                            </StackPanel>
-                        </Button>
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                            <Button Style="{StaticResource MaterialDesignOutlinedButton}"
+                                    Command="{Binding EditClipboardImageCommand}"
+                                    Margin="0,0,8,0" Height="36" Padding="12,0"
+                                    ToolTip="打开编辑器编辑剪贴板中的图片">
+                                <StackPanel Orientation="Horizontal">
+                                    <materialDesign:PackIcon Kind="ImageEdit" Width="16" Height="16" Margin="0,0,6,0"/>
+                                    <TextBlock Text="编辑剪贴板截图"/>
+                                </StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource MaterialDesignRaisedButton}"
+                                    Command="{Binding TakeScreenshotNowCommand}"
+                                    Height="36" Padding="12,0"
+                                    ToolTip="立即截图">
+                                <StackPanel Orientation="Horizontal">
+                                    <materialDesign:PackIcon Kind="Camera" Width="16" Height="16" Margin="0,0,6,0"/>
+                                    <TextBlock Text="立即截图"/>
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
                         <TextBlock Text="截图工具"
                                    Style="{StaticResource MaterialDesignHeadline5TextBlock}"
                                    VerticalAlignment="Center" />

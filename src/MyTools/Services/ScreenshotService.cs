@@ -1,20 +1,26 @@
-using System;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
-using System.Windows;
+using System.Runtime.InteropServices;
 using System.Windows.Media.Imaging;
 
 namespace MyTools.Services
 {
     public static class ScreenshotService
     {
+        [DllImport("user32.dll")]
+        private static extern int GetSystemMetrics(int nIndex);
+        private const int SM_XVIRTUALSCREEN  = 76;
+        private const int SM_YVIRTUALSCREEN  = 77;
+        private const int SM_CXVIRTUALSCREEN = 78;
+        private const int SM_CYVIRTUALSCREEN = 79;
+
         public static BitmapSource CaptureFullScreen()
         {
-            var left   = (int)SystemParameters.VirtualScreenLeft;
-            var top    = (int)SystemParameters.VirtualScreenTop;
-            var width  = (int)SystemParameters.VirtualScreenWidth;
-            var height = (int)SystemParameters.VirtualScreenHeight;
+            var left   = GetSystemMetrics(SM_XVIRTUALSCREEN);
+            var top    = GetSystemMetrics(SM_YVIRTUALSCREEN);
+            var width  = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+            var height = GetSystemMetrics(SM_CYVIRTUALSCREEN);
 
             using (var bitmap = new Bitmap(width, height, PixelFormat.Format32bppArgb))
             using (var g = Graphics.FromImage(bitmap))
