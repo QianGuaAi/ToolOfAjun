@@ -311,5 +311,16 @@ namespace MyTools
             else if (e.Key == Key.L) SetMode(DrawingMode.Line);
             else if (e.Key == Key.E) SetMode(_mode == DrawingMode.Eraser ? DrawingMode.Pen : DrawingMode.Eraser);
         }
+
+        protected override void OnClosed(EventArgs e)
+        {
+            DrawingCanvas.Strokes.StrokesChanged -= Strokes_StrokesChanged;
+            ScreenshotImage.Source = null;
+            DrawingCanvas.Strokes.Clear();
+            ShapesCanvas.Children.Clear();
+            _undoStack.Clear();
+
+            base.OnClosed(e);
+        }
     }
 }

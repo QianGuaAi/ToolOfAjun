@@ -7,6 +7,14 @@ namespace MyTools.Services
     public static class HotkeyService
     {
         public const int ScreenshotHotkeyId = 9001;
+        private const uint ModAlt = 0x0001;
+        private const uint ModControl = 0x0002;
+        private const uint ModShift = 0x0004;
+        private const uint ModWin = 0x0008;
+        private const uint ModNoRepeat = 0x4000;
+        private const int ErrorInvalidParameter = 87;
+
+        private static readonly object SyncRoot = new object();
 
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
@@ -17,37 +25,91 @@ namespace MyTools.Services
         private static IntPtr _handle = IntPtr.Zero;
         private static uint _currentModifiers;
         private static uint _currentKey;
+        private static bool _isRegistered;
+        private static int _lastWin32Error;
 
         public static void Initialize(IntPtr windowHandle)
         {
-            _handle = windowHandle;
+            lock (SyncRoot)
+            {
+                if (_handle != IntPtr.Zero && _handle != windowHandle && _isRegistered)
+                {
+                    UnregisterHotKey(_handle, ScreenshotHotkeyId);
+                    _isRegistered = false;
+                }
+
+                _handle = windowHandle;
+            }
         }
 
         public static bool Register(uint modifiers, uint key)
         {
-            if (_handle == IntPtr.Zero) return false;
+            lock (SyncRoot)
+            {
+                if (_handle == IntPtr.Zero || key == 0)
+                {
+                    _lastWin32Error = 0;
+                    return false;
+                }
 
-            UnregisterHotKey(_handle, ScreenshotHotkeyId);
-            _currentModifiers = modifiers;
-            _currentKey = key;
+                if (_isRegistered)
+                {
+                    UnregisterHotKey(_handle, ScreenshotHotkeyId);
+                    _isRegistered = false;
+                }
 
-            const uint MOD_NOREPEAT = 0x4000;
-            return RegisterHotKey(_handle, ScreenshotHotkeyId, modifiers | MOD_NOREPEAT, key);
+                _currentModifiers = modifiers;
+                _currentKey = key;
+
+                var registered = RegisterHotKey(_handle, ScreenshotHotkeyId, modifiers | ModNoRepeat, key);
+                if (!registered)
+                {
+                    var errorCode = Marshal.GetLastWin32Error();
+                    if (errorCode == ErrorInvalidParameter)
+                    {
+                        // Win7+ supports MOD_NOREPEAT, but keep a fallback for older/quirky environments.
+                        registered = RegisterHotKey(_handle, ScreenshotHotkeyId, modifiers, key);
+                    }
+                }
+
+                _lastWin32Error = registered ? 0 : Marshal.GetLastWin32Error();
+                _isRegistered = registered;
+                return registered;
+            }
         }
 
         public static void Unregister()
         {
-            if (_handle != IntPtr.Zero)
+            lock (SyncRoot)
+            {
+                if (_handle == IntPtr.Zero)
+                {
+                    return;
+                }
+
                 UnregisterHotKey(_handle, ScreenshotHotkeyId);
+                _isRegistered = false;
+            }
+        }
+
+        public static int LastWin32ErrorCode
+        {
+            get
+            {
+                lock (SyncRoot)
+                {
+                    return _lastWin32Error;
+                }
+            }
         }
 
         public static string BuildDisplayText(uint modifiers, uint key)
         {
             var parts = new System.Collections.Generic.List<string>();
-            if ((modifiers & 0x0002) != 0) parts.Add("Ctrl");
-            if ((modifiers & 0x0004) != 0) parts.Add("Shift");
-            if ((modifiers & 0x0001) != 0) parts.Add("Alt");
-            if ((modifiers & 0x0008) != 0) parts.Add("Win");
+            if ((modifiers & ModControl) != 0) parts.Add("Ctrl");
+            if ((modifiers & ModShift) != 0) parts.Add("Shift");
+            if ((modifiers & ModAlt) != 0) parts.Add("Alt");
+            if ((modifiers & ModWin) != 0) parts.Add("Win");
             var keyName = ((Keys)key).ToString();
             parts.Add(keyName);
             return string.Join("+", parts);

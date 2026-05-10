@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net.NetworkInformation;
+using System.Text;
 using System.Threading.Tasks;
 
 namespace MyTools.Services
@@ -65,7 +66,11 @@ namespace MyTools.Services
             {
                 if (!Directory.Exists(ConfigDir)) Directory.CreateDirectory(ConfigDir);
                 string configPath = Path.Combine(ConfigDir, $"{interfaceName}.conf");
-                File.WriteAllText(configPath, configContent);
+                using (var stream = new FileStream(configPath, FileMode.Create, FileAccess.Write, FileShare.None, 4096, useAsync: true))
+                using (var writer = new StreamWriter(stream, new UTF8Encoding(false)))
+                {
+                    await writer.WriteAsync(configContent ?? string.Empty).ConfigureAwait(false);
+                }
 
                 // Command: wireguard.exe /installtunnelservice config_path
                 var startInfo = new ProcessStartInfo

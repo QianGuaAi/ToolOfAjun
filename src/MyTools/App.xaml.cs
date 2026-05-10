@@ -48,19 +48,22 @@ namespace MyTools
                     {
                         try
                         {
-                            if (_activationEvent.WaitOne(500))
+                            _activationEvent.WaitOne();
+                            if (IsExiting)
                             {
-                                Dispatcher.InvokeAsync(() =>
-                                {
-                                    var win = MainWindow;
-                                    if (win == null) return;
-                                    win.Show();
-                                    if (win.WindowState == WindowState.Minimized)
-                                        win.WindowState = WindowState.Normal;
-                                    win.Activate();
-                                    win.Focus();
-                                });
+                                break;
                             }
+
+                            Dispatcher.InvokeAsync(() =>
+                            {
+                                var win = MainWindow;
+                                if (win == null) return;
+                                win.Show();
+                                if (win.WindowState == WindowState.Minimized)
+                                    win.WindowState = WindowState.Normal;
+                                win.Activate();
+                                win.Focus();
+                            });
                         }
                         catch { }
                     }

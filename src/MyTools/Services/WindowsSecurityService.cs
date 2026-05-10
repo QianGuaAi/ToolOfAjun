@@ -129,7 +129,11 @@ Start-Process 'ms-settings:windowsupdate' -ErrorAction SilentlyContinue";
                 Path.GetTempPath(),
                 $"mytools_{Guid.NewGuid():N}.ps1");
 
-            File.WriteAllText(tempPath, script, new UTF8Encoding(false));
+            using (var stream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None, 4096, useAsync: true))
+            using (var writer = new StreamWriter(stream, new UTF8Encoding(false)))
+            {
+                await writer.WriteAsync(script).ConfigureAwait(false);
+            }
 
             try
             {

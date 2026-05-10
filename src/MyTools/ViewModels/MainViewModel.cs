@@ -1,8 +1,9 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Data;
+using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
@@ -25,10 +26,11 @@ namespace MyTools.ViewModels
         private ObservableCollection<string> _sqlServerAddressHistory;
         private ObservableCollection<string> _sqlUsernameHistory;
         private ObservableCollection<string> _sqlPasswordHistory;
+        private ObservableCollection<CodexProfileItem> _codexProfiles;
         private string _wgInterfaceName = "wg0";
         private string _wgConfig;
         private bool _isWgConnected;
-        private string _wgStatusText = "未连接";
+        private string _wgStatusText = "鏈繛鎺?";
         private string _wgEndpoint;
         private string _wgAddress;
         private string _wgServerPublicKey;
@@ -42,9 +44,13 @@ namespace MyTools.ViewModels
         private DatabaseItem _selectedSqlDatabase;
         private TableItem _selectedSqlTable;
         private ICollectionView _filteredSqlTableView;
-        private string _sqlStatusMessage = "请输入 SQL Server 连接信息后测试连接。";
+        private string _sqlStatusMessage = "璇疯緭鍏?SQL Server 杩炴帴淇℃伅鍚庢祴璇曡繛鎺ャ€?";
         private bool _isSqlBusy;
         private CancellationTokenSource _loadTablesCancellationTokenSource;
+        private bool _suppressSqlTableAutoLoad;
+        private bool _isApplyingSqlHistory;
+        private bool _hasUserModifiedSqlConnectionInputs;
+        private SqlServerConnectionOptions _activeSqlConnectionOptions;
         private bool _isDefenderEnabled = true;
         private bool _isAutoUpdateEnabled = true;
         private string _systemStatusMessage = string.Empty;
@@ -57,11 +63,15 @@ namespace MyTools.ViewModels
         private bool _showEditorAfterCapture = true;
         private string _screenshotHotkeyText = "Ctrl+Shift+Z";
         private bool _isCapturingHotkey;
+        private bool _isScreenshotBusy;
+        private ScreenshotEditorWindow _screenshotEditorWindow;
         private uint _pendingModifiers = 0x0006;
         private uint _pendingKey = 0x5A;
+        private string _codexProfilesStatusMessage = "鎷栧叆鍖呭惈 config.toml 鍜?auth.json 鐨勬枃浠跺す锛岀敓鎴愬彲搴旂敤鐨?Codex 閰嶇疆璁板綍銆?";
 
         private readonly AsyncRelayCommand _executeQueryCommand;
         private readonly AsyncRelayCommand _exportQueryResultCommand;
+        private readonly AsyncRelayParameterCommand _applyCodexProfileCommand;
 
         private readonly AsyncRelayCommand _testSqlConnectionCommand;
         private readonly AsyncRelayCommand _exportSqlTableCommand;
@@ -79,6 +89,7 @@ namespace MyTools.ViewModels
             SqlServerAddressHistory = new ObservableCollection<string>();
             SqlUsernameHistory = new ObservableCollection<string>();
             SqlPasswordHistory = new ObservableCollection<string>();
+            CodexProfiles = new ObservableCollection<CodexProfileItem>();
             FilteredSqlTableView = CollectionViewSource.GetDefaultView(SqlTableList);
             FilteredSqlTableView.Filter = FilterSqlTable;
 
@@ -88,6 +99,7 @@ namespace MyTools.ViewModels
             ShowWireGuardCommand = new RelayCommand(() => { CurrentModule = "WireGuard"; Refresh(); });
             ShowSystemCommand = new RelayCommand(() => { CurrentModule = "System"; Refresh(); });
             ShowSqlExportCommand = new RelayCommand(() => { CurrentModule = "SqlExport"; Refresh(); });
+            ShowCodexProfilesCommand = new RelayCommand(() => { CurrentModule = "CodexProfiles"; });
             ToggleStartupCommand = new RelayParameterCommand(obj =>
             {
                 if (obj is StartupItem item)
@@ -100,8 +112,8 @@ namespace MyTools.ViewModels
             {
                 if (!(obj is StartupItem item)) return;
                 var confirm = MessageBox.Show(
-                    $"确定要永久删除启动项 \"{item.Name}\" 吗？\n此操作不可恢复。",
-                    "确认删除",
+                    $"纭畾瑕佹案涔呭垹闄ゅ惎鍔ㄩ」 \"{item.Name}\" 鍚楋紵\n姝ゆ搷浣滀笉鍙仮澶嶃€?",
+                    "纭鍒犻櫎",
                     MessageBoxButton.YesNo,
                     MessageBoxImage.Warning);
                 if (confirm == MessageBoxResult.Yes)
@@ -142,9 +154,14 @@ namespace MyTools.ViewModels
             SaveScreenshotSettingsCommand = new AsyncRelayCommand(SaveScreenshotSettingsAsync);
             EditClipboardImageCommand = new RelayCommand(EditClipboardImage);
 
+            _applyCodexProfileCommand = new AsyncRelayParameterCommand(ApplyCodexProfileAsync);
+            ApplyCodexProfileCommand = _applyCodexProfileCommand;
+            DeleteCodexProfileCommand = new RelayParameterCommand(DeleteCodexProfile);
+
             CurrentModule = "Home";
             _ = LoadSqlConnectionHistoryAsync();
             _ = LoadScreenshotSettingsAsync();
+            _ = LoadCodexProfilesAsync();
         }
 
         public ObservableCollection<NetworkData> NetworkList
@@ -207,6 +224,12 @@ namespace MyTools.ViewModels
             set { _sqlPasswordHistory = value; OnPropertyChanged(); }
         }
 
+        public ObservableCollection<CodexProfileItem> CodexProfiles
+        {
+            get => _codexProfiles;
+            set { _codexProfiles = value; OnPropertyChanged(); }
+        }
+
         public string WgInterfaceName
         {
             get => _wgInterfaceName;
@@ -264,25 +287,65 @@ namespace MyTools.ViewModels
         public string SqlServerAddress
         {
             get => _sqlServerAddress;
-            set { _sqlServerAddress = value; OnPropertyChanged(); }
+            set
+            {
+                if (string.Equals(_sqlServerAddress, value, StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                _sqlServerAddress = value;
+                MarkSqlConnectionInputAsUserModified();
+                OnPropertyChanged();
+            }
         }
 
         public string SqlPort
         {
             get => _sqlPort;
-            set { _sqlPort = value; OnPropertyChanged(); }
+            set
+            {
+                if (string.Equals(_sqlPort, value, StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                _sqlPort = value;
+                MarkSqlConnectionInputAsUserModified();
+                OnPropertyChanged();
+            }
         }
 
         public string SqlUsername
         {
             get => _sqlUsername;
-            set { _sqlUsername = value; OnPropertyChanged(); }
+            set
+            {
+                if (string.Equals(_sqlUsername, value, StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                _sqlUsername = value;
+                MarkSqlConnectionInputAsUserModified();
+                OnPropertyChanged();
+            }
         }
 
         public string SqlPassword
         {
             get => _sqlPassword;
-            set { _sqlPassword = value; OnPropertyChanged(); }
+            set
+            {
+                if (string.Equals(_sqlPassword, value, StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                _sqlPassword = value;
+                MarkSqlConnectionInputAsUserModified();
+                OnPropertyChanged();
+            }
         }
 
         public string SqlTableSearchText
@@ -320,7 +383,10 @@ namespace MyTools.ViewModels
                 OnPropertyChanged();
                 SelectedSqlTable = null;
                 TriggerCommandRequery();
-                _ = LoadTablesForSelectedDatabaseAsync();
+                if (!_suppressSqlTableAutoLoad)
+                {
+                    _ = LoadTablesForSelectedDatabaseAsync();
+                }
             }
         }
 
@@ -358,6 +424,7 @@ namespace MyTools.ViewModels
         public ICommand ShowWireGuardCommand { get; }
         public ICommand ShowSystemCommand { get; }
         public ICommand ShowSqlExportCommand { get; }
+        public ICommand ShowCodexProfilesCommand { get; }
         public ICommand ToggleStartupCommand { get; }
         public ICommand DeleteStartupCommand { get; }
         public ICommand ToggleWireGuardCommand { get; }
@@ -443,6 +510,14 @@ namespace MyTools.ViewModels
         public ICommand CancelCaptureHotkeyCommand { get; }
         public ICommand SaveScreenshotSettingsCommand { get; }
         public ICommand EditClipboardImageCommand { get; }
+        public ICommand ApplyCodexProfileCommand { get; }
+        public ICommand DeleteCodexProfileCommand { get; }
+
+        public string CodexProfilesStatusMessage
+        {
+            get => _codexProfilesStatusMessage;
+            set { _codexProfilesStatusMessage = value; OnPropertyChanged(); }
+        }
 
         public ICommand LockWin10Command { get; }
         public ICommand ExitCommand { get; }
@@ -454,61 +529,431 @@ namespace MyTools.ViewModels
         public ICommand TriggerUpdateNowCommand { get; }
         public ICommand RefreshSystemStatusCommand { get; }
 
+        public void AddCodexProfileFolders(IEnumerable<string> folderPaths)
+        {
+            _ = AddCodexProfileFoldersAsync(folderPaths);
+        }
+
+        public async Task AddCodexProfileFoldersAsync(IEnumerable<string> folderPaths)
+        {
+            var addedCount = 0;
+            var updatedCount = 0;
+            var failedCount = 0;
+
+            foreach (var folderPath in folderPaths ?? Enumerable.Empty<string>())
+            {
+                if (string.IsNullOrWhiteSpace(folderPath) || !Directory.Exists(folderPath))
+                {
+                    continue;
+                }
+
+                var fullPath = NormalizeFolderPath(folderPath);
+                try
+                {
+                    var sourceFiles = await CodexConfigProfileService.ReadProfileFromFolderAsync(fullPath, CancellationToken.None);
+                    var protectedConfig = CodexConfigProfileService.ProtectBytesToBase64(sourceFiles.ConfigTomlBytes);
+                    var protectedAuth = CodexConfigProfileService.ProtectBytesToBase64(sourceFiles.AuthJsonBytes);
+
+                    var existing = CodexProfiles.FirstOrDefault(item =>
+                        string.Equals(item.FolderPath, fullPath, StringComparison.OrdinalIgnoreCase));
+                    if (existing != null)
+                    {
+                        existing.ConfigTomlContentProtected = protectedConfig;
+                        existing.AuthJsonContentProtected = protectedAuth;
+                        existing.StatusMessage = "配置内容已更新。";
+                        updatedCount++;
+                        continue;
+                    }
+
+                    var profileItem = CreateCodexProfileItem(fullPath, null, null, protectedConfig, protectedAuth);
+                    profileItem.StatusMessage = "已保存配置内容。";
+                    AddCodexProfileItem(profileItem);
+                    addedCount++;
+                }
+                catch (Exception ex)
+                {
+                    failedCount++;
+                    AppLogService.Error(ex, "Adding Codex profile folder failed for {FolderPath}", fullPath);
+                }
+            }
+
+            if (addedCount > 0 || updatedCount > 0)
+            {
+                CurrentModule = "CodexProfiles";
+                CodexProfilesStatusMessage = $"已保存 {addedCount + updatedCount} 条记录（新增 {addedCount}，更新 {updatedCount}）。";
+                if (failedCount > 0)
+                {
+                    CodexProfilesStatusMessage += $" 失败 {failedCount} 条（请检查是否同时包含 {CodexConfigProfileService.ConfigFileName} 和 {CodexConfigProfileService.AuthFileName}）。";
+                }
+
+                await SaveCodexProfilesAsync();
+                return;
+            }
+
+            CodexProfilesStatusMessage = failedCount > 0
+                ? $"未添加任何记录。失败 {failedCount} 条（文件夹需同时包含 {CodexConfigProfileService.ConfigFileName} 和 {CodexConfigProfileService.AuthFileName}）。"
+                : "未检测到可添加的文件夹。";
+        }
+
+        private async Task LoadCodexProfilesAsync()
+        {
+            try
+            {
+                var settings = await AppSettingsService.LoadAsync();
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    foreach (var item in CodexProfiles)
+                    {
+                        item.PropertyChanged -= CodexProfileItem_OnPropertyChanged;
+                    }
+
+                    CodexProfiles.Clear();
+                    var profiles = settings.CodexProfiles ?? new List<CodexProfileSettings>();
+                    foreach (var profile in profiles)
+                    {
+                        if (profile == null)
+                        {
+                            continue;
+                        }
+
+                        AddCodexProfileItem(CreateCodexProfileItem(
+                            profile.FolderPath,
+                            profile.Name,
+                            profile.Remark,
+                            profile.ConfigTomlContentProtected,
+                            profile.AuthJsonContentProtected));
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "Loading Codex config profiles failed.");
+                CodexProfilesStatusMessage = "璇诲彇 Codex 閰嶇疆璁板綍澶辫触銆?";
+            }
+        }
+
+        private CodexProfileItem CreateCodexProfileItem(
+            string folderPath,
+            string name,
+            string remark,
+            string configTomlContentProtected,
+            string authJsonContentProtected)
+        {
+            var normalizedPath = NormalizeFolderPath(folderPath);
+            var defaultName = ResolveCodexProfileName(name, normalizedPath);
+            return new CodexProfileItem
+            {
+                Name = defaultName,
+                Remark = string.IsNullOrWhiteSpace(remark) ? defaultName : remark,
+                FolderPath = normalizedPath,
+                ConfigTomlContentProtected = configTomlContentProtected,
+                AuthJsonContentProtected = authJsonContentProtected,
+                StatusMessage = string.Empty
+            };
+        }
+
+        private void AddCodexProfileItem(CodexProfileItem item)
+        {
+            item.PropertyChanged += CodexProfileItem_OnPropertyChanged;
+            CodexProfiles.Add(item);
+        }
+
+        private void CodexProfileItem_OnPropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(CodexProfileItem.Remark))
+            {
+                _ = SaveCodexProfilesAsync();
+            }
+        }
+
+        private async Task SaveCodexProfilesAsync()
+        {
+            var profiles = CodexProfiles
+                .Where(item =>
+                    !string.IsNullOrWhiteSpace(item.Name)
+                    && (!string.IsNullOrWhiteSpace(item.FolderPath)
+                        || !string.IsNullOrWhiteSpace(item.ConfigTomlContentProtected)
+                        || !string.IsNullOrWhiteSpace(item.AuthJsonContentProtected)))
+                .Select(item => new CodexProfileSettings
+                {
+                    Name = item.Name,
+                    Remark = item.Remark,
+                    FolderPath = NormalizeFolderPath(item.FolderPath),
+                    ConfigTomlContentProtected = item.ConfigTomlContentProtected,
+                    AuthJsonContentProtected = item.AuthJsonContentProtected
+                })
+                .ToList();
+
+            await AppSettingsService.UpdateAsync(settings => settings.CodexProfiles = profiles);
+        }
+
+        private async Task ApplyCodexProfileAsync(object parameter)
+        {
+            if (!(parameter is CodexProfileItem item))
+            {
+                return;
+            }
+
+            try
+            {
+                item.IsApplying = true;
+                item.StatusMessage = "正在应用...";
+
+                var configTomlBytes = CodexConfigProfileService.UnprotectBytesFromBase64(item.ConfigTomlContentProtected);
+                var authJsonBytes = CodexConfigProfileService.UnprotectBytesFromBase64(item.AuthJsonContentProtected);
+
+                if (configTomlBytes == null || authJsonBytes == null)
+                {
+                    var fallbackFolderPath = NormalizeFolderPath(item.FolderPath);
+                    if (string.IsNullOrWhiteSpace(fallbackFolderPath) || !Directory.Exists(fallbackFolderPath))
+                    {
+                        throw new InvalidOperationException("该记录未保存配置内容，且来源文件夹已不存在，请重新拖入配置文件夹。");
+                    }
+
+                    var sourceFiles = await CodexConfigProfileService.ReadProfileFromFolderAsync(fallbackFolderPath, CancellationToken.None);
+                    configTomlBytes = sourceFiles.ConfigTomlBytes;
+                    authJsonBytes = sourceFiles.AuthJsonBytes;
+                    item.ConfigTomlContentProtected = CodexConfigProfileService.ProtectBytesToBase64(configTomlBytes);
+                    item.AuthJsonContentProtected = CodexConfigProfileService.ProtectBytesToBase64(authJsonBytes);
+                }
+
+                var result = await CodexConfigProfileService.ApplyAsync(configTomlBytes, authJsonBytes, CancellationToken.None);
+                item.StatusMessage = $"已应用到 {result.TargetFolderPath}：{DateTime.Now:yyyy-MM-dd HH:mm:ss}";
+                CodexProfilesStatusMessage = $"已应用「{item.Name}」。";
+                await SaveCodexProfilesAsync();
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "Applying Codex config profile failed for {ProfileName}", item.Name ?? string.Empty);
+                item.StatusMessage = "应用失败：" + ex.Message;
+                MessageBox.Show(ex.Message, "Codex 配置应用失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                item.IsApplying = false;
+            }
+        }
+
+        private void DeleteCodexProfile(object parameter)
+        {
+            if (!(parameter is CodexProfileItem item))
+            {
+                return;
+            }
+
+            var result = MessageBox.Show(
+                $"确定删除记录 \"{item.Name}\" 吗？",
+                "确认删除",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+            if (result != MessageBoxResult.Yes)
+            {
+                return;
+            }
+
+            item.PropertyChanged -= CodexProfileItem_OnPropertyChanged;
+            CodexProfiles.Remove(item);
+            CodexProfilesStatusMessage = $"已删除「{item.Name}」。";
+            _ = SaveCodexProfilesAsync();
+        }
+
+        private static string ResolveCodexProfileName(string name, string normalizedFolderPath)
+        {
+            if (!string.IsNullOrWhiteSpace(name))
+            {
+                return name;
+            }
+
+            if (!string.IsNullOrWhiteSpace(normalizedFolderPath))
+            {
+                try
+                {
+                    return new DirectoryInfo(normalizedFolderPath).Name;
+                }
+                catch
+                {
+                }
+            }
+
+            return "閰嶇疆璁板綍";
+        }
+
+        private static string NormalizeFolderPath(string folderPath)
+        {
+            if (string.IsNullOrWhiteSpace(folderPath))
+            {
+                return string.Empty;
+            }
+
+            try
+            {
+                return Path.GetFullPath(folderPath);
+            }
+            catch
+            {
+                return folderPath;
+            }
+        }
+
+        private void MarkSqlConnectionInputAsUserModified()
+        {
+            if (_isApplyingSqlHistory)
+            {
+                return;
+            }
+
+            _hasUserModifiedSqlConnectionInputs = true;
+            _activeSqlConnectionOptions = null;
+            if (SqlDatabaseList.Count == 0 && SqlTableList.Count == 0 && SelectedSqlDatabase == null && SelectedSqlTable == null)
+            {
+                return;
+            }
+
+            CancelPendingTableLoad();
+            _suppressSqlTableAutoLoad = true;
+            try
+            {
+                SelectedSqlDatabase = null;
+                SelectedSqlTable = null;
+            }
+            finally
+            {
+                _suppressSqlTableAutoLoad = false;
+            }
+
+            SqlDatabaseList.Clear();
+            SqlTableList.Clear();
+            AllSqlTableList.Clear();
+            SqlTableSearchText = string.Empty;
+            SqlStatusMessage = "杩炴帴淇℃伅宸插彉鍖栵紝璇烽噸鏂版祴璇曡繛鎺ャ€?";
+        }
+
         private void EditClipboardImage()
         {
             var image = System.Windows.Clipboard.GetImage();
             if (image == null)
             {
-                MessageBox.Show("剪贴板中没有图片", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show("鍓创鏉夸腑娌℃湁鍥剧墖", "鎻愮ず", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
-            var editor = new ScreenshotEditorWindow();
-            editor.LoadScreenshot(image);
-            editor.Show();
+            ShowScreenshotEditorWindow(image);
         }
 
         public void ReRegisterHotkey()
         {
-            if (_pendingKey != 0)
-                HotkeyService.Register(_pendingModifiers, _pendingKey);
+            if (_pendingKey == 0)
+            {
+                return;
+            }
+
+            _ = TryRegisterHotkeyAsync(_pendingModifiers, _pendingKey, false);
         }
 
         public void ApplyPendingHotkey(uint modifiers, uint key)
         {
+            var previousModifiers = _pendingModifiers;
+            var previousKey = _pendingKey;
+            var previousDisplayText = ScreenshotHotkeyText;
+
             _pendingModifiers = modifiers;
             _pendingKey = key;
             ScreenshotHotkeyText = HotkeyService.BuildDisplayText(modifiers, key);
+
+            _ = TryRegisterHotkeyAsync(modifiers, key, true, () =>
+            {
+                _pendingModifiers = previousModifiers;
+                _pendingKey = previousKey;
+                ScreenshotHotkeyText = previousDisplayText;
+            });
+
             IsCapturingHotkey = false;
         }
 
         public async Task TriggerScreenshotAsync()
         {
+            if (_isScreenshotBusy)
+            {
+                return;
+            }
+
+            _isScreenshotBusy = true;
+            Window mainWin = null;
+            var shouldRestoreMainWindow = false;
+
             try
             {
-                var mainWin = Application.Current?.MainWindow;
+                mainWin = Application.Current?.MainWindow;
                 var wasVisible = mainWin?.IsVisible == true;
-                if (wasVisible) mainWin.Hide();
+                if (wasVisible)
+                {
+                    mainWin.Hide();
+                    shouldRestoreMainWindow = true;
+                }
+
                 await Task.Delay(150);
 
-                var screenshot = ScreenshotService.CaptureFullScreen();
+                var screenshot = await Task.Run(() => ScreenshotService.CaptureFullScreen());
 
                 System.Windows.Clipboard.SetImage(screenshot);
 
                 if (ShowEditorAfterCapture)
                 {
-                    var editor = new ScreenshotEditorWindow();
-                    editor.LoadScreenshot(screenshot);
-                    editor.Closed += (s, e) => { if (wasVisible) mainWin?.Show(); };
-                    editor.Show();
-                }
-                else
-                {
-                    if (wasVisible) mainWin?.Show();
+                    ShowScreenshotEditorWindow(screenshot, () =>
+                    {
+                        if (!wasVisible)
+                        {
+                            return;
+                        }
+
+                        mainWin?.Show();
+                        mainWin?.Activate();
+                    });
+                    shouldRestoreMainWindow = false;
                 }
             }
             catch (Exception ex)
             {
                 AppLogService.Error(ex, "Screenshot failed");
+                MessageBox.Show(ex.Message, "鎴浘澶辫触", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                if (shouldRestoreMainWindow)
+                {
+                    mainWin?.Show();
+                    mainWin?.Activate();
+                }
+
+                _isScreenshotBusy = false;
+            }
+        }
+
+        private void ShowScreenshotEditorWindow(System.Windows.Media.Imaging.BitmapSource screenshot, Action onClosed = null)
+        {
+            if (_screenshotEditorWindow != null)
+            {
+                _screenshotEditorWindow.Closed -= HandleScreenshotEditorWindowClosed;
+                _screenshotEditorWindow.Close();
+                _screenshotEditorWindow = null;
+            }
+
+            var editor = new ScreenshotEditorWindow();
+            editor.Closed += HandleScreenshotEditorWindowClosed;
+            if (onClosed != null)
+            {
+                editor.Closed += (sender, args) => onClosed();
+            }
+
+            editor.LoadScreenshot(screenshot);
+            editor.Show();
+            _screenshotEditorWindow = editor;
+        }
+
+        private void HandleScreenshotEditorWindowClosed(object sender, EventArgs e)
+        {
+            if (ReferenceEquals(_screenshotEditorWindow, sender))
+            {
+                _screenshotEditorWindow = null;
             }
         }
 
@@ -516,12 +961,18 @@ namespace MyTools.ViewModels
         {
             try
             {
-                var settings = await AppSettingsService.LoadAsync().ConfigureAwait(false);
-                _pendingModifiers = settings.ScreenshotHotkey.Modifiers;
-                _pendingKey       = settings.ScreenshotHotkey.Key;
-                ShowEditorAfterCapture = settings.ShowEditorAfterCapture;
-                ScreenshotHotkeyText = settings.ScreenshotHotkey.DisplayText;
-                HotkeyService.Register(settings.ScreenshotHotkey.Modifiers, settings.ScreenshotHotkey.Key);
+                var settings = await AppSettingsService.LoadAsync();
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    _pendingModifiers = settings.ScreenshotHotkey.Modifiers;
+                    _pendingKey = settings.ScreenshotHotkey.Key;
+                    ShowEditorAfterCapture = settings.ShowEditorAfterCapture;
+                    ScreenshotHotkeyText = string.IsNullOrWhiteSpace(settings.ScreenshotHotkey.DisplayText)
+                        ? HotkeyService.BuildDisplayText(_pendingModifiers, _pendingKey)
+                        : settings.ScreenshotHotkey.DisplayText;
+                });
+
+                await TryRegisterHotkeyAsync(_pendingModifiers, _pendingKey, false);
             }
             catch (Exception ex)
             {
@@ -534,16 +985,22 @@ namespace MyTools.ViewModels
             try
             {
                 if (_pendingKey == 0) return;
-                var settings = await AppSettingsService.LoadAsync().ConfigureAwait(false);
-                settings.ScreenshotHotkey = new HotkeySettings
+                await AppSettingsService.UpdateAsync(settings =>
                 {
-                    Modifiers   = _pendingModifiers,
-                    Key         = _pendingKey,
-                    DisplayText = ScreenshotHotkeyText
-                };
-                settings.ShowEditorAfterCapture = ShowEditorAfterCapture;
-                await AppSettingsService.SaveAsync(settings).ConfigureAwait(false);
-                HotkeyService.Register(_pendingModifiers, _pendingKey);
+                    settings.ScreenshotHotkey = new HotkeySettings
+                    {
+                        Modifiers = _pendingModifiers,
+                        Key = _pendingKey,
+                        DisplayText = ScreenshotHotkeyText
+                    };
+                    settings.ShowEditorAfterCapture = ShowEditorAfterCapture;
+                });
+
+                var registered = await TryRegisterHotkeyAsync(_pendingModifiers, _pendingKey, true);
+                if (!registered)
+                {
+                    return;
+                }
                 Application.Current?.Dispatcher.Invoke(() =>
                     MessageBox.Show("设置已保存", "完成", MessageBoxButton.OK, MessageBoxImage.Information));
             }
@@ -551,6 +1008,48 @@ namespace MyTools.ViewModels
             {
                 AppLogService.Error(ex, "SaveScreenshotSettings failed");
             }
+        }
+
+        private async Task<bool> TryRegisterHotkeyAsync(uint modifiers, uint key, bool showMessageOnFailure, Action onRegisterFailed = null)
+        {
+            var dispatcher = Application.Current?.Dispatcher;
+            if (dispatcher == null)
+            {
+                return false;
+            }
+
+            return await dispatcher.InvokeAsync(() =>
+            {
+                var registered = HotkeyService.Register(modifiers, key);
+                if (registered || !showMessageOnFailure)
+                {
+                    return registered;
+                }
+
+                onRegisterFailed?.Invoke();
+                MessageBox.Show(
+                    BuildHotkeyRegistrationErrorMessage(modifiers, key, HotkeyService.LastWin32ErrorCode),
+                    "蹇嵎閿笉鍙敤",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                return false;
+            });
+        }
+
+        private static string BuildHotkeyRegistrationErrorMessage(uint modifiers, uint key, int errorCode)
+        {
+            var hotkeyText = HotkeyService.BuildDisplayText(modifiers, key);
+            if (errorCode == 1409)
+            {
+                return $"蹇嵎閿?{hotkeyText} 宸茶鍏朵粬绋嬪簭鍗犵敤锛岃鎹竴涓粍鍚堛€?";
+            }
+
+            if (errorCode > 0)
+            {
+                return $"鏃犳硶娉ㄥ唽蹇嵎閿?{hotkeyText}锛學in32 閿欒鐮侊細{errorCode}銆?";
+            }
+
+            return $"鏃犳硶娉ㄥ唽蹇嵎閿?{hotkeyText}锛岃鎹竴涓粍鍚堛€?";
         }
 
         private void Refresh()
@@ -599,7 +1098,7 @@ namespace MyTools.ViewModels
         private void GenerateConfigFromSettings()
         {
             string config = "[Interface]\n";
-            config += "PrivateKey = <请手动填写您的私钥>\n";
+            config += "PrivateKey = <璇锋墜鍔ㄥ～鍐欐偍鐨勭閽?\n";
             config += $"Address = {WgAddress}\n";
             config += "DNS = 8.8.8.8\n\n";
             config += "[Peer]\n";
@@ -616,7 +1115,7 @@ namespace MyTools.ViewModels
         {
             var status = WireGuardService.GetCurrentStatus(WgInterfaceName);
             IsWgConnected = status.IsConnected;
-            WgStatusText = IsWgConnected ? $"已连接: {status.IpAddress}" : "未连接";
+            WgStatusText = IsWgConnected ? $"宸茶繛鎺? {status.IpAddress}" : "鏈繛鎺?";
         }
 
         private async Task ToggleWireGuardAsync()
@@ -626,17 +1125,17 @@ namespace MyTools.ViewModels
             {
                 if (IsWgConnected)
                 {
-                    WgStatusText = "正在断开...";
+                    WgStatusText = "姝ｅ湪鏂紑...";
                     await WireGuardService.DisconnectAsync(WgInterfaceName);
                 }
                 else
                 {
                     if (string.IsNullOrWhiteSpace(WgConfig)) return;
-                    WgStatusText = "正在连接...";
+                    WgStatusText = "姝ｅ湪杩炴帴...";
                     var status = await WireGuardService.ConnectAsync(WgInterfaceName, WgConfig);
                     if (!string.IsNullOrEmpty(status.ErrorMessage))
                     {
-                        MessageBox.Show(status.ErrorMessage, "WireGuard 连接失败", MessageBoxButton.OK, MessageBoxImage.Error);
+                        MessageBox.Show(status.ErrorMessage, "WireGuard 杩炴帴澶辫触", MessageBoxButton.OK, MessageBoxImage.Error);
                     }
                 }
             }
@@ -652,19 +1151,31 @@ namespace MyTools.ViewModels
             try
             {
                 IsSqlBusy = true;
-                SqlStatusMessage = "正在连接 SQL Server...";
+                SqlStatusMessage = "姝ｅ湪杩炴帴 SQL Server...";
+                CancelPendingTableLoad(clearBusy: false);
                 SqlDatabaseList.Clear();
                 SqlTableList.Clear();
                 AllSqlTableList.Clear();
-                SelectedSqlDatabase = null;
-                SelectedSqlTable = null;
+                _suppressSqlTableAutoLoad = true;
+                try
+                {
+                    SelectedSqlDatabase = null;
+                    SelectedSqlTable = null;
+                }
+                finally
+                {
+                    _suppressSqlTableAutoLoad = false;
+                }
+
                 SqlTableSearchText = string.Empty;
 
                 var options = BuildSqlConnectionOptions();
                 await SqlExportService.TestConnectionAsync(options, CancellationToken.None);
+                _activeSqlConnectionOptions = CloneSqlConnectionOptions(options);
+                _hasUserModifiedSqlConnectionInputs = false;
                 await SaveSqlConnectionHistoryAsync(options);
 
-                SqlStatusMessage = "连接成功，正在读取数据库列表...";
+                SqlStatusMessage = "杩炴帴鎴愬姛锛屾鍦ㄨ鍙栨暟鎹簱鍒楄〃...";
                 var databases = await SqlExportService.GetDatabasesAsync(options, CancellationToken.None);
                 SqlDatabaseList.Clear();
                 foreach (var database in databases)
@@ -673,14 +1184,15 @@ namespace MyTools.ViewModels
                 }
 
                 SqlStatusMessage = databases.Count > 0
-                    ? $"连接成功，已加载 {databases.Count} 个数据库，请继续选择数据库和表。"
-                    : "连接成功，但当前账号没有可访问的数据库。";
+                    ? $"杩炴帴鎴愬姛锛屽凡鍔犺浇 {databases.Count} 涓暟鎹簱锛岃缁х画閫夋嫨鏁版嵁搴撳拰琛ㄣ€?"
+                    : "杩炴帴鎴愬姛锛屼絾褰撳墠璐﹀彿娌℃湁鍙闂殑鏁版嵁搴撱€?";
             }
             catch (Exception ex)
             {
+                _activeSqlConnectionOptions = null;
                 AppLogService.Error(ex, "SQL connection test failed for {ServerAddress}", SqlServerAddress ?? string.Empty);
-                SqlStatusMessage = "连接失败，请检查服务器地址、端口、用户名和密码。";
-                MessageBox.Show(ex.Message, "SQL Server 连接失败", MessageBoxButton.OK, MessageBoxImage.Error);
+                SqlStatusMessage = "杩炴帴澶辫触锛岃妫€鏌ユ湇鍔″櫒鍦板潃銆佺鍙ｃ€佺敤鎴峰悕鍜屽瘑鐮併€?";
+                MessageBox.Show(ex.Message, "SQL Server 杩炴帴澶辫触", MessageBoxButton.OK, MessageBoxImage.Error);
             }
             finally
             {
@@ -690,16 +1202,17 @@ namespace MyTools.ViewModels
 
         private async Task LoadTablesForSelectedDatabaseAsync()
         {
-            CancelPendingTableLoad();
+            CancelPendingTableLoad(clearBusy: false);
             SqlTableList.Clear();
             AllSqlTableList.Clear();
             SqlTableSearchText = string.Empty;
 
             if (SelectedSqlDatabase == null)
             {
+                IsSqlBusy = false;
                 SqlStatusMessage = SqlDatabaseList.Count == 0
-                    ? "请输入 SQL Server 连接信息后测试连接。"
-                    : "请选择数据库以加载数据表。";
+                    ? "璇疯緭鍏?SQL Server 杩炴帴淇℃伅鍚庢祴璇曡繛鎺ャ€?"
+                    : "璇烽€夋嫨鏁版嵁搴撲互鍔犺浇鏁版嵁琛ㄣ€?";
                 return;
             }
 
@@ -709,10 +1222,10 @@ namespace MyTools.ViewModels
             try
             {
                 IsSqlBusy = true;
-                SqlStatusMessage = $"正在读取数据库 {SelectedSqlDatabase.Name} 的表列表...";
+                SqlStatusMessage = $"姝ｅ湪璇诲彇鏁版嵁搴?{SelectedSqlDatabase.Name} 鐨勮〃鍒楄〃...";
 
                 var tables = await SqlExportService.GetTablesAsync(
-                    BuildSqlConnectionOptions(),
+                    GetEffectiveSqlConnectionOptions(),
                     SelectedSqlDatabase.Name,
                     cancellationTokenSource.Token);
 
@@ -731,8 +1244,8 @@ namespace MyTools.ViewModels
                 FilteredSqlTableView?.Refresh();
 
                 SqlStatusMessage = tables.Count > 0
-                    ? $"已加载 {tables.Count} 张表，请选择需要导出的表。"
-                    : "当前数据库下没有可导出的用户表。";
+                    ? $"宸插姞杞?{tables.Count} 寮犺〃锛岃閫夋嫨闇€瑕佸鍑虹殑琛ㄣ€?"
+                    : "褰撳墠鏁版嵁搴撲笅娌℃湁鍙鍑虹殑鐢ㄦ埛琛ㄣ€?";
             }
             catch (OperationCanceledException)
             {
@@ -740,7 +1253,7 @@ namespace MyTools.ViewModels
             catch (Exception ex)
             {
                 AppLogService.Error(ex, "Loading SQL tables failed for {DatabaseName}", SelectedSqlDatabase?.Name ?? string.Empty);
-                SqlStatusMessage = "读取表列表失败。";
+                SqlStatusMessage = "璇诲彇琛ㄥ垪琛ㄥけ璐ャ€?";
                 MessageBox.Show(ex.Message, "读取表列表失败", MessageBoxButton.OK, MessageBoxImage.Error);
             }
             finally
@@ -748,9 +1261,9 @@ namespace MyTools.ViewModels
                 if (ReferenceEquals(_loadTablesCancellationTokenSource, cancellationTokenSource))
                 {
                     _loadTablesCancellationTokenSource = null;
+                    IsSqlBusy = false;
                 }
 
-                IsSqlBusy = false;
                 cancellationTokenSource.Dispose();
             }
         }
@@ -759,7 +1272,7 @@ namespace MyTools.ViewModels
         {
             try
             {
-                var options = BuildSqlConnectionOptions();
+                var options = GetEffectiveSqlConnectionOptions();
                 if (SelectedSqlDatabase == null)
                 {
                     throw new InvalidOperationException("请先选择数据库。");
@@ -772,8 +1285,8 @@ namespace MyTools.ViewModels
 
                 var dialog = new SaveFileDialog
                 {
-                    Filter = "Excel 工作簿 (*.xlsx)|*.xlsx",
-                    FileName = SqlExportService.BuildDefaultFileName(SqlServerAddress, SelectedSqlDatabase.Name, SelectedSqlTable),
+                    Filter = "Excel 宸ヤ綔绨?(*.xlsx)|*.xlsx",
+                    FileName = SqlExportService.BuildDefaultFileName(options.ServerAddress, SelectedSqlDatabase.Name, SelectedSqlTable),
                     DefaultExt = ".xlsx",
                     AddExtension = true,
                     OverwritePrompt = true
@@ -785,7 +1298,7 @@ namespace MyTools.ViewModels
                 }
 
                 IsSqlBusy = true;
-                SqlStatusMessage = "正在检查数据量并导出 Excel...";
+                SqlStatusMessage = "姝ｅ湪妫€鏌ユ暟鎹噺骞跺鍑?Excel...";
 
                 var exportResult = await SqlExportService.ExportTableAsync(
                     options,
@@ -808,8 +1321,8 @@ namespace MyTools.ViewModels
                     "SQL export failed for {DatabaseName}.{TableName}",
                     SelectedSqlDatabase?.Name ?? string.Empty,
                     SelectedSqlTable?.DisplayName ?? string.Empty);
-                SqlStatusMessage = "导出失败。";
-                MessageBox.Show(ex.Message, "导出失败", MessageBoxButton.OK, MessageBoxImage.Error);
+                SqlStatusMessage = "瀵煎嚭澶辫触銆?";
+                MessageBox.Show(ex.Message, "瀵煎嚭澶辫触", MessageBoxButton.OK, MessageBoxImage.Error);
             }
             finally
             {
@@ -821,10 +1334,33 @@ namespace MyTools.ViewModels
         {
             return new SqlServerConnectionOptions
             {
-                ServerAddress = SqlServerAddress,
-                Port = SqlPort,
-                Username = SqlUsername,
+                ServerAddress = SqlServerAddress?.Trim(),
+                Port = SqlPort?.Trim(),
+                Username = SqlUsername?.Trim(),
                 Password = SqlPassword
+            };
+        }
+
+        private SqlServerConnectionOptions GetEffectiveSqlConnectionOptions()
+        {
+            return _activeSqlConnectionOptions != null
+                ? CloneSqlConnectionOptions(_activeSqlConnectionOptions)
+                : BuildSqlConnectionOptions();
+        }
+
+        private static SqlServerConnectionOptions CloneSqlConnectionOptions(SqlServerConnectionOptions options)
+        {
+            if (options == null)
+            {
+                return null;
+            }
+
+            return new SqlServerConnectionOptions
+            {
+                ServerAddress = options.ServerAddress,
+                Port = options.Port,
+                Username = options.Username,
+                Password = options.Password
             };
         }
 
@@ -833,14 +1369,25 @@ namespace MyTools.ViewModels
             var history = await SqlConnectionHistoryService.LoadAsync();
             await Application.Current.Dispatcher.InvokeAsync(() =>
             {
-                ReplaceItems(SqlServerAddressHistory, history.ServerAddresses);
-                ReplaceItems(SqlUsernameHistory, history.Usernames);
-                ReplaceItems(SqlPasswordHistory, history.Passwords);
+                _isApplyingSqlHistory = true;
+                try
+                {
+                    ReplaceItems(SqlServerAddressHistory, history.ServerAddresses);
+                    ReplaceItems(SqlUsernameHistory, history.Usernames);
+                    ReplaceItems(SqlPasswordHistory, history.Passwords);
 
-                SqlServerAddress = history.LastServerAddress;
-                SqlPort = string.IsNullOrWhiteSpace(history.LastPort) ? "1433" : history.LastPort;
-                SqlUsername = history.LastUsername;
-                SqlPassword = history.LastPassword;
+                    if (!_hasUserModifiedSqlConnectionInputs)
+                    {
+                        SqlServerAddress = history.LastServerAddress;
+                        SqlPort = string.IsNullOrWhiteSpace(history.LastPort) ? "1433" : history.LastPort;
+                        SqlUsername = history.LastUsername;
+                        SqlPassword = history.LastPassword;
+                    }
+                }
+                finally
+                {
+                    _isApplyingSqlHistory = false;
+                }
             });
         }
 
@@ -850,9 +1397,17 @@ namespace MyTools.ViewModels
             var history = await SqlConnectionHistoryService.LoadAsync();
             await Application.Current.Dispatcher.InvokeAsync(() =>
             {
-                ReplaceItems(SqlServerAddressHistory, history.ServerAddresses);
-                ReplaceItems(SqlUsernameHistory, history.Usernames);
-                ReplaceItems(SqlPasswordHistory, history.Passwords);
+                _isApplyingSqlHistory = true;
+                try
+                {
+                    ReplaceItems(SqlServerAddressHistory, history.ServerAddresses);
+                    ReplaceItems(SqlUsernameHistory, history.Usernames);
+                    ReplaceItems(SqlPasswordHistory, history.Passwords);
+                }
+                finally
+                {
+                    _isApplyingSqlHistory = false;
+                }
             });
         }
 
@@ -885,7 +1440,7 @@ namespace MyTools.ViewModels
             return !IsSqlBusy && SelectedSqlDatabase != null && SelectedSqlTable != null;
         }
 
-        private void CancelPendingTableLoad()
+        private void CancelPendingTableLoad(bool clearBusy = true)
         {
             if (_loadTablesCancellationTokenSource == null)
             {
@@ -893,8 +1448,11 @@ namespace MyTools.ViewModels
             }
 
             _loadTablesCancellationTokenSource.Cancel();
-            _loadTablesCancellationTokenSource.Dispose();
             _loadTablesCancellationTokenSource = null;
+            if (clearBusy)
+            {
+                IsSqlBusy = false;
+            }
         }
 
         private void RestoreWindow()
@@ -916,6 +1474,8 @@ namespace MyTools.ViewModels
         {
             App.IsExiting = true;
             CancelPendingTableLoad();
+            _screenshotEditorWindow?.Close();
+            _screenshotEditorWindow = null;
             Application.Current.Shutdown();
         }
 
@@ -928,7 +1488,7 @@ namespace MyTools.ViewModels
         private async Task ToggleDefenderAsync()
         {
             bool target = !IsDefenderEnabled;
-            SystemStatusMessage = target ? "正在恢复实时防护，请在 UAC 弹窗中确认..." : "正在关闭实时防护，请在 UAC 弹窗中确认...";
+            SystemStatusMessage = target ? "姝ｅ湪鎭㈠瀹炴椂闃叉姢锛岃鍦?UAC 寮圭獥涓‘璁?.." : "姝ｅ湪鍏抽棴瀹炴椂闃叉姢锛岃鍦?UAC 寮圭獥涓‘璁?..";
             try
             {
                 await WindowsSecurityService.SetDefenderRealtimeAsync(target);
@@ -938,19 +1498,19 @@ namespace MyTools.ViewModels
             }
             catch (OperationCanceledException)
             {
-                SystemStatusMessage = "操作已取消（UAC 未授权）。";
+                SystemStatusMessage = "鎿嶄綔宸插彇娑堬紙UAC 鏈巿鏉冿級銆?";
             }
             catch (Exception ex)
             {
                 SystemStatusMessage = "操作失败：" + ex.Message;
-                MessageBox.Show(ex.Message, "操作失败", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show(ex.Message, "鎿嶄綔澶辫触", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
         private async Task ToggleAutoUpdateAsync()
         {
             bool target = !IsAutoUpdateEnabled;
-            SystemStatusMessage = target ? "正在恢复自动更新，请在 UAC 弹窗中确认..." : "正在停止自动更新，请在 UAC 弹窗中确认...";
+            SystemStatusMessage = target ? "姝ｅ湪鎭㈠鑷姩鏇存柊锛岃鍦?UAC 寮圭獥涓‘璁?.." : "姝ｅ湪鍋滄鑷姩鏇存柊锛岃鍦?UAC 寮圭獥涓‘璁?..";
             try
             {
                 await WindowsSecurityService.SetAutoUpdateAsync(target);
@@ -960,32 +1520,32 @@ namespace MyTools.ViewModels
             }
             catch (OperationCanceledException)
             {
-                SystemStatusMessage = "操作已取消（UAC 未授权）。";
+                SystemStatusMessage = "鎿嶄綔宸插彇娑堬紙UAC 鏈巿鏉冿級銆?";
             }
             catch (Exception ex)
             {
                 SystemStatusMessage = "操作失败：" + ex.Message;
-                MessageBox.Show(ex.Message, "操作失败", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show(ex.Message, "鎿嶄綔澶辫触", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
         private async Task TriggerUpdateNowAsync()
         {
-            SystemStatusMessage = "正在触发立即更新，请在 UAC 弹窗中确认...";
+            SystemStatusMessage = "姝ｅ湪瑙﹀彂绔嬪嵆鏇存柊锛岃鍦?UAC 寮圭獥涓‘璁?..";
             try
             {
                 await WindowsSecurityService.TriggerImmediateUpdateAsync();
                 RefreshSystemStatus();
-                SystemStatusMessage = "更新任务已下发，Windows Update 设置页已打开，可在其中查看进度。";
+                SystemStatusMessage = "鏇存柊浠诲姟宸蹭笅鍙戯紝Windows Update 璁剧疆椤靛凡鎵撳紑锛屽彲鍦ㄥ叾涓煡鐪嬭繘搴︺€?";
             }
             catch (OperationCanceledException)
             {
-                SystemStatusMessage = "操作已取消（UAC 未授权）。";
+                SystemStatusMessage = "鎿嶄綔宸插彇娑堬紙UAC 鏈巿鏉冿級銆?";
             }
             catch (Exception ex)
             {
-                SystemStatusMessage = "操作失败：" + ex.Message;
-                MessageBox.Show(ex.Message, "操作失败", MessageBoxButton.OK, MessageBoxImage.Error);
+                SystemStatusMessage = "鎿嶄綔澶辫触锛? + ex.Message";
+                MessageBox.Show(ex.Message, "鎿嶄綔澶辫触", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -1016,7 +1576,7 @@ namespace MyTools.ViewModels
             }
             catch (Exception ex)
             {
-                MessageBox.Show("执行失败: " + ex.Message, "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show("鎵ц澶辫触: " + ex.Message, "閿欒", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -1029,11 +1589,11 @@ namespace MyTools.ViewModels
         private async Task ExecuteSqlQueryAsync()
         {
             IsQueryBusy = true;
-            QueryStatusMessage = "正在执行查询...";
+            QueryStatusMessage = "姝ｅ湪鎵ц鏌ヨ...";
             SqlQueryResult = null;
             try
             {
-                var options = BuildSqlConnectionOptions();
+                var options = GetEffectiveSqlConnectionOptions();
                 var table = await SqlExportService.ExecuteQueryAsync(
                     options,
                     SelectedSqlDatabase.Name,
@@ -1041,13 +1601,13 @@ namespace MyTools.ViewModels
                     CancellationToken.None);
 
                 SqlQueryResult = table.DefaultView;
-                QueryStatusMessage = $"共 {table.Rows.Count} 行、{table.Columns.Count} 列。";
+                QueryStatusMessage = $"共 {table.Rows.Count} 行，{table.Columns.Count} 列。";
             }
             catch (Exception ex)
             {
                 AppLogService.Error(ex, "SQL query execution failed");
                 QueryStatusMessage = "执行失败：" + ex.Message;
-                MessageBox.Show(ex.Message, "SQL 执行失败", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show(ex.Message, "SQL 鎵ц澶辫触", MessageBoxButton.OK, MessageBoxImage.Error);
             }
             finally
             {
@@ -1060,7 +1620,7 @@ namespace MyTools.ViewModels
             if (SqlQueryResult == null) return;
             var dialog = new SaveFileDialog
             {
-                Filter = "Excel 工作簿 (*.xlsx)|*.xlsx",
+                Filter = "Excel 宸ヤ綔绨?(*.xlsx)|*.xlsx",
                 FileName = $"QueryResult_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx",
                 DefaultExt = ".xlsx",
                 AddExtension = true,
@@ -1069,7 +1629,7 @@ namespace MyTools.ViewModels
             if (dialog.ShowDialog() != true) return;
 
             IsQueryBusy = true;
-            QueryStatusMessage = "正在导出 Excel...";
+            QueryStatusMessage = "姝ｅ湪瀵煎嚭 Excel...";
             try
             {
                 var table = SqlQueryResult.Table;
@@ -1079,7 +1639,7 @@ namespace MyTools.ViewModels
                     dialog.FileName,
                     CancellationToken.None);
 
-                QueryStatusMessage = $"导出完成，共 {result.RowCount} 行。";
+                QueryStatusMessage = $"瀵煎嚭瀹屾垚锛屽叡 {result.RowCount} 琛屻€?";
                 MessageBox.Show(
                     $"导出成功。\n文件路径：{result.FilePath}",
                     "导出完成",
@@ -1089,8 +1649,8 @@ namespace MyTools.ViewModels
             catch (Exception ex)
             {
                 AppLogService.Error(ex, "Query result export failed");
-                QueryStatusMessage = "导出失败：" + ex.Message;
-                MessageBox.Show(ex.Message, "导出失败", MessageBoxButton.OK, MessageBoxImage.Error);
+                QueryStatusMessage = "瀵煎嚭澶辫触锛? + ex.Message";
+                MessageBox.Show(ex.Message, "瀵煎嚭澶辫触", MessageBoxButton.OK, MessageBoxImage.Error);
             }
             finally
             {
@@ -1105,6 +1665,113 @@ namespace MyTools.ViewModels
             _executeQueryCommand?.RaiseCanExecuteChanged();
             _exportQueryResultCommand?.RaiseCanExecuteChanged();
         }
+
+        public event PropertyChangedEventHandler PropertyChanged;
+
+        protected virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+    }
+
+    public class CodexProfileItem : INotifyPropertyChanged
+    {
+        private string _remark;
+        private bool _isApplying;
+        private string _statusMessage;
+        private string _configTomlContentProtected;
+        private string _authJsonContentProtected;
+
+        public string Name { get; set; }
+        public string FolderPath { get; set; }
+
+        public string Remark
+        {
+            get => _remark;
+            set
+            {
+                if (string.Equals(_remark, value, StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                _remark = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public bool IsApplying
+        {
+            get => _isApplying;
+            set
+            {
+                if (_isApplying == value)
+                {
+                    return;
+                }
+
+                _isApplying = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public string StatusMessage
+        {
+            get => _statusMessage;
+            set
+            {
+                if (string.Equals(_statusMessage, value, StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                _statusMessage = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public string ConfigTomlContentProtected
+        {
+            get => _configTomlContentProtected;
+            set
+            {
+                if (string.Equals(_configTomlContentProtected, value, StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                _configTomlContentProtected = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(HasEmbeddedContent));
+                OnPropertyChanged(nameof(ContentStorageSummary));
+            }
+        }
+
+        public string AuthJsonContentProtected
+        {
+            get => _authJsonContentProtected;
+            set
+            {
+                if (string.Equals(_authJsonContentProtected, value, StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                _authJsonContentProtected = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(HasEmbeddedContent));
+                OnPropertyChanged(nameof(ContentStorageSummary));
+            }
+        }
+
+        public bool HasEmbeddedContent =>
+            !string.IsNullOrWhiteSpace(ConfigTomlContentProtected)
+            && !string.IsNullOrWhiteSpace(AuthJsonContentProtected);
+
+        public string ContentStorageSummary =>
+            HasEmbeddedContent
+                ? "宸插唴缃繚瀛?config.toml 鍜?auth.json 鍐呭"
+                : "鏈唴缃厤缃唴瀹癸紙寤鸿閲嶆柊鎷栧叆鏂囦欢澶癸級";
 
         public event PropertyChangedEventHandler PropertyChanged;
 
@@ -1202,6 +1869,61 @@ namespace MyTools.ViewModels
                 RaiseCanExecuteChanged();
                 await _executeAsync();
             }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "Command execution failed.");
+                MessageBox.Show(ex.Message, "鎿嶄綔澶辫触", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                _isExecuting = false;
+                RaiseCanExecuteChanged();
+            }
+        }
+
+        public event EventHandler CanExecuteChanged;
+
+        public void RaiseCanExecuteChanged()
+        {
+            CanExecuteChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    public class AsyncRelayParameterCommand : ICommand
+    {
+        private readonly Func<object, Task> _executeAsync;
+        private readonly Func<object, bool> _canExecute;
+        private bool _isExecuting;
+
+        public AsyncRelayParameterCommand(Func<object, Task> executeAsync, Func<object, bool> canExecute = null)
+        {
+            _executeAsync = executeAsync;
+            _canExecute = canExecute;
+        }
+
+        public bool CanExecute(object parameter)
+        {
+            return !_isExecuting && (_canExecute == null || _canExecute(parameter));
+        }
+
+        public async void Execute(object parameter)
+        {
+            if (!CanExecute(parameter))
+            {
+                return;
+            }
+
+            try
+            {
+                _isExecuting = true;
+                RaiseCanExecuteChanged();
+                await _executeAsync(parameter);
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "Parameterized command execution failed.");
+                MessageBox.Show(ex.Message, "鎿嶄綔澶辫触", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
             finally
             {
                 _isExecuting = false;
@@ -1217,3 +1939,7 @@ namespace MyTools.ViewModels
         }
     }
 }
+
+
+
+

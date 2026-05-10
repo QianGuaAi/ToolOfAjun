@@ -38,7 +38,9 @@ namespace MyTools.Services
                 bitmap.Save(ms, ImageFormat.Png);
                 ms.Position = 0;
                 var decoder = new PngBitmapDecoder(ms, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
-                return decoder.Frames[0];
+                var frame = decoder.Frames[0];
+                frame.Freeze();
+                return frame;
             }
         }
     }
