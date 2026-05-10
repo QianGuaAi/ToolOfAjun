@@ -1,0 +1,2 @@
+[待确认] Codex 文件名乱码源未在代码中找到，可能来自序列化文件 MyTools.codexprofiles.json。
+[待确认] 当前环境未发现 %LOCALAPPDATA%\MyTools\MyTools.codexprofiles.json 文件，无法确认历史 Name/FolderPath 是否包含乱码；如用户历史记录异常，可重新拖入配置文件夹覆盖显示。

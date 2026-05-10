@@ -52,6 +52,12 @@ namespace MyTools.Services
             Log.Error(exception, messageTemplate, propertyValues);
         }
 
+        public static void Error(string messageTemplate, params object[] propertyValues)
+        {
+            Initialize();
+            Log.Error(messageTemplate, propertyValues);
+        }
+
         public static void CloseAndFlush()
         {
             if (!_initialized)

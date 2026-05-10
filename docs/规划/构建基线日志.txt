@@ -1,0 +1,42 @@
+﻿=== Debug 构建基线 ===
+  正在确定要还原的项目…
+  所有项目均是最新的，无法还原。
+  MyTools -> C:\ToolOfAjun\src\MyTools\bin\Debug\net48\MyTools.exe
+
+已成功生成。
+    0 个警告
+    0 个错误
+
+已用时间 00:00:01.15
+
+=== 最终 Release 构建 ===
+  正在确定要还原的项目…
+  所有项目均是最新的，无法还原。
+  MyTools -> C:\ToolOfAjun\src\MyTools\bin\Release\net48\MyTools.exe
+
+已成功生成。
+    0 个警告
+    0 个错误
+
+已用时间 00:00:06.61
+## [2026-05-10 21:13:40] Release Build Tail
+  正在确定要还原的项目…
+  所有项目均是最新的，无法还原。
+  MyTools -> C:\ToolOfAjun\src\MyTools\bin\Release\net48\MyTools.exe
+
+已成功生成。
+    0 个警告
+    0 个错误
+
+已用时间 00:00:01.28
+
+## [2026-05-10 21:20:46] Release Build Tail
+  正在确定要还原的项目…
+  所有项目均是最新的，无法还原。
+  MyTools -> C:\ToolOfAjun\src\MyTools\bin\Release\net48\MyTools.exe
+
+已成功生成。
+    0 个警告
+    0 个错误
+
+已用时间 00:00:01.15

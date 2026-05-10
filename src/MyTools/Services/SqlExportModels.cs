@@ -2,6 +2,7 @@ namespace MyTools.Services
 {
     public class SqlServerConnectionOptions
     {
+        public SqlProviderKind ProviderKind { get; set; } = SqlProviderKind.SqlServer;
         public string ServerAddress { get; set; }
         public string Port { get; set; }
         public string Username { get; set; }

@@ -35,7 +35,10 @@ namespace MyTools
         {
             InitializeComponent();
             SetBrushColor(Colors.Red);
-            MarkActiveColorButton(BtnColorRed);
+            if (BtnColorRed != null)
+            {
+                MarkActiveColorButton(BtnColorRed);
+            }
             DrawingCanvas.Strokes.StrokesChanged += Strokes_StrokesChanged;
         }
 
@@ -60,14 +63,24 @@ namespace MyTools
 
         private void MarkActiveColorButton(Button active)
         {
+            if (active == null)
+            {
+                return;
+            }
+
             Button[] all = {
                 BtnColorRed, BtnColorOrange, BtnColorYellow, BtnColorGreen,
                 BtnColorCyan, BtnColorBlue, BtnColorPurple, BtnColorWhite, BtnColorBlack
             };
             foreach (var btn in all)
-                btn.BorderBrush = Brushes.Transparent;
-            if (active != null)
-                active.BorderBrush = Brushes.White;
+            {
+                if (btn != null)
+                {
+                    btn.BorderBrush = Brushes.Transparent;
+                }
+            }
+
+            active.BorderBrush = Brushes.White;
         }
 
         private void SetMode(DrawingMode mode)
@@ -314,10 +327,22 @@ namespace MyTools
 
         protected override void OnClosed(EventArgs e)
         {
-            DrawingCanvas.Strokes.StrokesChanged -= Strokes_StrokesChanged;
-            ScreenshotImage.Source = null;
-            DrawingCanvas.Strokes.Clear();
-            ShapesCanvas.Children.Clear();
+            if (DrawingCanvas != null)
+            {
+                DrawingCanvas.Strokes.StrokesChanged -= Strokes_StrokesChanged;
+                DrawingCanvas.Strokes.Clear();
+            }
+
+            if (ScreenshotImage != null)
+            {
+                ScreenshotImage.Source = null;
+            }
+
+            if (ShapesCanvas != null)
+            {
+                ShapesCanvas.Children.Clear();
+            }
+
             _undoStack.Clear();
 
             base.OnClosed(e);

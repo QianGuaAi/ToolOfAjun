@@ -6,13 +6,17 @@ using System.Data;
 using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Input;
+using System.Windows.Threading;
+using Microsoft.VisualBasic;
 using Microsoft.Win32;
 using MyTools.Services;
+using WinForms = System.Windows.Forms;
 
 namespace MyTools.ViewModels
 {
@@ -30,7 +34,7 @@ namespace MyTools.ViewModels
         private string _wgInterfaceName = "wg0";
         private string _wgConfig;
         private bool _isWgConnected;
-        private string _wgStatusText = "鏈繛鎺?";
+        private string _wgStatusText = "未连接";
         private string _wgEndpoint;
         private string _wgAddress;
         private string _wgServerPublicKey;
@@ -38,13 +42,14 @@ namespace MyTools.ViewModels
         private string _currentModule;
         private string _sqlServerAddress;
         private string _sqlPort = "1433";
+        private SqlProviderKind _selectedSqlProvider = SqlProviderKind.SqlServer;
         private string _sqlUsername;
         private string _sqlPassword;
         private string _sqlTableSearchText;
         private DatabaseItem _selectedSqlDatabase;
         private TableItem _selectedSqlTable;
         private ICollectionView _filteredSqlTableView;
-        private string _sqlStatusMessage = "璇疯緭鍏?SQL Server 杩炴帴淇℃伅鍚庢祴璇曡繛鎺ャ€?";
+        private string _sqlStatusMessage = "请输入 SQL Server 连接信息后测试连接。";
         private bool _isSqlBusy;
         private CancellationTokenSource _loadTablesCancellationTokenSource;
         private bool _suppressSqlTableAutoLoad;
@@ -59,25 +64,99 @@ namespace MyTools.ViewModels
         private DataView _sqlQueryResult;
         private bool _isQueryBusy;
         private string _queryStatusMessage = string.Empty;
+        private ObservableCollection<OptimizationReportItem> _optimizationReports;
+        private ObservableCollection<JunkCandidate> _junkCandidates;
+        private ObservableCollection<WeChatCleanupCandidate> _weChatCleanupCandidates;
+        private ObservableCollection<WeChatRoot> _weChatRoots;
+        private WeChatRoot _selectedWeChatRoot;
+        private bool _isAutoOptimizeBusy;
+        private string _autoOptimizeStatusMessage = "点击“开始自动优化”执行白名单优化流程。";
+        private bool _isJunkBusy;
+        private string _junkStatusMessage = "点击“开始扫描”分析可清理项目。";
+        private bool _isWeChatCleanupBusy;
+        private string _weChatCleanupStatusMessage = "请选择日期和类别后先扫描，再执行清理。";
+        private bool _isWeChatBackupBusy;
+        private string _weChatBackupStatusMessage = "请选择日期和类别，设置输出目录后开始备份。";
+        private bool _isWeChatRestoreBusy;
+        private string _weChatRestoreStatusMessage = "请选择备份文件并确认恢复路径。";
+        private DateTime? _weChatCleanupStartDate = DateTime.Today.AddDays(-30);
+        private DateTime? _weChatCleanupEndDate = DateTime.Today;
+        private DateTime? _weChatBackupStartDate = DateTime.Today.AddDays(-30);
+        private DateTime? _weChatBackupEndDate = DateTime.Today;
+        private bool _weChatCleanupIncludeText;
+        private bool _weChatCleanupIncludeImage = true;
+        private bool _weChatCleanupIncludeVideo = true;
+        private bool _weChatCleanupIncludeVoice = true;
+        private bool _weChatCleanupIncludeFile = true;
+        private bool _weChatCleanupIncludeCache = true;
+        private bool _weChatBackupIncludeText;
+        private bool _weChatBackupIncludeImage = true;
+        private bool _weChatBackupIncludeVideo = true;
+        private bool _weChatBackupIncludeVoice = true;
+        private bool _weChatBackupIncludeFile = true;
+        private bool _weChatBackupIncludeCache;
+        private string _weChatBackupOutputFolder = string.Empty;
+        private string _weChatRestoreZipPath = string.Empty;
+        private string _weChatRestoreManifestSummary = "未选择备份文件。";
+        private bool _restoreToOriginal = true;
+        private string _weChatRestoreTargetRoot = string.Empty;
 
         private bool _showEditorAfterCapture = true;
         private string _screenshotHotkeyText = "Ctrl+Shift+Z";
         private bool _isCapturingHotkey;
         private bool _isScreenshotBusy;
         private ScreenshotEditorWindow _screenshotEditorWindow;
+        private RecordRegionWindow _recordRegionWindow;
+        private readonly RecordingService _recordingService = new RecordingService();
+        private bool _isVideoRecording;
+        private bool _isAudioRecording;
+        private DateTime _audioRecordingStartedAt;
+        private string _audioRecordingIndicator = string.Empty;
+        private string _activeVideoOutputPath = string.Empty;
+        private string _activeAudioOutputPath = string.Empty;
+        private readonly DispatcherTimer _audioRecordingTimer;
         private uint _pendingModifiers = 0x0006;
         private uint _pendingKey = 0x5A;
-        private string _codexProfilesStatusMessage = "鎷栧叆鍖呭惈 config.toml 鍜?auth.json 鐨勬枃浠跺す锛岀敓鎴愬彲搴旂敤鐨?Codex 閰嶇疆璁板綍銆?";
+        private string _codexProfilesStatusMessage = "拖入包含 config.toml 和 auth.json 的文件夹，生成可应用的 Codex 配置记录。";
 
         private readonly AsyncRelayCommand _executeQueryCommand;
         private readonly AsyncRelayCommand _exportQueryResultCommand;
         private readonly AsyncRelayParameterCommand _applyCodexProfileCommand;
+        private readonly AsyncRelayParameterCommand _exportCodexProfileCommand;
+        private readonly AsyncRelayCommand _importCodexProfileCommand;
+        private readonly AsyncRelayCommand _openRecordRegionCommand;
+        private readonly AsyncRelayCommand _toggleAudioRecordingCommand;
 
         private readonly AsyncRelayCommand _testSqlConnectionCommand;
         private readonly AsyncRelayCommand _exportSqlTableCommand;
         private readonly AsyncRelayCommand _toggleDefenderCommand;
         private readonly AsyncRelayCommand _toggleAutoUpdateCommand;
         private readonly AsyncRelayCommand _triggerUpdateNowCommand;
+        private readonly AsyncRelayCommand _startAutoOptimizeCommand;
+        private readonly AsyncRelayCommand _startJunkScanCommand;
+        private readonly AsyncRelayCommand _runJunkCleanupCommand;
+        private readonly AsyncRelayCommand _scanWeChatCleanupCommand;
+        private readonly AsyncRelayCommand _startWeChatCleanupCommand;
+        private readonly AsyncRelayCommand _startWeChatBackupCommand;
+        private readonly AsyncRelayCommand _startWeChatRestoreCommand;
+        private readonly RelayCommand _deleteSelectedReportsCommand;
+        private readonly RelayCommand _selectWeChatBackupOutputFolderCommand;
+        private readonly RelayCommand _selectWeChatRestoreZipCommand;
+        private readonly RelayCommand _selectWeChatRestoreTargetRootCommand;
+        private readonly RelayParameterCommand _showReportDetailsCommand;
+
+        private readonly OptimizationReportService _optimizationReportService = new OptimizationReportService();
+        private readonly SystemOptimizationService _systemOptimizationService = new SystemOptimizationService();
+        private readonly JunkCleanupService _junkCleanupService = new JunkCleanupService();
+        private readonly WeChatDataLocator _weChatDataLocator = new WeChatDataLocator();
+        private readonly WeChatCleanupService _weChatCleanupService = new WeChatCleanupService();
+        private readonly WeChatBackupService _weChatBackupService = new WeChatBackupService();
+        private static readonly IReadOnlyList<SqlProviderOption> SqlProviderOptionItems = new List<SqlProviderOption>
+        {
+            new SqlProviderOption(SqlProviderKind.SqlServer, "SQL Server"),
+            new SqlProviderOption(SqlProviderKind.PostgreSql, "PostgreSQL"),
+            new SqlProviderOption(SqlProviderKind.MySql, "MySQL")
+        };
 
         public MainViewModel()
         {
@@ -90,8 +169,17 @@ namespace MyTools.ViewModels
             SqlUsernameHistory = new ObservableCollection<string>();
             SqlPasswordHistory = new ObservableCollection<string>();
             CodexProfiles = new ObservableCollection<CodexProfileItem>();
+            OptimizationReports = new ObservableCollection<OptimizationReportItem>();
+            JunkCandidates = new ObservableCollection<JunkCandidate>();
+            WeChatCleanupCandidates = new ObservableCollection<WeChatCleanupCandidate>();
+            WeChatRoots = new ObservableCollection<WeChatRoot>();
             FilteredSqlTableView = CollectionViewSource.GetDefaultView(SqlTableList);
             FilteredSqlTableView.Filter = FilterSqlTable;
+            _audioRecordingTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(1)
+            };
+            _audioRecordingTimer.Tick += (sender, args) => UpdateAudioRecordingIndicator();
 
             RefreshCommand = new RelayCommand(Refresh);
             ShowNetworkCommand = new RelayCommand(() => { CurrentModule = "Network"; Refresh(); });
@@ -112,8 +200,8 @@ namespace MyTools.ViewModels
             {
                 if (!(obj is StartupItem item)) return;
                 var confirm = MessageBox.Show(
-                    $"纭畾瑕佹案涔呭垹闄ゅ惎鍔ㄩ」 \"{item.Name}\" 鍚楋紵\n姝ゆ搷浣滀笉鍙仮澶嶃€?",
-                    "纭鍒犻櫎",
+                    $"确定要永久删除启动项 \"{item.Name}\" 吗？\n此操作不可恢复。",
+                    "确认删除",
                     MessageBoxButton.YesNo,
                     MessageBoxImage.Warning);
                 if (confirm == MessageBoxResult.Yes)
@@ -136,6 +224,30 @@ namespace MyTools.ViewModels
             ToggleAutoUpdateCommand = _toggleAutoUpdateCommand;
             TriggerUpdateNowCommand = _triggerUpdateNowCommand;
             RefreshSystemStatusCommand = new RelayCommand(RefreshSystemStatus);
+            _startAutoOptimizeCommand = new AsyncRelayCommand(StartAutoOptimizeAsync, () => !IsAutoOptimizeBusy);
+            _startJunkScanCommand = new AsyncRelayCommand(StartJunkScanAsync, () => !IsJunkBusy);
+            _runJunkCleanupCommand = new AsyncRelayCommand(RunJunkCleanupAsync, CanRunJunkCleanup);
+            _scanWeChatCleanupCommand = new AsyncRelayCommand(ScanWeChatCleanupAsync, () => !IsWeChatCleanupBusy);
+            _startWeChatCleanupCommand = new AsyncRelayCommand(StartWeChatCleanupAsync, CanStartWeChatCleanup);
+            _startWeChatBackupCommand = new AsyncRelayCommand(StartWeChatBackupAsync, CanStartWeChatBackup);
+            _startWeChatRestoreCommand = new AsyncRelayCommand(StartWeChatRestoreAsync, CanStartWeChatRestore);
+            _deleteSelectedReportsCommand = new RelayCommand(DeleteSelectedReports, CanDeleteSelectedReports);
+            _selectWeChatBackupOutputFolderCommand = new RelayCommand(SelectWeChatBackupOutputFolder, () => !IsWeChatBackupBusy);
+            _selectWeChatRestoreZipCommand = new RelayCommand(SelectWeChatRestoreZip, () => !IsWeChatRestoreBusy);
+            _selectWeChatRestoreTargetRootCommand = new RelayCommand(SelectWeChatRestoreTargetRoot, () => !IsWeChatRestoreBusy);
+            _showReportDetailsCommand = new RelayParameterCommand(ShowReportDetails);
+            StartAutoOptimizeCommand = _startAutoOptimizeCommand;
+            StartJunkScanCommand = _startJunkScanCommand;
+            RunJunkCleanupCommand = _runJunkCleanupCommand;
+            ScanWeChatCleanupCommand = _scanWeChatCleanupCommand;
+            StartWeChatCleanupCommand = _startWeChatCleanupCommand;
+            StartWeChatBackupCommand = _startWeChatBackupCommand;
+            StartWeChatRestoreCommand = _startWeChatRestoreCommand;
+            DeleteSelectedReportsCommand = _deleteSelectedReportsCommand;
+            SelectWeChatBackupOutputFolderCommand = _selectWeChatBackupOutputFolderCommand;
+            SelectWeChatRestoreZipCommand = _selectWeChatRestoreZipCommand;
+            SelectWeChatRestoreTargetRootCommand = _selectWeChatRestoreTargetRootCommand;
+            ShowReportDetailsCommand = _showReportDetailsCommand;
 
             _executeQueryCommand = new AsyncRelayCommand(ExecuteSqlQueryAsync, CanExecuteSqlQuery);
             _exportQueryResultCommand = new AsyncRelayCommand(ExportQueryResultAsync, CanExportQueryResult);
@@ -149,6 +261,10 @@ namespace MyTools.ViewModels
 
             ShowScreenshotCommand = new RelayCommand(() => { CurrentModule = "Screenshot"; });
             TakeScreenshotNowCommand = new AsyncRelayCommand(TriggerScreenshotAsync);
+            _openRecordRegionCommand = new AsyncRelayCommand(OpenRecordRegionAsync, () => !IsVideoRecording && !IsAudioRecording);
+            StartVideoRecordingCommand = _openRecordRegionCommand;
+            _toggleAudioRecordingCommand = new AsyncRelayCommand(ToggleAudioRecordingAsync, () => !IsVideoRecording);
+            ToggleAudioRecordingCommand = _toggleAudioRecordingCommand;
             StartCaptureHotkeyCommand = new RelayCommand(() => IsCapturingHotkey = true);
             CancelCaptureHotkeyCommand = new RelayCommand(() => IsCapturingHotkey = false);
             SaveScreenshotSettingsCommand = new AsyncRelayCommand(SaveScreenshotSettingsAsync);
@@ -156,12 +272,18 @@ namespace MyTools.ViewModels
 
             _applyCodexProfileCommand = new AsyncRelayParameterCommand(ApplyCodexProfileAsync);
             ApplyCodexProfileCommand = _applyCodexProfileCommand;
+            _exportCodexProfileCommand = new AsyncRelayParameterCommand(ExportCodexProfileAsync);
+            ExportCodexProfileCommand = _exportCodexProfileCommand;
+            _importCodexProfileCommand = new AsyncRelayCommand(ImportCodexProfileAsync);
+            ImportCodexProfileCommand = _importCodexProfileCommand;
             DeleteCodexProfileCommand = new RelayParameterCommand(DeleteCodexProfile);
 
             CurrentModule = "Home";
             _ = LoadSqlConnectionHistoryAsync();
             _ = LoadScreenshotSettingsAsync();
             _ = LoadCodexProfilesAsync();
+            _ = LoadOptimizationReportsAsync();
+            _ = LoadWeChatRootsAsync();
         }
 
         public ObservableCollection<NetworkData> NetworkList
@@ -230,6 +352,46 @@ namespace MyTools.ViewModels
             set { _codexProfiles = value; OnPropertyChanged(); }
         }
 
+        public ObservableCollection<OptimizationReportItem> OptimizationReports
+        {
+            get => _optimizationReports;
+            set { _optimizationReports = value; OnPropertyChanged(); OnPropertyChanged(nameof(HasSelectedOptimizationReports)); }
+        }
+
+        public ObservableCollection<JunkCandidate> JunkCandidates
+        {
+            get => _junkCandidates;
+            set { _junkCandidates = value; OnPropertyChanged(); }
+        }
+
+        public ObservableCollection<WeChatCleanupCandidate> WeChatCleanupCandidates
+        {
+            get => _weChatCleanupCandidates;
+            set { _weChatCleanupCandidates = value; OnPropertyChanged(); }
+        }
+
+        public ObservableCollection<WeChatRoot> WeChatRoots
+        {
+            get => _weChatRoots;
+            set { _weChatRoots = value; OnPropertyChanged(); }
+        }
+
+        public WeChatRoot SelectedWeChatRoot
+        {
+            get => _selectedWeChatRoot;
+            set
+            {
+                if (ReferenceEquals(_selectedWeChatRoot, value))
+                {
+                    return;
+                }
+
+                _selectedWeChatRoot = value;
+                OnPropertyChanged();
+                TriggerCommandRequery();
+            }
+        }
+
         public string WgInterfaceName
         {
             get => _wgInterfaceName;
@@ -284,6 +446,29 @@ namespace MyTools.ViewModels
             set { _currentModule = value; OnPropertyChanged(); }
         }
 
+        public string AppVersionText => BuildAppVersionText();
+
+        public IReadOnlyList<SqlProviderOption> SqlProviderOptions => SqlProviderOptionItems;
+
+        public SqlProviderKind SelectedSqlProvider
+        {
+            get => _selectedSqlProvider;
+            set
+            {
+                if (_selectedSqlProvider == value)
+                {
+                    return;
+                }
+
+                _selectedSqlProvider = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(SqlPortHint));
+                ApplyDefaultSqlPortIfNeeded();
+                MarkSqlConnectionInputAsUserModified();
+                _ = LoadSqlConnectionHistoryAsync();
+            }
+        }
+
         public string SqlServerAddress
         {
             get => _sqlServerAddress;
@@ -313,6 +498,22 @@ namespace MyTools.ViewModels
                 _sqlPort = value;
                 MarkSqlConnectionInputAsUserModified();
                 OnPropertyChanged();
+            }
+        }
+
+        public string SqlPortHint
+        {
+            get
+            {
+                switch (SelectedSqlProvider)
+                {
+                    case SqlProviderKind.PostgreSql:
+                        return "端口（默认 5432）";
+                    case SqlProviderKind.MySql:
+                        return "端口（默认 3306）";
+                    default:
+                        return "端口（默认 1433）";
+                }
             }
         }
 
@@ -486,6 +687,274 @@ namespace MyTools.ViewModels
             set { _systemStatusMessage = value; OnPropertyChanged(); }
         }
 
+        public bool IsAutoOptimizeBusy
+        {
+            get => _isAutoOptimizeBusy;
+            set
+            {
+                if (_isAutoOptimizeBusy == value)
+                {
+                    return;
+                }
+
+                _isAutoOptimizeBusy = value;
+                OnPropertyChanged();
+                TriggerCommandRequery();
+            }
+        }
+
+        public string AutoOptimizeStatusMessage
+        {
+            get => _autoOptimizeStatusMessage;
+            set { _autoOptimizeStatusMessage = value; OnPropertyChanged(); }
+        }
+
+        public bool IsJunkBusy
+        {
+            get => _isJunkBusy;
+            set
+            {
+                if (_isJunkBusy == value)
+                {
+                    return;
+                }
+
+                _isJunkBusy = value;
+                OnPropertyChanged();
+                TriggerCommandRequery();
+            }
+        }
+
+        public string JunkStatusMessage
+        {
+            get => _junkStatusMessage;
+            set { _junkStatusMessage = value; OnPropertyChanged(); }
+        }
+
+        public bool IsWeChatCleanupBusy
+        {
+            get => _isWeChatCleanupBusy;
+            set
+            {
+                if (_isWeChatCleanupBusy == value)
+                {
+                    return;
+                }
+
+                _isWeChatCleanupBusy = value;
+                OnPropertyChanged();
+                TriggerCommandRequery();
+            }
+        }
+
+        public string WeChatCleanupStatusMessage
+        {
+            get => _weChatCleanupStatusMessage;
+            set { _weChatCleanupStatusMessage = value; OnPropertyChanged(); }
+        }
+
+        public bool IsWeChatBackupBusy
+        {
+            get => _isWeChatBackupBusy;
+            set
+            {
+                if (_isWeChatBackupBusy == value)
+                {
+                    return;
+                }
+
+                _isWeChatBackupBusy = value;
+                OnPropertyChanged();
+                TriggerCommandRequery();
+            }
+        }
+
+        public string WeChatBackupStatusMessage
+        {
+            get => _weChatBackupStatusMessage;
+            set { _weChatBackupStatusMessage = value; OnPropertyChanged(); }
+        }
+
+        public bool IsWeChatRestoreBusy
+        {
+            get => _isWeChatRestoreBusy;
+            set
+            {
+                if (_isWeChatRestoreBusy == value)
+                {
+                    return;
+                }
+
+                _isWeChatRestoreBusy = value;
+                OnPropertyChanged();
+                TriggerCommandRequery();
+            }
+        }
+
+        public string WeChatRestoreStatusMessage
+        {
+            get => _weChatRestoreStatusMessage;
+            set { _weChatRestoreStatusMessage = value; OnPropertyChanged(); }
+        }
+
+        public DateTime? WeChatCleanupStartDate
+        {
+            get => _weChatCleanupStartDate;
+            set { _weChatCleanupStartDate = value; OnPropertyChanged(); }
+        }
+
+        public DateTime? WeChatCleanupEndDate
+        {
+            get => _weChatCleanupEndDate;
+            set { _weChatCleanupEndDate = value; OnPropertyChanged(); }
+        }
+
+        public DateTime? WeChatBackupStartDate
+        {
+            get => _weChatBackupStartDate;
+            set { _weChatBackupStartDate = value; OnPropertyChanged(); }
+        }
+
+        public DateTime? WeChatBackupEndDate
+        {
+            get => _weChatBackupEndDate;
+            set { _weChatBackupEndDate = value; OnPropertyChanged(); }
+        }
+
+        public bool WeChatCleanupIncludeText
+        {
+            get => _weChatCleanupIncludeText;
+            set { _weChatCleanupIncludeText = value; OnPropertyChanged(); }
+        }
+
+        public bool WeChatCleanupIncludeImage
+        {
+            get => _weChatCleanupIncludeImage;
+            set { _weChatCleanupIncludeImage = value; OnPropertyChanged(); }
+        }
+
+        public bool WeChatCleanupIncludeVideo
+        {
+            get => _weChatCleanupIncludeVideo;
+            set { _weChatCleanupIncludeVideo = value; OnPropertyChanged(); }
+        }
+
+        public bool WeChatCleanupIncludeVoice
+        {
+            get => _weChatCleanupIncludeVoice;
+            set { _weChatCleanupIncludeVoice = value; OnPropertyChanged(); }
+        }
+
+        public bool WeChatCleanupIncludeFile
+        {
+            get => _weChatCleanupIncludeFile;
+            set { _weChatCleanupIncludeFile = value; OnPropertyChanged(); }
+        }
+
+        public bool WeChatCleanupIncludeCache
+        {
+            get => _weChatCleanupIncludeCache;
+            set { _weChatCleanupIncludeCache = value; OnPropertyChanged(); }
+        }
+
+        public bool WeChatBackupIncludeText
+        {
+            get => _weChatBackupIncludeText;
+            set { _weChatBackupIncludeText = value; OnPropertyChanged(); }
+        }
+
+        public bool WeChatBackupIncludeImage
+        {
+            get => _weChatBackupIncludeImage;
+            set { _weChatBackupIncludeImage = value; OnPropertyChanged(); }
+        }
+
+        public bool WeChatBackupIncludeVideo
+        {
+            get => _weChatBackupIncludeVideo;
+            set { _weChatBackupIncludeVideo = value; OnPropertyChanged(); }
+        }
+
+        public bool WeChatBackupIncludeVoice
+        {
+            get => _weChatBackupIncludeVoice;
+            set { _weChatBackupIncludeVoice = value; OnPropertyChanged(); }
+        }
+
+        public bool WeChatBackupIncludeFile
+        {
+            get => _weChatBackupIncludeFile;
+            set { _weChatBackupIncludeFile = value; OnPropertyChanged(); }
+        }
+
+        public bool WeChatBackupIncludeCache
+        {
+            get => _weChatBackupIncludeCache;
+            set { _weChatBackupIncludeCache = value; OnPropertyChanged(); }
+        }
+
+        public string WeChatBackupOutputFolder
+        {
+            get => _weChatBackupOutputFolder;
+            set { _weChatBackupOutputFolder = value; OnPropertyChanged(); TriggerCommandRequery(); }
+        }
+
+        public string WeChatRestoreZipPath
+        {
+            get => _weChatRestoreZipPath;
+            set { _weChatRestoreZipPath = value; OnPropertyChanged(); TriggerCommandRequery(); }
+        }
+
+        public string WeChatRestoreManifestSummary
+        {
+            get => _weChatRestoreManifestSummary;
+            set { _weChatRestoreManifestSummary = value; OnPropertyChanged(); }
+        }
+
+        public bool RestoreToOriginal
+        {
+            get => _restoreToOriginal;
+            set
+            {
+                if (_restoreToOriginal == value)
+                {
+                    return;
+                }
+
+                _restoreToOriginal = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(RestoreToCustom));
+            }
+        }
+
+        public bool RestoreToCustom
+        {
+            get => !_restoreToOriginal;
+            set
+            {
+                if (value == !_restoreToOriginal)
+                {
+                    return;
+                }
+
+                _restoreToOriginal = !value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(RestoreToOriginal));
+            }
+        }
+
+        public string WeChatRestoreTargetRoot
+        {
+            get => _weChatRestoreTargetRoot;
+            set { _weChatRestoreTargetRoot = value; OnPropertyChanged(); TriggerCommandRequery(); }
+        }
+
+        public bool HasSelectedOptimizationReports => OptimizationReports.Any(x => x.IsSelected);
+
+        public bool HasJunkCandidates => JunkCandidates.Any();
+
+        public bool HasWeChatCleanupCandidates => WeChatCleanupCandidates.Any();
+
         public bool ShowEditorAfterCapture
         {
             get => _showEditorAfterCapture;
@@ -506,12 +975,67 @@ namespace MyTools.ViewModels
 
         public ICommand ShowScreenshotCommand { get; }
         public ICommand TakeScreenshotNowCommand { get; }
+        public ICommand StartVideoRecordingCommand { get; }
+        public ICommand ToggleAudioRecordingCommand { get; }
         public ICommand StartCaptureHotkeyCommand { get; }
         public ICommand CancelCaptureHotkeyCommand { get; }
         public ICommand SaveScreenshotSettingsCommand { get; }
         public ICommand EditClipboardImageCommand { get; }
         public ICommand ApplyCodexProfileCommand { get; }
+        public ICommand ExportCodexProfileCommand { get; }
+        public ICommand ImportCodexProfileCommand { get; }
         public ICommand DeleteCodexProfileCommand { get; }
+
+        public bool IsVideoRecording
+        {
+            get => _isVideoRecording;
+            private set
+            {
+                if (_isVideoRecording == value)
+                {
+                    return;
+                }
+
+                _isVideoRecording = value;
+                OnPropertyChanged();
+                TriggerCommandRequery();
+            }
+        }
+
+        public bool IsAudioRecording
+        {
+            get => _isAudioRecording;
+            private set
+            {
+                if (_isAudioRecording == value)
+                {
+                    return;
+                }
+
+                _isAudioRecording = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(HasAudioRecordingIndicator));
+                TriggerCommandRequery();
+            }
+        }
+
+        public string AudioRecordingIndicator
+        {
+            get => _audioRecordingIndicator;
+            private set
+            {
+                if (string.Equals(_audioRecordingIndicator, value, StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                _audioRecordingIndicator = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(HasAudioRecordingIndicator));
+            }
+        }
+
+        public bool HasAudioRecordingIndicator => !string.IsNullOrWhiteSpace(AudioRecordingIndicator);
 
         public string CodexProfilesStatusMessage
         {
@@ -528,6 +1052,18 @@ namespace MyTools.ViewModels
         public ICommand ToggleAutoUpdateCommand { get; }
         public ICommand TriggerUpdateNowCommand { get; }
         public ICommand RefreshSystemStatusCommand { get; }
+        public ICommand StartAutoOptimizeCommand { get; }
+        public ICommand StartJunkScanCommand { get; }
+        public ICommand RunJunkCleanupCommand { get; }
+        public ICommand ScanWeChatCleanupCommand { get; }
+        public ICommand StartWeChatCleanupCommand { get; }
+        public ICommand StartWeChatBackupCommand { get; }
+        public ICommand StartWeChatRestoreCommand { get; }
+        public ICommand DeleteSelectedReportsCommand { get; }
+        public ICommand SelectWeChatBackupOutputFolderCommand { get; }
+        public ICommand SelectWeChatRestoreZipCommand { get; }
+        public ICommand SelectWeChatRestoreTargetRootCommand { get; }
+        public ICommand ShowReportDetailsCommand { get; }
 
         public void AddCodexProfileFolders(IEnumerable<string> folderPaths)
         {
@@ -628,7 +1164,7 @@ namespace MyTools.ViewModels
             catch (Exception ex)
             {
                 AppLogService.Error(ex, "Loading Codex config profiles failed.");
-                CodexProfilesStatusMessage = "璇诲彇 Codex 閰嶇疆璁板綍澶辫触銆?";
+                CodexProfilesStatusMessage = "读取 Codex 配置记录失败。";
             }
         }
 
@@ -734,6 +1270,129 @@ namespace MyTools.ViewModels
             }
         }
 
+        private async Task ExportCodexProfileAsync(object parameter)
+        {
+            if (!(parameter is CodexProfileItem item))
+            {
+                return;
+            }
+
+            try
+            {
+                if (string.IsNullOrWhiteSpace(item.ConfigTomlContentProtected) || string.IsNullOrWhiteSpace(item.AuthJsonContentProtected))
+                {
+                    MessageBox.Show(
+                        "该记录暂无可导出的内容，请先确保已成功添加配置。",
+                        "导出 Codex 配置",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                    return;
+                }
+
+                using (var dialog = new WinForms.FolderBrowserDialog())
+                {
+                    dialog.Description = "请选择导出的目标文件夹";
+                    dialog.ShowNewFolderButton = true;
+                    if (dialog.ShowDialog() != WinForms.DialogResult.OK || string.IsNullOrWhiteSpace(dialog.SelectedPath))
+                    {
+                        return;
+                    }
+
+                    var parentFolder = dialog.SelectedPath;
+                    var safeName = BuildSafeCodexFolderName(item.Name);
+                    var targetFolder = BuildUniqueChildFolder(parentFolder, safeName);
+                    Directory.CreateDirectory(targetFolder);
+
+                    var configTomlBytes = CodexConfigProfileService.UnprotectBytesFromBase64(item.ConfigTomlContentProtected);
+                    var authJsonBytes = CodexConfigProfileService.UnprotectBytesFromBase64(item.AuthJsonContentProtected);
+                    if (configTomlBytes == null || authJsonBytes == null)
+                    {
+                        throw new InvalidOperationException("该记录暂无可导出的内容，请先确保已成功添加配置。");
+                    }
+
+                    var configPath = Path.Combine(targetFolder, CodexConfigProfileService.ConfigFileName);
+                    var authPath = Path.Combine(targetFolder, CodexConfigProfileService.AuthFileName);
+                    await WriteAllBytesAsync(configPath, configTomlBytes, CancellationToken.None);
+                    await WriteAllBytesAsync(authPath, authJsonBytes, CancellationToken.None);
+
+                    CodexProfilesStatusMessage = $"已导出「{item.Name}」到 {targetFolder}。";
+                    AppLogService.Information("Exported Codex profile {Name} to {Folder}", item.Name ?? string.Empty, targetFolder);
+                }
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "Exporting Codex profile failed for {Name}", item.Name ?? string.Empty);
+                MessageBox.Show(ex.Message, "导出失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private async Task ImportCodexProfileAsync()
+        {
+            try
+            {
+                var dialog = new OpenFileDialog
+                {
+                    Multiselect = true,
+                    Filter = "Codex 配置文件|config.toml;auth.json|所有文件 (*.*)|*.*",
+                    Title = "请选择 config.toml 和 auth.json"
+                };
+
+                if (dialog.ShowDialog() != true || dialog.FileNames == null || dialog.FileNames.Length == 0)
+                {
+                    return;
+                }
+
+                var configFilePath = dialog.FileNames.FirstOrDefault(path =>
+                    string.Equals(Path.GetFileName(path), CodexConfigProfileService.ConfigFileName, StringComparison.OrdinalIgnoreCase));
+                var authFilePath = dialog.FileNames.FirstOrDefault(path =>
+                    string.Equals(Path.GetFileName(path), CodexConfigProfileService.AuthFileName, StringComparison.OrdinalIgnoreCase));
+
+                if (string.IsNullOrWhiteSpace(configFilePath) || string.IsNullOrWhiteSpace(authFilePath))
+                {
+                    MessageBox.Show("请同时选择 config.toml 和 auth.json 两个文件。", "导入 Codex 配置", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                var configFolderPath = NormalizeFolderPath(Path.GetDirectoryName(configFilePath));
+                var authFolderPath = NormalizeFolderPath(Path.GetDirectoryName(authFilePath));
+                if (!string.Equals(configFolderPath, authFolderPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    MessageBox.Show("config.toml 和 auth.json 必须来自同一个文件夹。", "导入 Codex 配置", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                var inputName = Interaction.InputBox("请输入新记录名称", "导入 Codex 配置", string.Empty);
+                var fallbackName = Path.GetFileName(configFolderPath);
+                var name = string.IsNullOrWhiteSpace(inputName)
+                    ? fallbackName
+                    : inputName.Trim();
+                if (string.IsNullOrWhiteSpace(name))
+                {
+                    name = $"codex-profile-{DateTime.Now:yyyyMMddHHmmss}";
+                }
+
+                var configBytes = await ReadAllBytesAsync(configFilePath, CancellationToken.None);
+                var authBytes = await ReadAllBytesAsync(authFilePath, CancellationToken.None);
+                var item = CreateCodexProfileItem(
+                    configFolderPath,
+                    name,
+                    name,
+                    CodexConfigProfileService.ProtectBytesToBase64(configBytes),
+                    CodexConfigProfileService.ProtectBytesToBase64(authBytes));
+                item.StatusMessage = "已导入配置内容。";
+                AddCodexProfileItem(item);
+
+                await SaveCodexProfilesAsync();
+                CodexProfilesStatusMessage = $"已导入「{item.Name}」。";
+                AppLogService.Information("Imported Codex profile {Name} from {Folder}", item.Name ?? string.Empty, configFolderPath);
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "Importing Codex profile failed.");
+                MessageBox.Show(ex.Message, "导入失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
         private void DeleteCodexProfile(object parameter)
         {
             if (!(parameter is CodexProfileItem item))
@@ -775,7 +1434,7 @@ namespace MyTools.ViewModels
                 }
             }
 
-            return "閰嶇疆璁板綍";
+            return "配置记录";
         }
 
         private static string NormalizeFolderPath(string folderPath)
@@ -792,6 +1451,52 @@ namespace MyTools.ViewModels
             catch
             {
                 return folderPath;
+            }
+        }
+
+        private static string BuildSafeCodexFolderName(string name)
+        {
+            var safeName = string.IsNullOrWhiteSpace(name) ? "codex-profile" : name.Trim();
+            foreach (var invalidFileNameChar in Path.GetInvalidFileNameChars())
+            {
+                safeName = safeName.Replace(invalidFileNameChar, '_');
+            }
+
+            return string.IsNullOrWhiteSpace(safeName) ? "codex-profile" : safeName;
+        }
+
+        private static string BuildUniqueChildFolder(string parentFolder, string safeName)
+        {
+            var baseName = string.IsNullOrWhiteSpace(safeName) ? "codex-profile" : safeName;
+            var index = 0;
+            while (true)
+            {
+                var folderName = index == 0 ? baseName : $"{baseName}_{index}";
+                var fullPath = Path.Combine(parentFolder, folderName);
+                if (!Directory.Exists(fullPath))
+                {
+                    return fullPath;
+                }
+
+                index++;
+            }
+        }
+
+        private static async Task<byte[]> ReadAllBytesAsync(string filePath, CancellationToken cancellationToken)
+        {
+            using (var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true))
+            using (var memoryStream = new MemoryStream())
+            {
+                await stream.CopyToAsync(memoryStream, 81920, cancellationToken);
+                return memoryStream.ToArray();
+            }
+        }
+
+        private static async Task WriteAllBytesAsync(string filePath, byte[] bytes, CancellationToken cancellationToken)
+        {
+            using (var stream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true))
+            {
+                await stream.WriteAsync(bytes, 0, bytes.Length, cancellationToken);
             }
         }
 
@@ -825,7 +1530,7 @@ namespace MyTools.ViewModels
             SqlTableList.Clear();
             AllSqlTableList.Clear();
             SqlTableSearchText = string.Empty;
-            SqlStatusMessage = "杩炴帴淇℃伅宸插彉鍖栵紝璇烽噸鏂版祴璇曡繛鎺ャ€?";
+            SqlStatusMessage = "连接信息已变化，请重新测试连接。";
         }
 
         private void EditClipboardImage()
@@ -833,7 +1538,7 @@ namespace MyTools.ViewModels
             var image = System.Windows.Clipboard.GetImage();
             if (image == null)
             {
-                MessageBox.Show("鍓创鏉夸腑娌℃湁鍥剧墖", "鎻愮ず", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show("剪贴板中没有图片", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
             ShowScreenshotEditorWindow(image);
@@ -882,6 +1587,7 @@ namespace MyTools.ViewModels
 
             try
             {
+                AppLogService.Information("Screenshot capture started.");
                 mainWin = Application.Current?.MainWindow;
                 var wasVisible = mainWin?.IsVisible == true;
                 if (wasVisible)
@@ -894,7 +1600,15 @@ namespace MyTools.ViewModels
 
                 var screenshot = await Task.Run(() => ScreenshotService.CaptureFullScreen());
 
-                System.Windows.Clipboard.SetImage(screenshot);
+                var dispatcher = Application.Current?.Dispatcher;
+                if (dispatcher == null || dispatcher.CheckAccess())
+                {
+                    Clipboard.SetImage(screenshot);
+                }
+                else
+                {
+                    await dispatcher.InvokeAsync(() => Clipboard.SetImage(screenshot));
+                }
 
                 if (ShowEditorAfterCapture)
                 {
@@ -913,8 +1627,9 @@ namespace MyTools.ViewModels
             }
             catch (Exception ex)
             {
-                AppLogService.Error(ex, "Screenshot failed");
-                MessageBox.Show(ex.Message, "鎴浘澶辫触", MessageBoxButton.OK, MessageBoxImage.Error);
+                AppLogService.Error(ex, "Screenshot failed: {Detail}", ex.ToString());
+                SystemStatusMessage = "截图失败：" + ex.Message;
+                MessageBox.Show(ex.Message, "截图失败", MessageBoxButton.OK, MessageBoxImage.Error);
             }
             finally
             {
@@ -942,6 +1657,11 @@ namespace MyTools.ViewModels
             if (onClosed != null)
             {
                 editor.Closed += (sender, args) => onClosed();
+            }
+
+            if (Application.Current?.MainWindow != null)
+            {
+                editor.Owner = Application.Current.MainWindow;
             }
 
             editor.LoadScreenshot(screenshot);
@@ -1010,6 +1730,309 @@ namespace MyTools.ViewModels
             }
         }
 
+        private async Task OpenRecordRegionAsync()
+        {
+            if (IsVideoRecording)
+            {
+                _recordRegionWindow?.Activate();
+                return;
+            }
+
+            if (IsAudioRecording)
+            {
+                MessageBox.Show("当前已有录像/录音任务在进行，请先停止。", "录像", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            if (!EnsureFfmpegAvailable())
+            {
+                return;
+            }
+
+            var outputFolder = await EnsureRecordingOutputFolderAsync();
+            if (string.IsNullOrWhiteSpace(outputFolder))
+            {
+                return;
+            }
+
+            if (_recordRegionWindow != null)
+            {
+                _recordRegionWindow.Activate();
+                return;
+            }
+
+            var mainWindow = Application.Current?.MainWindow;
+            if (mainWindow?.IsVisible == true)
+            {
+                mainWindow.Hide();
+            }
+
+            var recordWindow = new RecordRegionWindow();
+            recordWindow.ToggleRecordingRequested += RecordRegionWindow_OnToggleRecordingRequested;
+            recordWindow.Closed += async (sender, args) =>
+            {
+                _recordRegionWindow = null;
+                if (IsVideoRecording)
+                {
+                    await StopVideoRecordingInternalAsync(showMessage: true);
+                }
+
+                RestoreWindow();
+            };
+
+            _recordRegionWindow = recordWindow;
+            recordWindow.Show();
+            recordWindow.Activate();
+        }
+
+        private async void RecordRegionWindow_OnToggleRecordingRequested(object sender, EventArgs e)
+        {
+            if (IsVideoRecording)
+            {
+                await StopVideoRecordingInternalAsync(showMessage: true);
+                _recordRegionWindow?.SetRecordingState(false);
+                _recordRegionWindow?.Close();
+                return;
+            }
+
+            if (!EnsureFfmpegAvailable())
+            {
+                return;
+            }
+
+            var outputFolder = await EnsureRecordingOutputFolderAsync();
+            if (string.IsNullOrWhiteSpace(outputFolder))
+            {
+                return;
+            }
+
+            try
+            {
+                var window = sender as RecordRegionWindow ?? _recordRegionWindow;
+                if (window == null)
+                {
+                    return;
+                }
+
+                var region = window.GetCaptureRegion();
+                var audioDevice = await _recordingService.ResolvePreferredAudioDeviceAsync(CancellationToken.None);
+                if (string.IsNullOrWhiteSpace(audioDevice))
+                {
+                    var continueWithoutAudio = MessageBox.Show(
+                        "未检测到可用音频设备，将仅录制画面，是否继续？",
+                        "录像",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Question);
+                    if (continueWithoutAudio != MessageBoxResult.Yes)
+                    {
+                        return;
+                    }
+                }
+
+                _activeVideoOutputPath = BuildRecordingOutputPath(outputFolder, "录像", ".mp4");
+                await _recordingService.StartVideoRecordingAsync(region, _activeVideoOutputPath, audioDevice, CancellationToken.None);
+                IsVideoRecording = true;
+                window.SetRecordingState(true);
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "Starting video recording failed.");
+                MessageBox.Show(ex.Message, "录像失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private async Task ToggleAudioRecordingAsync()
+        {
+            if (IsAudioRecording)
+            {
+                await StopAudioRecordingInternalAsync(showMessage: true);
+                return;
+            }
+
+            if (IsVideoRecording)
+            {
+                MessageBox.Show("当前已有录像/录音任务在进行，请先停止。", "录音", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            if (!EnsureFfmpegAvailable())
+            {
+                return;
+            }
+
+            var outputFolder = await EnsureAudioOutputFolderAsync();
+            if (string.IsNullOrWhiteSpace(outputFolder))
+            {
+                return;
+            }
+
+            try
+            {
+                _activeAudioOutputPath = BuildRecordingOutputPath(outputFolder, "录音", ".m4a");
+                await _recordingService.StartAudioOnlyAsync(_activeAudioOutputPath, CancellationToken.None);
+                _audioRecordingStartedAt = DateTime.Now;
+                IsAudioRecording = true;
+                UpdateAudioRecordingIndicator();
+                _audioRecordingTimer.Start();
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "Starting audio recording failed.");
+                MessageBox.Show(ex.Message, "录音失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private async Task StopVideoRecordingInternalAsync(bool showMessage)
+        {
+            try
+            {
+                var result = await _recordingService.StopVideoRecordingAsync();
+                IsVideoRecording = false;
+                if (!showMessage)
+                {
+                    return;
+                }
+
+                if (result.TimedOut)
+                {
+                    MessageBox.Show(
+                        $"录像文件可能未正确写入，请检查 {_activeVideoOutputPath}。",
+                        "录像",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                }
+                else
+                {
+                    MessageBox.Show($"录像已保存到 {_activeVideoOutputPath}", "录像", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "Stopping video recording failed.");
+                MessageBox.Show(ex.Message, "录像失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                IsVideoRecording = false;
+            }
+        }
+
+        private async Task StopAudioRecordingInternalAsync(bool showMessage)
+        {
+            try
+            {
+                var result = await _recordingService.StopAudioOnlyAsync();
+                _audioRecordingTimer.Stop();
+                IsAudioRecording = false;
+                AudioRecordingIndicator = string.Empty;
+                if (!showMessage)
+                {
+                    return;
+                }
+
+                if (result.TimedOut)
+                {
+                    MessageBox.Show(
+                        $"录音文件可能未正确写入，请检查 {_activeAudioOutputPath}。",
+                        "录音",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                }
+                else
+                {
+                    MessageBox.Show($"录音已保存到 {_activeAudioOutputPath}", "录音", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "Stopping audio recording failed.");
+                MessageBox.Show(ex.Message, "录音失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                _audioRecordingTimer.Stop();
+                IsAudioRecording = false;
+                AudioRecordingIndicator = string.Empty;
+            }
+        }
+
+        private void UpdateAudioRecordingIndicator()
+        {
+            if (!IsAudioRecording)
+            {
+                AudioRecordingIndicator = string.Empty;
+                return;
+            }
+
+            var elapsed = DateTime.Now - _audioRecordingStartedAt;
+            AudioRecordingIndicator = $"录音中 {elapsed:mm\\:ss}";
+        }
+
+        private bool EnsureFfmpegAvailable()
+        {
+            if (_recordingService.TryGetFfmpegPath(out _))
+            {
+                return true;
+            }
+
+            MessageBox.Show(
+                $"请将 ffmpeg.exe 放到 {_recordingService.ExpectedFfmpegPath} 后再试。",
+                "缺少 ffmpeg",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return false;
+        }
+
+        private async Task<string> EnsureRecordingOutputFolderAsync()
+        {
+            var settings = await AppSettingsService.LoadAsync();
+            if (!string.IsNullOrWhiteSpace(settings.RecordingOutputFolder) && Directory.Exists(settings.RecordingOutputFolder))
+            {
+                return settings.RecordingOutputFolder;
+            }
+
+            using (var dialog = new WinForms.FolderBrowserDialog())
+            {
+                dialog.Description = "请选择录像保存的文件夹（仅本次首设）";
+                dialog.ShowNewFolderButton = true;
+                if (dialog.ShowDialog() != WinForms.DialogResult.OK || string.IsNullOrWhiteSpace(dialog.SelectedPath))
+                {
+                    return string.Empty;
+                }
+
+                await AppSettingsService.UpdateAsync(current => current.RecordingOutputFolder = dialog.SelectedPath);
+                return dialog.SelectedPath;
+            }
+        }
+
+        private async Task<string> EnsureAudioOutputFolderAsync()
+        {
+            var settings = await AppSettingsService.LoadAsync();
+            if (!string.IsNullOrWhiteSpace(settings.AudioOutputFolder) && Directory.Exists(settings.AudioOutputFolder))
+            {
+                return settings.AudioOutputFolder;
+            }
+
+            using (var dialog = new WinForms.FolderBrowserDialog())
+            {
+                dialog.Description = "请选择录音保存的文件夹（仅本次首设）";
+                dialog.ShowNewFolderButton = true;
+                if (dialog.ShowDialog() != WinForms.DialogResult.OK || string.IsNullOrWhiteSpace(dialog.SelectedPath))
+                {
+                    return string.Empty;
+                }
+
+                await AppSettingsService.UpdateAsync(current => current.AudioOutputFolder = dialog.SelectedPath);
+                return dialog.SelectedPath;
+            }
+        }
+
+        private static string BuildRecordingOutputPath(string outputFolder, string prefix, string extension)
+        {
+            Directory.CreateDirectory(outputFolder);
+            return Path.Combine(outputFolder, $"{prefix}_{DateTime.Now:yyyyMMdd_HHmmss}{extension}");
+        }
+
         private async Task<bool> TryRegisterHotkeyAsync(uint modifiers, uint key, bool showMessageOnFailure, Action onRegisterFailed = null)
         {
             var dispatcher = Application.Current?.Dispatcher;
@@ -1029,7 +2052,7 @@ namespace MyTools.ViewModels
                 onRegisterFailed?.Invoke();
                 MessageBox.Show(
                     BuildHotkeyRegistrationErrorMessage(modifiers, key, HotkeyService.LastWin32ErrorCode),
-                    "蹇嵎閿笉鍙敤",
+                    "快捷键不可用",
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
                 return false;
@@ -1041,15 +2064,15 @@ namespace MyTools.ViewModels
             var hotkeyText = HotkeyService.BuildDisplayText(modifiers, key);
             if (errorCode == 1409)
             {
-                return $"蹇嵎閿?{hotkeyText} 宸茶鍏朵粬绋嬪簭鍗犵敤锛岃鎹竴涓粍鍚堛€?";
+                return $"快捷键 {hotkeyText} 已被其他程序占用，请换一个组合。";
             }
 
             if (errorCode > 0)
             {
-                return $"鏃犳硶娉ㄥ唽蹇嵎閿?{hotkeyText}锛學in32 閿欒鐮侊細{errorCode}銆?";
+                return $"无法注册快捷键 {hotkeyText}，Win32 错误码：{errorCode}。";
             }
 
-            return $"鏃犳硶娉ㄥ唽蹇嵎閿?{hotkeyText}锛岃鎹竴涓粍鍚堛€?";
+            return $"无法注册快捷键 {hotkeyText}，请换一个组合。";
         }
 
         private void Refresh()
@@ -1098,7 +2121,7 @@ namespace MyTools.ViewModels
         private void GenerateConfigFromSettings()
         {
             string config = "[Interface]\n";
-            config += "PrivateKey = <璇锋墜鍔ㄥ～鍐欐偍鐨勭閽?\n";
+            config += "PrivateKey = <请手动填写您的私钥>\n";
             config += $"Address = {WgAddress}\n";
             config += "DNS = 8.8.8.8\n\n";
             config += "[Peer]\n";
@@ -1115,7 +2138,7 @@ namespace MyTools.ViewModels
         {
             var status = WireGuardService.GetCurrentStatus(WgInterfaceName);
             IsWgConnected = status.IsConnected;
-            WgStatusText = IsWgConnected ? $"宸茶繛鎺? {status.IpAddress}" : "鏈繛鎺?";
+            WgStatusText = IsWgConnected ? $"已连接 {status.IpAddress}" : "未连接";
         }
 
         private async Task ToggleWireGuardAsync()
@@ -1125,17 +2148,17 @@ namespace MyTools.ViewModels
             {
                 if (IsWgConnected)
                 {
-                    WgStatusText = "姝ｅ湪鏂紑...";
+                    WgStatusText = "正在断开...";
                     await WireGuardService.DisconnectAsync(WgInterfaceName);
                 }
                 else
                 {
                     if (string.IsNullOrWhiteSpace(WgConfig)) return;
-                    WgStatusText = "姝ｅ湪杩炴帴...";
+                    WgStatusText = "正在连接...";
                     var status = await WireGuardService.ConnectAsync(WgInterfaceName, WgConfig);
                     if (!string.IsNullOrEmpty(status.ErrorMessage))
                     {
-                        MessageBox.Show(status.ErrorMessage, "WireGuard 杩炴帴澶辫触", MessageBoxButton.OK, MessageBoxImage.Error);
+                        MessageBox.Show(status.ErrorMessage, "WireGuard 连接失败", MessageBoxButton.OK, MessageBoxImage.Error);
                     }
                 }
             }
@@ -1151,7 +2174,7 @@ namespace MyTools.ViewModels
             try
             {
                 IsSqlBusy = true;
-                SqlStatusMessage = "姝ｅ湪杩炴帴 SQL Server...";
+                SqlStatusMessage = $"正在连接 {GetSqlProviderDisplayName(SelectedSqlProvider)}...";
                 CancelPendingTableLoad(clearBusy: false);
                 SqlDatabaseList.Clear();
                 SqlTableList.Clear();
@@ -1170,13 +2193,14 @@ namespace MyTools.ViewModels
                 SqlTableSearchText = string.Empty;
 
                 var options = BuildSqlConnectionOptions();
-                await SqlExportService.TestConnectionAsync(options, CancellationToken.None);
+                var provider = SqlExportProviderFactory.GetProvider(options.ProviderKind);
+                await provider.TestConnectionAsync(options, CancellationToken.None);
                 _activeSqlConnectionOptions = CloneSqlConnectionOptions(options);
                 _hasUserModifiedSqlConnectionInputs = false;
                 await SaveSqlConnectionHistoryAsync(options);
 
-                SqlStatusMessage = "杩炴帴鎴愬姛锛屾鍦ㄨ鍙栨暟鎹簱鍒楄〃...";
-                var databases = await SqlExportService.GetDatabasesAsync(options, CancellationToken.None);
+                SqlStatusMessage = "连接成功，正在读取数据库列表...";
+                var databases = await provider.GetDatabasesAsync(options, CancellationToken.None);
                 SqlDatabaseList.Clear();
                 foreach (var database in databases)
                 {
@@ -1184,15 +2208,15 @@ namespace MyTools.ViewModels
                 }
 
                 SqlStatusMessage = databases.Count > 0
-                    ? $"杩炴帴鎴愬姛锛屽凡鍔犺浇 {databases.Count} 涓暟鎹簱锛岃缁х画閫夋嫨鏁版嵁搴撳拰琛ㄣ€?"
-                    : "杩炴帴鎴愬姛锛屼絾褰撳墠璐﹀彿娌℃湁鍙闂殑鏁版嵁搴撱€?";
+                    ? $"连接成功，已加载 {databases.Count} 个数据库，请继续选择数据库和表。"
+                    : "连接成功，但当前账号没有可访问的数据库。";
             }
             catch (Exception ex)
             {
                 _activeSqlConnectionOptions = null;
                 AppLogService.Error(ex, "SQL connection test failed for {ServerAddress}", SqlServerAddress ?? string.Empty);
-                SqlStatusMessage = "杩炴帴澶辫触锛岃妫€鏌ユ湇鍔″櫒鍦板潃銆佺鍙ｃ€佺敤鎴峰悕鍜屽瘑鐮併€?";
-                MessageBox.Show(ex.Message, "SQL Server 杩炴帴澶辫触", MessageBoxButton.OK, MessageBoxImage.Error);
+                SqlStatusMessage = "连接失败，请检查服务器地址、端口、用户名和密码。";
+                MessageBox.Show(ex.Message, $"{GetSqlProviderDisplayName(SelectedSqlProvider)} 连接失败", MessageBoxButton.OK, MessageBoxImage.Error);
             }
             finally
             {
@@ -1211,8 +2235,8 @@ namespace MyTools.ViewModels
             {
                 IsSqlBusy = false;
                 SqlStatusMessage = SqlDatabaseList.Count == 0
-                    ? "璇疯緭鍏?SQL Server 杩炴帴淇℃伅鍚庢祴璇曡繛鎺ャ€?"
-                    : "璇烽€夋嫨鏁版嵁搴撲互鍔犺浇鏁版嵁琛ㄣ€?";
+                    ? $"请输入 {GetSqlProviderDisplayName(SelectedSqlProvider)} 连接信息后测试连接。"
+                    : "请选择数据库以加载数据表。";
                 return;
             }
 
@@ -1222,10 +2246,12 @@ namespace MyTools.ViewModels
             try
             {
                 IsSqlBusy = true;
-                SqlStatusMessage = $"姝ｅ湪璇诲彇鏁版嵁搴?{SelectedSqlDatabase.Name} 鐨勮〃鍒楄〃...";
+                SqlStatusMessage = $"正在读取数据库 {SelectedSqlDatabase.Name} 的表列表...";
 
-                var tables = await SqlExportService.GetTablesAsync(
-                    GetEffectiveSqlConnectionOptions(),
+                var options = GetEffectiveSqlConnectionOptions();
+                var provider = SqlExportProviderFactory.GetProvider(options.ProviderKind);
+                var tables = await provider.GetTablesAsync(
+                    options,
                     SelectedSqlDatabase.Name,
                     cancellationTokenSource.Token);
 
@@ -1244,8 +2270,8 @@ namespace MyTools.ViewModels
                 FilteredSqlTableView?.Refresh();
 
                 SqlStatusMessage = tables.Count > 0
-                    ? $"宸插姞杞?{tables.Count} 寮犺〃锛岃閫夋嫨闇€瑕佸鍑虹殑琛ㄣ€?"
-                    : "褰撳墠鏁版嵁搴撲笅娌℃湁鍙鍑虹殑鐢ㄦ埛琛ㄣ€?";
+                    ? $"已加载 {tables.Count} 张表，请选择需要导出的表。"
+                    : "当前数据库下没有可导出的用户表。";
             }
             catch (OperationCanceledException)
             {
@@ -1253,7 +2279,7 @@ namespace MyTools.ViewModels
             catch (Exception ex)
             {
                 AppLogService.Error(ex, "Loading SQL tables failed for {DatabaseName}", SelectedSqlDatabase?.Name ?? string.Empty);
-                SqlStatusMessage = "璇诲彇琛ㄥ垪琛ㄥけ璐ャ€?";
+                SqlStatusMessage = "读取表列表失败。";
                 MessageBox.Show(ex.Message, "读取表列表失败", MessageBoxButton.OK, MessageBoxImage.Error);
             }
             finally
@@ -1285,7 +2311,7 @@ namespace MyTools.ViewModels
 
                 var dialog = new SaveFileDialog
                 {
-                    Filter = "Excel 宸ヤ綔绨?(*.xlsx)|*.xlsx",
+                    Filter = "Excel 工作簿 (*.xlsx)|*.xlsx",
                     FileName = SqlExportService.BuildDefaultFileName(options.ServerAddress, SelectedSqlDatabase.Name, SelectedSqlTable),
                     DefaultExt = ".xlsx",
                     AddExtension = true,
@@ -1298,9 +2324,10 @@ namespace MyTools.ViewModels
                 }
 
                 IsSqlBusy = true;
-                SqlStatusMessage = "姝ｅ湪妫€鏌ユ暟鎹噺骞跺鍑?Excel...";
+                SqlStatusMessage = "正在检查数据量并导出 Excel...";
 
-                var exportResult = await SqlExportService.ExportTableAsync(
+                var provider = SqlExportProviderFactory.GetProvider(options.ProviderKind);
+                var exportResult = await provider.ExportTableAsync(
                     options,
                     SelectedSqlDatabase.Name,
                     SelectedSqlTable,
@@ -1321,8 +2348,8 @@ namespace MyTools.ViewModels
                     "SQL export failed for {DatabaseName}.{TableName}",
                     SelectedSqlDatabase?.Name ?? string.Empty,
                     SelectedSqlTable?.DisplayName ?? string.Empty);
-                SqlStatusMessage = "瀵煎嚭澶辫触銆?";
-                MessageBox.Show(ex.Message, "瀵煎嚭澶辫触", MessageBoxButton.OK, MessageBoxImage.Error);
+                SqlStatusMessage = "导出失败。";
+                MessageBox.Show(ex.Message, "导出失败", MessageBoxButton.OK, MessageBoxImage.Error);
             }
             finally
             {
@@ -1334,6 +2361,7 @@ namespace MyTools.ViewModels
         {
             return new SqlServerConnectionOptions
             {
+                ProviderKind = SelectedSqlProvider,
                 ServerAddress = SqlServerAddress?.Trim(),
                 Port = SqlPort?.Trim(),
                 Username = SqlUsername?.Trim(),
@@ -1357,6 +2385,7 @@ namespace MyTools.ViewModels
 
             return new SqlServerConnectionOptions
             {
+                ProviderKind = options.ProviderKind,
                 ServerAddress = options.ServerAddress,
                 Port = options.Port,
                 Username = options.Username,
@@ -1366,7 +2395,7 @@ namespace MyTools.ViewModels
 
         private async Task LoadSqlConnectionHistoryAsync()
         {
-            var history = await SqlConnectionHistoryService.LoadAsync();
+            var history = await SqlConnectionHistoryService.LoadAsync(SelectedSqlProvider);
             await Application.Current.Dispatcher.InvokeAsync(() =>
             {
                 _isApplyingSqlHistory = true;
@@ -1379,7 +2408,8 @@ namespace MyTools.ViewModels
                     if (!_hasUserModifiedSqlConnectionInputs)
                     {
                         SqlServerAddress = history.LastServerAddress;
-                        SqlPort = string.IsNullOrWhiteSpace(history.LastPort) ? "1433" : history.LastPort;
+                        var defaultPort = GetDefaultSqlPort(SelectedSqlProvider);
+                        SqlPort = string.IsNullOrWhiteSpace(history.LastPort) ? defaultPort : history.LastPort;
                         SqlUsername = history.LastUsername;
                         SqlPassword = history.LastPassword;
                     }
@@ -1394,7 +2424,7 @@ namespace MyTools.ViewModels
         private async Task SaveSqlConnectionHistoryAsync(SqlServerConnectionOptions options)
         {
             await SqlConnectionHistoryService.SaveAsync(options);
-            var history = await SqlConnectionHistoryService.LoadAsync();
+            var history = await SqlConnectionHistoryService.LoadAsync(options?.ProviderKind ?? SelectedSqlProvider);
             await Application.Current.Dispatcher.InvokeAsync(() =>
             {
                 _isApplyingSqlHistory = true;
@@ -1409,6 +2439,50 @@ namespace MyTools.ViewModels
                     _isApplyingSqlHistory = false;
                 }
             });
+        }
+
+        private void ApplyDefaultSqlPortIfNeeded()
+        {
+            if (_isApplyingSqlHistory)
+            {
+                return;
+            }
+
+            var current = SqlPort?.Trim();
+            if (string.IsNullOrWhiteSpace(current)
+                || string.Equals(current, "1433", StringComparison.Ordinal)
+                || string.Equals(current, "5432", StringComparison.Ordinal)
+                || string.Equals(current, "3306", StringComparison.Ordinal))
+            {
+                _sqlPort = GetDefaultSqlPort(SelectedSqlProvider);
+                OnPropertyChanged(nameof(SqlPort));
+            }
+        }
+
+        private static string GetDefaultSqlPort(SqlProviderKind providerKind)
+        {
+            switch (providerKind)
+            {
+                case SqlProviderKind.PostgreSql:
+                    return "5432";
+                case SqlProviderKind.MySql:
+                    return "3306";
+                default:
+                    return "1433";
+            }
+        }
+
+        private static string GetSqlProviderDisplayName(SqlProviderKind providerKind)
+        {
+            switch (providerKind)
+            {
+                case SqlProviderKind.PostgreSql:
+                    return "PostgreSQL";
+                case SqlProviderKind.MySql:
+                    return "MySQL";
+                default:
+                    return "SQL Server";
+            }
         }
 
         private static void ReplaceItems<T>(ObservableCollection<T> target, IEnumerable<T> values)
@@ -1476,6 +2550,17 @@ namespace MyTools.ViewModels
             CancelPendingTableLoad();
             _screenshotEditorWindow?.Close();
             _screenshotEditorWindow = null;
+            _recordRegionWindow?.Close();
+            _recordRegionWindow = null;
+            if (IsVideoRecording)
+            {
+                _recordingService.StopVideoRecordingAsync().GetAwaiter().GetResult();
+            }
+
+            if (IsAudioRecording)
+            {
+                _recordingService.StopAudioOnlyAsync().GetAwaiter().GetResult();
+            }
             Application.Current.Shutdown();
         }
 
@@ -1488,7 +2573,7 @@ namespace MyTools.ViewModels
         private async Task ToggleDefenderAsync()
         {
             bool target = !IsDefenderEnabled;
-            SystemStatusMessage = target ? "姝ｅ湪鎭㈠瀹炴椂闃叉姢锛岃鍦?UAC 寮圭獥涓‘璁?.." : "姝ｅ湪鍏抽棴瀹炴椂闃叉姢锛岃鍦?UAC 寮圭獥涓‘璁?..";
+            SystemStatusMessage = target ? "正在恢复实时防护，请在 UAC 弹窗中确认..." : "正在关闭实时防护，请在 UAC 弹窗中确认...";
             try
             {
                 await WindowsSecurityService.SetDefenderRealtimeAsync(target);
@@ -1498,19 +2583,19 @@ namespace MyTools.ViewModels
             }
             catch (OperationCanceledException)
             {
-                SystemStatusMessage = "鎿嶄綔宸插彇娑堬紙UAC 鏈巿鏉冿級銆?";
+                SystemStatusMessage = "操作已取消（UAC 未授权）。";
             }
             catch (Exception ex)
             {
                 SystemStatusMessage = "操作失败：" + ex.Message;
-                MessageBox.Show(ex.Message, "鎿嶄綔澶辫触", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show(ex.Message, "操作失败", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
         private async Task ToggleAutoUpdateAsync()
         {
             bool target = !IsAutoUpdateEnabled;
-            SystemStatusMessage = target ? "姝ｅ湪鎭㈠鑷姩鏇存柊锛岃鍦?UAC 寮圭獥涓‘璁?.." : "姝ｅ湪鍋滄鑷姩鏇存柊锛岃鍦?UAC 寮圭獥涓‘璁?..";
+            SystemStatusMessage = target ? "正在恢复自动更新，请在 UAC 弹窗中确认..." : "正在停止自动更新，请在 UAC 弹窗中确认...";
             try
             {
                 await WindowsSecurityService.SetAutoUpdateAsync(target);
@@ -1520,32 +2605,32 @@ namespace MyTools.ViewModels
             }
             catch (OperationCanceledException)
             {
-                SystemStatusMessage = "鎿嶄綔宸插彇娑堬紙UAC 鏈巿鏉冿級銆?";
+                SystemStatusMessage = "操作已取消（UAC 未授权）。";
             }
             catch (Exception ex)
             {
                 SystemStatusMessage = "操作失败：" + ex.Message;
-                MessageBox.Show(ex.Message, "鎿嶄綔澶辫触", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show(ex.Message, "操作失败", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
         private async Task TriggerUpdateNowAsync()
         {
-            SystemStatusMessage = "姝ｅ湪瑙﹀彂绔嬪嵆鏇存柊锛岃鍦?UAC 寮圭獥涓‘璁?..";
+            SystemStatusMessage = "正在触发立即更新，请在 UAC 弹窗中确认...";
             try
             {
                 await WindowsSecurityService.TriggerImmediateUpdateAsync();
                 RefreshSystemStatus();
-                SystemStatusMessage = "鏇存柊浠诲姟宸蹭笅鍙戯紝Windows Update 璁剧疆椤靛凡鎵撳紑锛屽彲鍦ㄥ叾涓煡鐪嬭繘搴︺€?";
+                SystemStatusMessage = "更新任务已下发，Windows Update 设置页已打开，可在其中查看进度。";
             }
             catch (OperationCanceledException)
             {
-                SystemStatusMessage = "鎿嶄綔宸插彇娑堬紙UAC 鏈巿鏉冿級銆?";
+                SystemStatusMessage = "操作已取消（UAC 未授权）。";
             }
             catch (Exception ex)
             {
-                SystemStatusMessage = "鎿嶄綔澶辫触锛? + ex.Message";
-                MessageBox.Show(ex.Message, "鎿嶄綔澶辫触", MessageBoxButton.OK, MessageBoxImage.Error);
+                SystemStatusMessage = "操作失败：" + ex.Message;
+                MessageBox.Show(ex.Message, "操作失败", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -1576,7 +2661,7 @@ namespace MyTools.ViewModels
             }
             catch (Exception ex)
             {
-                MessageBox.Show("鎵ц澶辫触: " + ex.Message, "閿欒", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show("执行失败: " + ex.Message, "错误", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -1589,12 +2674,13 @@ namespace MyTools.ViewModels
         private async Task ExecuteSqlQueryAsync()
         {
             IsQueryBusy = true;
-            QueryStatusMessage = "姝ｅ湪鎵ц鏌ヨ...";
+            QueryStatusMessage = "正在执行查询...";
             SqlQueryResult = null;
             try
             {
                 var options = GetEffectiveSqlConnectionOptions();
-                var table = await SqlExportService.ExecuteQueryAsync(
+                var provider = SqlExportProviderFactory.GetProvider(options.ProviderKind);
+                var table = await provider.ExecuteQueryAsync(
                     options,
                     SelectedSqlDatabase.Name,
                     SqlQueryText,
@@ -1607,7 +2693,7 @@ namespace MyTools.ViewModels
             {
                 AppLogService.Error(ex, "SQL query execution failed");
                 QueryStatusMessage = "执行失败：" + ex.Message;
-                MessageBox.Show(ex.Message, "SQL 鎵ц澶辫触", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show(ex.Message, "SQL 执行失败", MessageBoxButton.OK, MessageBoxImage.Error);
             }
             finally
             {
@@ -1620,7 +2706,7 @@ namespace MyTools.ViewModels
             if (SqlQueryResult == null) return;
             var dialog = new SaveFileDialog
             {
-                Filter = "Excel 宸ヤ綔绨?(*.xlsx)|*.xlsx",
+                Filter = "Excel 工作簿 (*.xlsx)|*.xlsx",
                 FileName = $"QueryResult_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx",
                 DefaultExt = ".xlsx",
                 AddExtension = true,
@@ -1629,7 +2715,7 @@ namespace MyTools.ViewModels
             if (dialog.ShowDialog() != true) return;
 
             IsQueryBusy = true;
-            QueryStatusMessage = "姝ｅ湪瀵煎嚭 Excel...";
+            QueryStatusMessage = "正在导出 Excel...";
             try
             {
                 var table = SqlQueryResult.Table;
@@ -1639,7 +2725,7 @@ namespace MyTools.ViewModels
                     dialog.FileName,
                     CancellationToken.None);
 
-                QueryStatusMessage = $"瀵煎嚭瀹屾垚锛屽叡 {result.RowCount} 琛屻€?";
+                QueryStatusMessage = $"导出完成，共 {result.RowCount} 行。";
                 MessageBox.Show(
                     $"导出成功。\n文件路径：{result.FilePath}",
                     "导出完成",
@@ -1649,12 +2735,712 @@ namespace MyTools.ViewModels
             catch (Exception ex)
             {
                 AppLogService.Error(ex, "Query result export failed");
-                QueryStatusMessage = "瀵煎嚭澶辫触锛? + ex.Message";
-                MessageBox.Show(ex.Message, "瀵煎嚭澶辫触", MessageBoxButton.OK, MessageBoxImage.Error);
+                QueryStatusMessage = "导出失败：" + ex.Message;
+                MessageBox.Show(ex.Message, "导出失败", MessageBoxButton.OK, MessageBoxImage.Error);
             }
             finally
             {
                 IsQueryBusy = false;
+            }
+        }
+
+        private async Task LoadOptimizationReportsAsync()
+        {
+            try
+            {
+                var reports = await _optimizationReportService.LoadAllAsync();
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    foreach (var existing in OptimizationReports)
+                    {
+                        existing.PropertyChanged -= OptimizationReport_OnPropertyChanged;
+                    }
+
+                    OptimizationReports.Clear();
+                    foreach (var report in reports)
+                    {
+                        report.PropertyChanged += OptimizationReport_OnPropertyChanged;
+                        OptimizationReports.Add(report);
+                    }
+
+                    OnPropertyChanged(nameof(HasSelectedOptimizationReports));
+                });
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "Loading optimization reports failed.");
+            }
+        }
+
+        private async Task LoadWeChatRootsAsync()
+        {
+            try
+            {
+                var roots = await Task.Run(() => _weChatDataLocator.LocateRoots());
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    WeChatRoots.Clear();
+                    foreach (var root in roots)
+                    {
+                        WeChatRoots.Add(root);
+                    }
+
+                    SelectedWeChatRoot = WeChatRoots.FirstOrDefault();
+                    if (SelectedWeChatRoot == null)
+                    {
+                        WeChatCleanupStatusMessage = "未检测到本机微信数据。";
+                        WeChatBackupStatusMessage = "未检测到本机微信数据。";
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "Loading WeChat roots failed.");
+            }
+        }
+
+        private async Task StartAutoOptimizeAsync()
+        {
+            if (IsAutoOptimizeBusy)
+            {
+                return;
+            }
+
+            var restartExplorerResult = MessageBox.Show(
+                "清理缩略图缓存需要临时重启资源管理器（explorer.exe），是否允许该步骤执行？",
+                "自动优化确认",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+
+            IsAutoOptimizeBusy = true;
+            try
+            {
+                _systemOptimizationService.AllowExplorerRestartForThumbnailCleanup = restartExplorerResult == MessageBoxResult.Yes;
+                var progress = new Progress<string>(message => AutoOptimizeStatusMessage = message);
+                var report = await Task.Run(() => _systemOptimizationService.RunAsync(progress, CancellationToken.None));
+                await _optimizationReportService.SaveAsync(report);
+
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    report.PropertyChanged += OptimizationReport_OnPropertyChanged;
+                    OptimizationReports.Insert(0, report);
+                    OnPropertyChanged(nameof(HasSelectedOptimizationReports));
+                });
+
+                AutoOptimizeStatusMessage = $"自动优化完成：{report.Summary}，释放空间 {report.TotalBytesFreedDisplay}。";
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "Auto optimize execution failed.");
+                AutoOptimizeStatusMessage = "自动优化失败：" + ex.Message;
+                MessageBox.Show(ex.Message, "自动优化失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                IsAutoOptimizeBusy = false;
+            }
+        }
+
+        private async Task StartJunkScanAsync()
+        {
+            IsJunkBusy = true;
+            try
+            {
+                var progress = new Progress<string>(message => JunkStatusMessage = message);
+                var scanned = await Task.Run(() => _junkCleanupService.ScanAsync(progress, CancellationToken.None));
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    foreach (var candidate in JunkCandidates)
+                    {
+                        candidate.PropertyChanged -= JunkCandidate_OnPropertyChanged;
+                    }
+
+                    JunkCandidates.Clear();
+                    foreach (var candidate in scanned)
+                    {
+                        candidate.PropertyChanged += JunkCandidate_OnPropertyChanged;
+                        JunkCandidates.Add(candidate);
+                    }
+
+                    OnPropertyChanged(nameof(HasJunkCandidates));
+                    TriggerCommandRequery();
+                });
+
+                var totalBytes = scanned.Sum(x => x.Bytes);
+                JunkStatusMessage = scanned.Count == 0
+                    ? "未发现可清理项目。"
+                    : $"扫描完成：{scanned.Count} 项，预计可释放 {FileSizeFormatter.Format(totalBytes)}。";
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "Junk scan failed.");
+                JunkStatusMessage = "扫描失败：" + ex.Message;
+                MessageBox.Show(ex.Message, "垃圾扫描失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                IsJunkBusy = false;
+            }
+        }
+
+        private bool CanRunJunkCleanup()
+        {
+            return !IsJunkBusy && JunkCandidates.Any(x => x.IsSelected);
+        }
+
+        private async Task RunJunkCleanupAsync()
+        {
+            var selected = JunkCandidates.Where(x => x.IsSelected).ToList();
+            if (selected.Count == 0)
+            {
+                return;
+            }
+
+            var totalBytes = selected.Sum(x => x.Bytes);
+            var confirm = MessageBox.Show(
+                $"将删除 {selected.Count} 项，约 {FileSizeFormatter.Format(totalBytes)}，操作不可撤销。是否继续？",
+                "确认清理",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+
+            if (confirm != MessageBoxResult.Yes)
+            {
+                return;
+            }
+
+            IsJunkBusy = true;
+            try
+            {
+                var progress = new Progress<string>(message => JunkStatusMessage = message);
+                var execution = await Task.Run(() => _junkCleanupService.CleanupAsync(selected, progress, CancellationToken.None));
+                JunkStatusMessage = $"已清理 {execution.DeletedCount} 项，释放空间 {FileSizeFormatter.Format(execution.FreedBytes)}。";
+
+                var report = new OptimizationReportItem
+                {
+                    Id = Guid.NewGuid().ToString("N").Substring(0, 8),
+                    StartedAt = DateTime.Now,
+                    FinishedAt = DateTime.Now,
+                    ReportType = "JunkCleanup",
+                    Steps = execution.Steps,
+                    TotalBytesFreed = execution.FreedBytes,
+                    Summary = $"垃圾清理：成功 {execution.DeletedCount} 项。"
+                };
+
+                await _optimizationReportService.SaveAsync(report);
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    report.PropertyChanged += OptimizationReport_OnPropertyChanged;
+                    OptimizationReports.Insert(0, report);
+                    OnPropertyChanged(nameof(HasSelectedOptimizationReports));
+                });
+
+                MessageBox.Show(
+                    $"已清理 {execution.DeletedCount} 项，释放空间 {FileSizeFormatter.Format(execution.FreedBytes)}。",
+                    "清理完成",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "Junk cleanup failed.");
+                JunkStatusMessage = "清理失败：" + ex.Message;
+                MessageBox.Show(ex.Message, "垃圾清理失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                IsJunkBusy = false;
+            }
+        }
+
+        private async Task ScanWeChatCleanupAsync()
+        {
+            if (SelectedWeChatRoot == null)
+            {
+                WeChatCleanupStatusMessage = "未检测到本机微信数据。";
+                return;
+            }
+
+            IsWeChatCleanupBusy = true;
+            try
+            {
+                var options = BuildWeChatCleanupOptions(
+                    WeChatCleanupStartDate,
+                    WeChatCleanupEndDate,
+                    WeChatCleanupIncludeText,
+                    WeChatCleanupIncludeImage,
+                    WeChatCleanupIncludeVideo,
+                    WeChatCleanupIncludeVoice,
+                    WeChatCleanupIncludeFile,
+                    WeChatCleanupIncludeCache);
+
+                var progress = new Progress<string>(message => WeChatCleanupStatusMessage = message);
+                var scanResult = await Task.Run(() => _weChatCleanupService.ScanAsync(
+                    new[] { SelectedWeChatRoot },
+                    options,
+                    progress,
+                    CancellationToken.None));
+
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    foreach (var item in WeChatCleanupCandidates)
+                    {
+                        item.PropertyChanged -= WeChatCleanupCandidate_OnPropertyChanged;
+                    }
+
+                    WeChatCleanupCandidates.Clear();
+                    foreach (var candidate in scanResult.Candidates)
+                    {
+                        candidate.PropertyChanged += WeChatCleanupCandidate_OnPropertyChanged;
+                        WeChatCleanupCandidates.Add(candidate);
+                    }
+
+                    OnPropertyChanged(nameof(HasWeChatCleanupCandidates));
+                    TriggerCommandRequery();
+                });
+
+                var totalBytes = scanResult.Candidates.Sum(x => x.Bytes);
+                var note = scanResult.PendingNotes.Count > 0
+                    ? " " + string.Join("；", scanResult.PendingNotes)
+                    : string.Empty;
+                WeChatCleanupStatusMessage = scanResult.Candidates.Count == 0
+                    ? "未发现符合条件的微信数据。" + note
+                    : $"扫描完成：{scanResult.Candidates.Count} 项，约 {FileSizeFormatter.Format(totalBytes)}。{note}";
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "WeChat cleanup scan failed.");
+                WeChatCleanupStatusMessage = "扫描失败：" + ex.Message;
+                MessageBox.Show(ex.Message, "微信清理扫描失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                IsWeChatCleanupBusy = false;
+            }
+        }
+
+        private bool CanStartWeChatCleanup()
+        {
+            return !IsWeChatCleanupBusy && WeChatCleanupCandidates.Any(x => x.IsSelected) && SelectedWeChatRoot != null;
+        }
+
+        private async Task StartWeChatCleanupAsync()
+        {
+            var selected = WeChatCleanupCandidates.Where(x => x.IsSelected).ToList();
+            if (selected.Count == 0)
+            {
+                WeChatCleanupStatusMessage = "请先扫描并选择要清理的项目。";
+                return;
+            }
+
+            var totalBytes = selected.Sum(x => x.Bytes);
+            var confirm = MessageBox.Show(
+                $"将删除 {selected.Count} 项微信数据（{FileSizeFormatter.Format(totalBytes)}），操作不可撤销，建议先备份。是否继续？",
+                "确认微信清理",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+
+            if (confirm != MessageBoxResult.Yes)
+            {
+                return;
+            }
+
+            IsWeChatCleanupBusy = true;
+            try
+            {
+                var progress = new Progress<string>(message => WeChatCleanupStatusMessage = message);
+                var execution = await Task.Run(() => _weChatCleanupService.CleanupAsync(
+                    selected,
+                    new[] { SelectedWeChatRoot },
+                    progress,
+                    CancellationToken.None));
+
+                var report = new OptimizationReportItem
+                {
+                    Id = Guid.NewGuid().ToString("N").Substring(0, 8),
+                    StartedAt = DateTime.Now,
+                    FinishedAt = DateTime.Now,
+                    ReportType = "WeChatCleanup",
+                    Steps = execution.Steps,
+                    TotalBytesFreed = execution.FreedBytes,
+                    Summary = $"微信清理：成功 {execution.DeletedCount} 项。"
+                };
+
+                await _optimizationReportService.SaveAsync(report);
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    report.PropertyChanged += OptimizationReport_OnPropertyChanged;
+                    OptimizationReports.Insert(0, report);
+                    OnPropertyChanged(nameof(HasSelectedOptimizationReports));
+                });
+
+                WeChatCleanupStatusMessage = $"微信清理完成：成功 {execution.DeletedCount} 项，释放空间 {FileSizeFormatter.Format(execution.FreedBytes)}。";
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "WeChat cleanup execution failed.");
+                WeChatCleanupStatusMessage = "清理失败：" + ex.Message;
+                MessageBox.Show(ex.Message, "微信清理失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                IsWeChatCleanupBusy = false;
+            }
+        }
+
+        private bool CanStartWeChatBackup()
+        {
+            return !IsWeChatBackupBusy
+                && SelectedWeChatRoot != null
+                && !string.IsNullOrWhiteSpace(WeChatBackupOutputFolder);
+        }
+
+        private async Task StartWeChatBackupAsync()
+        {
+            if (SelectedWeChatRoot == null)
+            {
+                WeChatBackupStatusMessage = "未检测到本机微信数据。";
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(WeChatBackupOutputFolder))
+            {
+                SelectWeChatBackupOutputFolder();
+                if (string.IsNullOrWhiteSpace(WeChatBackupOutputFolder))
+                {
+                    return;
+                }
+            }
+
+            IsWeChatBackupBusy = true;
+            try
+            {
+                var options = new WeChatBackupOptions
+                {
+                    Root = SelectedWeChatRoot,
+                    StartDate = (WeChatBackupStartDate ?? DateTime.Today.AddDays(-30)).Date,
+                    EndDate = (WeChatBackupEndDate ?? DateTime.Today).Date,
+                    Categories = WeChatCleanupService.BuildCategories(
+                        WeChatBackupIncludeText,
+                        WeChatBackupIncludeImage,
+                        WeChatBackupIncludeVideo,
+                        WeChatBackupIncludeVoice,
+                        WeChatBackupIncludeFile,
+                        WeChatBackupIncludeCache),
+                    OutputDirectory = WeChatBackupOutputFolder
+                };
+
+                var progress = new Progress<WeChatBackupProgress>(p =>
+                {
+                    WeChatBackupStatusMessage = $"备份中：{p.RelativePath}（{p.Current}/{p.Total}）";
+                });
+
+                var backupResult = await Task.Run(() => _weChatBackupService.BackupAsync(options, progress, CancellationToken.None));
+                WeChatBackupStatusMessage = $"备份完成：{backupResult.FileCount} 个文件，{FileSizeFormatter.Format(backupResult.TotalBytes)}。";
+                MessageBox.Show(
+                    $"已备份 {backupResult.FileCount} 个文件（{FileSizeFormatter.Format(backupResult.TotalBytes)}）到 {backupResult.ZipPath}。",
+                    "备份完成",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "WeChat backup failed.");
+                WeChatBackupStatusMessage = "备份失败：" + ex.Message;
+                MessageBox.Show(ex.Message, "微信备份失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                IsWeChatBackupBusy = false;
+            }
+        }
+
+        private bool CanStartWeChatRestore()
+        {
+            if (IsWeChatRestoreBusy || string.IsNullOrWhiteSpace(WeChatRestoreZipPath))
+            {
+                return false;
+            }
+
+            if (RestoreToOriginal)
+            {
+                return true;
+            }
+
+            return !string.IsNullOrWhiteSpace(WeChatRestoreTargetRoot);
+        }
+
+        private async Task StartWeChatRestoreAsync()
+        {
+            if (string.IsNullOrWhiteSpace(WeChatRestoreZipPath))
+            {
+                WeChatRestoreStatusMessage = "请先选择备份文件。";
+                return;
+            }
+
+            if (!RestoreToOriginal && string.IsNullOrWhiteSpace(WeChatRestoreTargetRoot))
+            {
+                SelectWeChatRestoreTargetRoot();
+                if (string.IsNullOrWhiteSpace(WeChatRestoreTargetRoot))
+                {
+                    return;
+                }
+            }
+
+            IsWeChatRestoreBusy = true;
+            try
+            {
+                var restoreResult = await Task.Run(() => _weChatBackupService.RestoreAsync(
+                    new WeChatRestoreOptions
+                    {
+                        ZipPath = WeChatRestoreZipPath,
+                        RestoreToOriginal = RestoreToOriginal,
+                        CustomTargetRoot = RestoreToOriginal ? null : WeChatRestoreTargetRoot
+                    },
+                    new Progress<string>(msg => WeChatRestoreStatusMessage = msg),
+                    CancellationToken.None));
+
+                WeChatRestoreStatusMessage = $"恢复完成：成功 {restoreResult.Success}，失败 {restoreResult.Failed}。";
+                if (restoreResult.Failed > 0)
+                {
+                    MessageBox.Show(
+                        $"恢复完成：成功 {restoreResult.Success}，失败 {restoreResult.Failed}（详见日志）。",
+                        "微信恢复",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                }
+                else
+                {
+                    MessageBox.Show(
+                        $"恢复完成：成功 {restoreResult.Success}，失败 {restoreResult.Failed}（详见日志）。",
+                        "微信恢复",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
+                }
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "WeChat restore failed.");
+                WeChatRestoreStatusMessage = "恢复失败：" + ex.Message;
+                MessageBox.Show(ex.Message, "微信恢复失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                IsWeChatRestoreBusy = false;
+            }
+        }
+
+        private void SelectWeChatBackupOutputFolder()
+        {
+            using (var dialog = new WinForms.FolderBrowserDialog())
+            {
+                dialog.Description = "请选择微信备份输出目录";
+                dialog.ShowNewFolderButton = true;
+                if (dialog.ShowDialog() == WinForms.DialogResult.OK)
+                {
+                    WeChatBackupOutputFolder = dialog.SelectedPath;
+                }
+            }
+        }
+
+        private void SelectWeChatRestoreZip()
+        {
+            var dialog = new OpenFileDialog
+            {
+                Filter = "微信备份 (*.zip)|*.zip",
+                Title = "选择微信备份文件"
+            };
+
+            if (dialog.ShowDialog() != true)
+            {
+                return;
+            }
+
+            WeChatRestoreZipPath = dialog.FileName;
+            _ = LoadRestoreManifestSummaryAsync(dialog.FileName);
+        }
+
+        private async Task LoadRestoreManifestSummaryAsync(string zipPath)
+        {
+            try
+            {
+                var manifest = await _weChatBackupService.ReadManifestAsync(zipPath, CancellationToken.None);
+                var count = manifest.Entries?.Count ?? 0;
+                var total = manifest.Entries?.Sum(x => x.Size) ?? 0L;
+                var categories = manifest.Categories == null || manifest.Categories.Count == 0
+                    ? "无"
+                    : string.Join(", ", manifest.Categories);
+
+                var builder = new StringBuilder();
+                builder.AppendLine($"微信版本：{manifest.WechatVariant}");
+                builder.AppendLine($"wxId：{manifest.WxId}");
+                builder.AppendLine($"时间范围：{manifest.DateRange?.Start} ~ {manifest.DateRange?.End}");
+                builder.AppendLine($"类别：{categories}");
+                builder.AppendLine($"条目数：{count}");
+                builder.Append($"总大小：{FileSizeFormatter.Format(total)}");
+                WeChatRestoreManifestSummary = builder.ToString();
+                WeChatRestoreStatusMessage = "已解析备份清单。";
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "Reading restore manifest failed for {Path}", zipPath ?? string.Empty);
+                WeChatRestoreManifestSummary = "清单读取失败。";
+                WeChatRestoreStatusMessage = "无法解析备份清单：" + ex.Message;
+            }
+        }
+
+        private void SelectWeChatRestoreTargetRoot()
+        {
+            using (var dialog = new WinForms.FolderBrowserDialog())
+            {
+                dialog.Description = "请选择恢复目标目录";
+                dialog.ShowNewFolderButton = true;
+                if (dialog.ShowDialog() == WinForms.DialogResult.OK)
+                {
+                    WeChatRestoreTargetRoot = dialog.SelectedPath;
+                }
+            }
+        }
+
+        private async void DeleteSelectedReports()
+        {
+            var selected = OptimizationReports.Where(x => x.IsSelected).ToList();
+            if (selected.Count == 0)
+            {
+                return;
+            }
+
+            var confirm = MessageBox.Show(
+                $"确定删除选中的 {selected.Count} 条优化报告吗？",
+                "确认删除",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+            if (confirm != MessageBoxResult.Yes)
+            {
+                return;
+            }
+
+            try
+            {
+                await _optimizationReportService.DeleteAsync(selected.Select(x => x.Id));
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    foreach (var item in selected)
+                    {
+                        item.PropertyChanged -= OptimizationReport_OnPropertyChanged;
+                        OptimizationReports.Remove(item);
+                    }
+
+                    OnPropertyChanged(nameof(HasSelectedOptimizationReports));
+                    TriggerCommandRequery();
+                });
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "Deleting selected optimization reports failed.");
+                MessageBox.Show(ex.Message, "删除失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private bool CanDeleteSelectedReports()
+        {
+            return OptimizationReports.Any(x => x.IsSelected)
+                && !IsAutoOptimizeBusy
+                && !IsJunkBusy
+                && !IsWeChatCleanupBusy;
+        }
+
+        private void ShowReportDetails(object parameter)
+        {
+            if (!(parameter is OptimizationReportItem report))
+            {
+                return;
+            }
+
+            var lines = new List<string>
+            {
+                $"报告类型：{report.ReportTypeDisplay}",
+                $"开始时间：{report.StartedAt:yyyy-MM-dd HH:mm:ss}",
+                $"结束时间：{report.FinishedAt:yyyy-MM-dd HH:mm:ss}",
+                $"释放空间：{report.TotalBytesFreedDisplay}",
+                $"摘要：{report.Summary}",
+                "",
+                "步骤明细："
+            };
+
+            if (report.Steps == null || report.Steps.Count == 0)
+            {
+                lines.Add("（无步骤明细）");
+            }
+            else
+            {
+                foreach (var step in report.Steps)
+                {
+                    lines.Add($"- {step.Name} [{step.Status}] 释放 {FileSizeFormatter.Format(step.BytesFreed)}，耗时 {step.Duration:g}");
+                    if (!string.IsNullOrWhiteSpace(step.Detail))
+                    {
+                        lines.Add($"  {step.Detail}");
+                    }
+                }
+            }
+
+            MessageBox.Show(string.Join(Environment.NewLine, lines), "优化报告详情", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        private static WeChatCleanupScanOptions BuildWeChatCleanupOptions(
+            DateTime? startDate,
+            DateTime? endDate,
+            bool includeText,
+            bool includeImage,
+            bool includeVideo,
+            bool includeVoice,
+            bool includeFile,
+            bool includeCache)
+        {
+            var start = (startDate ?? DateTime.Today.AddDays(-30)).Date;
+            var end = (endDate ?? DateTime.Today).Date;
+            if (start > end)
+            {
+                var swap = start;
+                start = end;
+                end = swap;
+            }
+
+            return new WeChatCleanupScanOptions
+            {
+                StartDate = start,
+                EndDate = end,
+                Categories = WeChatCleanupService.BuildCategories(
+                    includeText,
+                    includeImage,
+                    includeVideo,
+                    includeVoice,
+                    includeFile,
+                    includeCache)
+            };
+        }
+
+        private void OptimizationReport_OnPropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(OptimizationReportItem.IsSelected))
+            {
+                OnPropertyChanged(nameof(HasSelectedOptimizationReports));
+                TriggerCommandRequery();
+            }
+        }
+
+        private void JunkCandidate_OnPropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(JunkCandidate.IsSelected))
+            {
+                TriggerCommandRequery();
+            }
+        }
+
+        private void WeChatCleanupCandidate_OnPropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(WeChatCleanupCandidate.IsSelected))
+            {
+                TriggerCommandRequery();
             }
         }
 
@@ -1664,6 +3450,33 @@ namespace MyTools.ViewModels
             _exportSqlTableCommand?.RaiseCanExecuteChanged();
             _executeQueryCommand?.RaiseCanExecuteChanged();
             _exportQueryResultCommand?.RaiseCanExecuteChanged();
+            _startAutoOptimizeCommand?.RaiseCanExecuteChanged();
+            _startJunkScanCommand?.RaiseCanExecuteChanged();
+            _runJunkCleanupCommand?.RaiseCanExecuteChanged();
+            _scanWeChatCleanupCommand?.RaiseCanExecuteChanged();
+            _startWeChatCleanupCommand?.RaiseCanExecuteChanged();
+            _startWeChatBackupCommand?.RaiseCanExecuteChanged();
+            _startWeChatRestoreCommand?.RaiseCanExecuteChanged();
+            _deleteSelectedReportsCommand?.RaiseCanExecuteChanged();
+            _selectWeChatBackupOutputFolderCommand?.RaiseCanExecuteChanged();
+            _selectWeChatRestoreZipCommand?.RaiseCanExecuteChanged();
+            _selectWeChatRestoreTargetRootCommand?.RaiseCanExecuteChanged();
+            _openRecordRegionCommand?.RaiseCanExecuteChanged();
+            _toggleAudioRecordingCommand?.RaiseCanExecuteChanged();
+            _importCodexProfileCommand?.RaiseCanExecuteChanged();
+            _exportCodexProfileCommand?.RaiseCanExecuteChanged();
+        }
+
+        private static string BuildAppVersionText()
+        {
+            var version = typeof(MainViewModel).Assembly.GetName().Version;
+            if (version == null)
+            {
+                return "v1.0.0";
+            }
+
+            var build = version.Build < 0 ? 0 : version.Build;
+            return $"v{version.Major}.{version.Minor}.{build}";
         }
 
         public event PropertyChangedEventHandler PropertyChanged;
@@ -1770,8 +3583,8 @@ namespace MyTools.ViewModels
 
         public string ContentStorageSummary =>
             HasEmbeddedContent
-                ? "宸插唴缃繚瀛?config.toml 鍜?auth.json 鍐呭"
-                : "鏈唴缃厤缃唴瀹癸紙寤鸿閲嶆柊鎷栧叆鏂囦欢澶癸級";
+                ? "已内置保存 config.toml 和 auth.json 内容"
+                : "未内置配置内容（建议重新拖入文件夹）";
 
         public event PropertyChangedEventHandler PropertyChanged;
 
@@ -1779,6 +3592,18 @@ namespace MyTools.ViewModels
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
+    }
+
+    public class SqlProviderOption
+    {
+        public SqlProviderOption(SqlProviderKind kind, string displayName)
+        {
+            Kind = kind;
+            DisplayName = displayName ?? string.Empty;
+        }
+
+        public SqlProviderKind Kind { get; }
+        public string DisplayName { get; }
     }
 
     public class RelayCommand : ICommand
@@ -1872,7 +3697,7 @@ namespace MyTools.ViewModels
             catch (Exception ex)
             {
                 AppLogService.Error(ex, "Command execution failed.");
-                MessageBox.Show(ex.Message, "鎿嶄綔澶辫触", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show(ex.Message, "操作失败", MessageBoxButton.OK, MessageBoxImage.Error);
             }
             finally
             {
@@ -1922,7 +3747,7 @@ namespace MyTools.ViewModels
             catch (Exception ex)
             {
                 AppLogService.Error(ex, "Parameterized command execution failed.");
-                MessageBox.Show(ex.Message, "鎿嶄綔澶辫触", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show(ex.Message, "操作失败", MessageBoxButton.OK, MessageBoxImage.Error);
             }
             finally
             {

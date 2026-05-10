@@ -108,6 +108,8 @@ namespace MyTools.Services
         };
         public bool ShowEditorAfterCapture { get; set; } = true;
         public List<CodexProfileSettings> CodexProfiles { get; set; } = new List<CodexProfileSettings>();
+        public string RecordingOutputFolder { get; set; } = string.Empty;
+        public string AudioOutputFolder { get; set; } = string.Empty;
     }
 
     public class HotkeySettings

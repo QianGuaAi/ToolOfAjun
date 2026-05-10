@@ -71,3 +71,62 @@
 - 连接信息变更后自动清空旧数据库/表选择，提示重新测试连接，避免使用已失效的连接上下文。
 - 新增 Codex 配置模块：拖入包含 config.toml/auth.json 的文件夹后生成记录，备注可编辑，点击“应用”覆盖当前用户 `%userprofile%\.codex` 下的同名文件，目标不存在时自动创建。
 - 修复 StatusToColorConverter.ConvertBack 抛 NotImplementedException 的潜在绑定异常，改为返回 Binding.DoNothing。
+
+## [2026-05-10] 自动优化与报告
+- 新增 OptimizationReportService 与 SystemOptimizationService，支持白名单自动优化流程、报告 JSON 保存、报告列表查看和删除。
+- 系统优化面板追加“自动优化与报告”卡片，保留原 Defender / 自动更新卡片不变。
+
+## [2026-05-10] 垃圾清理
+- 新增 JunkCleanupService，按白名单扫描用户临时目录、系统临时目录、回收站、浏览器缓存、缩略图缓存、Prefetch、Windows Update 与 Delivery Optimization 缓存。
+- 清理前进行完整路径安全校验与二次确认，并把清理结果写入优化报告。
+
+## [2026-05-10] 微信清理
+- 新增 WeChatDataLocator 与 WeChatCleanupService，支持定位旧版 WeChat Files 与新版 xwechat_files 数据根目录。
+- 支持按日期和类别扫描/清理微信图片、视频、语音、文件与缓存，明确跳过消息库、MMKV、config 和登录态相关文件。
+
+## [2026-05-10] 微信备份
+- 新增 WeChatBackupService 备份能力，按日期和类别生成单个 zip 文件。
+- 备份包包含 manifest.json、相对路径、文件大小、修改时间与 SHA256 校验信息。
+
+## [2026-05-10] 微信恢复
+- 支持读取微信备份 zip 的 manifest.json 并展示摘要。
+- 支持恢复到原目录或自定义目录，同名文件自动追加 restored 后缀，并防护 zip slip 与受保护路径写入。
+
+## [2026-05-10] SQL/Codex 乱码修复
+- 修复 MainViewModel 中 SQL 导出状态文案、Codex 配置状态文案、系统操作反馈、快捷键提示等乱码字符串。
+- 修复 Codex 记录默认名与“内容保存状态”文案乱码，统一为可读中文。
+
+## [2026-05-10] Codex 配置导出
+- 新增 `ExportCodexProfileCommand`，支持将单条记录解密后导出为 `config.toml` 与 `auth.json`。
+- 导出目录支持自动安全命名与冲突后缀递增（`_1/_2/...`），并写入应用日志。
+
+## [2026-05-10] Codex 配置导入
+- 新增 `ImportCodexProfileCommand`，支持同时选择 `config.toml` 与 `auth.json` 导入新记录。
+- 新增记录名输入框（`Microsoft.VisualBasic.Interaction.InputBox`），导入内容以 DPAPI 保护后保存。
+
+## [2026-05-10] 截图 NRE 修复
+- 截图流程新增开始/失败日志，失败时回填 `SystemStatusMessage` 并保留异常弹窗。
+- `Clipboard.SetImage` 强制在 UI Dispatcher 执行；截图编辑器窗口创建时仅在主窗体存在时设置 `Owner`。
+- 编辑器颜色按钮激活逻辑增加空值保护，避免控件缺失导致空引用异常。
+
+## [2026-05-10] SQL 导出多数据库支持
+- 新增 `SqlExportProvider` 抽象、`SqlServerExportProvider`、`PostgreSqlExportProvider`、`MySqlExportProvider`。
+- SQL 工具面板新增数据库类型选择，支持 SQL Server / PostgreSQL / MySQL 测试连接、库表加载、导出与查询。
+- SQL 连接历史改为按 Provider 分组保存，并迁移旧版 SQL Server 单分组历史数据。
+
+## [2026-05-10] 截图区域录像
+- 新增 `RecordingService` 与 `RecordRegionWindow`，支持可拖拽/可调大小区域录像窗口与开始/停止按钮状态切换。
+- 录像使用 ffmpeg（`NativeBinaries\\ffmpeg\\ffmpeg.exe`）调用 `gdigrab + dshow`，编码为 `H.264 + AAC + MP4`。
+- 未检测到音频设备时支持提示后降级为纯画面录制；停止时通过 `q` 优雅退出，超时后兜底 Kill。
+
+## [2026-05-10] 独立录音
+- 新增录音独立流程（`StartAudioOnlyAsync` / `StopAudioOnlyAsync`），输出 `.m4a`（AAC）。
+- 录音首设独立目录，主界面新增“录音中 mm:ss”计时与按钮图标/文案切换。
+- 录像与录音任务互斥，避免并发启动多个 ffmpeg 进程。
+## [2026-05-10] ???????? / ?? / ?? / ???
+- ?? `Resources/Theme.xaml`?????????????????Card ??? Badge ???
+- ?? `Resources/Illustrations.xaml`??? HomeHero / NetworkEmpty / StartupEmpty / SystemEmpty / SqlEmpty / ScreenshotEmpty / CodexEmpty / WeChatEmpty 8 ? DrawingImage ???
+- `App.xaml` ?? `Theme.xaml` ? `Illustrations.xaml`???????? `AppIcon.ico`?????????????????
+- `MainWindow.xaml` ???????????????????? Hero + ?????????? Header ??? Badge ???
+- ????????????????Release ??????????????
+
