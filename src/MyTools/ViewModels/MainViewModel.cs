@@ -5,6 +5,7 @@ using System.ComponentModel;
 using System.Data;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
@@ -1535,13 +1536,57 @@ namespace MyTools.ViewModels
 
         private void EditClipboardImage()
         {
-            var image = System.Windows.Clipboard.GetImage();
-            if (image == null)
+            if (TryGetClipboardImage(out var image, out var clipboardError))
             {
-                MessageBox.Show("剪贴板中没有图片", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+                ShowScreenshotEditorWindow(image);
                 return;
             }
-            ShowScreenshotEditorWindow(image);
+
+            if (clipboardError != null)
+            {
+                AppLogService.Error(clipboardError, "Reading clipboard image failed.");
+                SystemStatusMessage = "读取剪贴板失败，请重新复制图片后再试。";
+                MessageBox.Show("剪贴板图片数据无效，请重新复制图片后再试。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            MessageBox.Show("剪贴板中没有图片", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        private static bool TryGetClipboardImage(out System.Windows.Media.Imaging.BitmapSource image, out Exception error)
+        {
+            image = null;
+            error = null;
+            const int maxAttempts = 3;
+
+            for (var attempt = 1; attempt <= maxAttempts; attempt++)
+            {
+                try
+                {
+                    if (!Clipboard.ContainsImage())
+                    {
+                        return false;
+                    }
+
+                    image = Clipboard.GetImage();
+                    return image != null;
+                }
+                catch (COMException ex)
+                {
+                    error = ex;
+                }
+                catch (ExternalException ex)
+                {
+                    error = ex;
+                }
+
+                if (attempt < maxAttempts)
+                {
+                    Thread.Sleep(80 * attempt);
+                }
+            }
+
+            return false;
         }
 
         public void ReRegisterHotkey()

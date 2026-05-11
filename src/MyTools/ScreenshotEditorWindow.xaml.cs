@@ -8,6 +8,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
+using System.Windows.Threading;
 using Microsoft.Win32;
 
 namespace MyTools
@@ -27,6 +28,13 @@ namespace MyTools
         private DrawingMode _mode = DrawingMode.Pen;
         private Color _currentColor = Colors.Red;
         private readonly Stack<UndoItem> _undoStack = new Stack<UndoItem>();
+        private const double MinZoom = 0.1;
+        private const double MaxZoom = 3.0;
+        private const double FitPaddingRatio = 0.96;
+        private const double ZoomStepFactor = 1.1;
+        private bool _isSyncingZoomControl;
+        private bool _isUserZoomCustomized;
+        private BitmapSource _loadedScreenshot;
 
         private Point _shapeStart;
         private Shape _previewShape;
@@ -40,10 +48,17 @@ namespace MyTools
                 MarkActiveColorButton(BtnColorRed);
             }
             DrawingCanvas.Strokes.StrokesChanged += Strokes_StrokesChanged;
+            Loaded += ScreenshotEditorWindow_Loaded;
         }
 
         public void LoadScreenshot(BitmapSource screenshot)
         {
+            if (screenshot == null)
+            {
+                return;
+            }
+
+            _loadedScreenshot = screenshot;
             ScreenshotImage.Source = screenshot;
             var w = screenshot.PixelWidth;
             var h = screenshot.PixelHeight;
@@ -53,6 +68,219 @@ namespace MyTools
             ShapesCanvas.Height  = h;
             CanvasContainer.Width  = w;
             CanvasContainer.Height = h;
+            _isUserZoomCustomized = false;
+
+            Dispatcher.BeginInvoke(new Action(() => TryFitToWorkspace(true)), DispatcherPriority.Loaded);
+        }
+
+        private void ScreenshotEditorWindow_Loaded(object sender, RoutedEventArgs e)
+        {
+            TryFitToWorkspace(false);
+        }
+
+        private void WorkspaceScrollViewer_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            TryFitToWorkspace(false);
+        }
+
+        private void WorkspaceScrollViewer_ScrollChanged(object sender, ScrollChangedEventArgs e)
+        {
+            if (e.ViewportWidthChange == 0 && e.ViewportHeightChange == 0)
+            {
+                return;
+            }
+
+            TryFitToWorkspace(false);
+        }
+
+        private void SldZoom_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isSyncingZoomControl)
+            {
+                return;
+            }
+
+            var zoom = e.NewValue / 100.0;
+            SetZoom(zoom, true, true);
+        }
+
+        private void WorkspaceScrollViewer_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+        {
+            if (_loadedScreenshot == null)
+            {
+                return;
+            }
+
+            var currentZoom = GetCurrentZoom();
+            var factor = e.Delta > 0 ? ZoomStepFactor : (1.0 / ZoomStepFactor);
+            SetZoom(currentZoom * factor, true, true);
+            e.Handled = true;
+        }
+
+        private void TryFitToWorkspace(bool force)
+        {
+            if (!force && _isUserZoomCustomized)
+            {
+                return;
+            }
+
+            if (_loadedScreenshot == null || WorkspaceScrollViewer == null)
+            {
+                return;
+            }
+
+            var viewportWidth = WorkspaceScrollViewer.ViewportWidth;
+            var viewportHeight = WorkspaceScrollViewer.ViewportHeight;
+            if (viewportWidth <= 0 || viewportHeight <= 0)
+            {
+                return;
+            }
+
+            var sourceWidth = _loadedScreenshot.PixelWidth;
+            var sourceHeight = _loadedScreenshot.PixelHeight;
+            if (sourceWidth <= 0 || sourceHeight <= 0)
+            {
+                return;
+            }
+
+            var fitZoom = Math.Min(viewportWidth / sourceWidth, viewportHeight / sourceHeight) * FitPaddingRatio;
+            if (double.IsNaN(fitZoom) || double.IsInfinity(fitZoom) || fitZoom <= 0)
+            {
+                return;
+            }
+
+            SetZoom(fitZoom, false, false);
+        }
+
+        private double GetCurrentZoom()
+        {
+            if (CanvasZoomTransform == null || CanvasZoomTransform.ScaleX <= 0)
+            {
+                return 1.0;
+            }
+
+            return CanvasZoomTransform.ScaleX;
+        }
+
+        private void SetZoom(double zoom, bool byUser, bool keepViewportCenter)
+        {
+            var normalizedZoom = Math.Max(MinZoom, Math.Min(MaxZoom, zoom));
+            var currentZoom = GetCurrentZoom();
+            if (Math.Abs(currentZoom - normalizedZoom) < 0.0001)
+            {
+                UpdateZoomControls(normalizedZoom);
+                if (byUser)
+                {
+                    _isUserZoomCustomized = true;
+                }
+
+                return;
+            }
+
+            var centerRatioX = 0.5;
+            var centerRatioY = 0.5;
+            if (keepViewportCenter)
+            {
+                CaptureViewportCenterRatio(out centerRatioX, out centerRatioY);
+            }
+
+            if (CanvasZoomTransform != null)
+            {
+                CanvasZoomTransform.ScaleX = normalizedZoom;
+                CanvasZoomTransform.ScaleY = normalizedZoom;
+            }
+
+            UpdateZoomControls(normalizedZoom);
+            if (keepViewportCenter)
+            {
+                RestoreViewportCenter(centerRatioX, centerRatioY);
+            }
+
+            if (byUser)
+            {
+                _isUserZoomCustomized = true;
+            }
+        }
+
+        private void CaptureViewportCenterRatio(out double centerRatioX, out double centerRatioY)
+        {
+            centerRatioX = 0.5;
+            centerRatioY = 0.5;
+            if (WorkspaceScrollViewer == null)
+            {
+                return;
+            }
+
+            var extentWidth = WorkspaceScrollViewer.ExtentWidth;
+            var extentHeight = WorkspaceScrollViewer.ExtentHeight;
+            if (extentWidth <= 0 || extentHeight <= 0)
+            {
+                return;
+            }
+
+            centerRatioX = Clamp((WorkspaceScrollViewer.HorizontalOffset + WorkspaceScrollViewer.ViewportWidth / 2.0) / extentWidth, 0.0, 1.0);
+            centerRatioY = Clamp((WorkspaceScrollViewer.VerticalOffset + WorkspaceScrollViewer.ViewportHeight / 2.0) / extentHeight, 0.0, 1.0);
+        }
+
+        private void RestoreViewportCenter(double centerRatioX, double centerRatioY)
+        {
+            if (WorkspaceScrollViewer == null)
+            {
+                return;
+            }
+
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                if (WorkspaceScrollViewer == null)
+                {
+                    return;
+                }
+
+                var targetX = centerRatioX * WorkspaceScrollViewer.ExtentWidth - WorkspaceScrollViewer.ViewportWidth / 2.0;
+                var targetY = centerRatioY * WorkspaceScrollViewer.ExtentHeight - WorkspaceScrollViewer.ViewportHeight / 2.0;
+                WorkspaceScrollViewer.ScrollToHorizontalOffset(Clamp(targetX, 0.0, WorkspaceScrollViewer.ScrollableWidth));
+                WorkspaceScrollViewer.ScrollToVerticalOffset(Clamp(targetY, 0.0, WorkspaceScrollViewer.ScrollableHeight));
+            }), DispatcherPriority.Loaded);
+        }
+
+        private static double Clamp(double value, double min, double max)
+        {
+            if (value < min)
+            {
+                return min;
+            }
+
+            if (value > max)
+            {
+                return max;
+            }
+
+            return value;
+        }
+
+        private void UpdateZoomControls(double zoom)
+        {
+            _isSyncingZoomControl = true;
+            try
+            {
+                if (SldZoom != null)
+                {
+                    var sliderValue = zoom * 100.0;
+                    if (Math.Abs(SldZoom.Value - sliderValue) > 0.1)
+                    {
+                        SldZoom.Value = sliderValue;
+                    }
+                }
+
+                if (TxtZoom != null)
+                {
+                    TxtZoom.Text = $"{(int)Math.Round(zoom * 100.0)}%";
+                }
+            }
+            finally
+            {
+                _isSyncingZoomControl = false;
+            }
         }
 
         private void SetBrushColor(Color color)
@@ -86,6 +314,12 @@ namespace MyTools
         private void SetMode(DrawingMode mode)
         {
             _mode = mode;
+            if (DrawingCanvas == null || ShapesCanvas == null ||
+                TglPen == null || TglRect == null || TglLine == null || TglEraser == null)
+            {
+                return;
+            }
+
             switch (mode)
             {
                 case DrawingMode.Pen:

@@ -85,12 +85,6 @@
                                 <Setter TargetName="ActiveBar" Property="Visibility" Value="Visible" />
                                 <Setter TargetName="ActiveBar" Property="Fill" Value="{DynamicResource BrushAccentAmber}" />
                             </Trigger>
-                            <Trigger Property="Tag" Value="ActiveWireGuard">
-                                <Setter TargetName="Root" Property="Background" Value="{DynamicResource BrushSidebarActive}" />
-                                <Setter Property="Foreground" Value="{DynamicResource BrushSidebarTextActive}" />
-                                <Setter TargetName="ActiveBar" Property="Visibility" Value="Visible" />
-                                <Setter TargetName="ActiveBar" Property="Fill" Value="{DynamicResource BrushAccentTeal}" />
-                            </Trigger>
                             <Trigger Property="Tag" Value="ActiveSystem">
                                 <Setter TargetName="Root" Property="Background" Value="{DynamicResource BrushSidebarActive}" />
                                 <Setter Property="Foreground" Value="{DynamicResource BrushSidebarTextActive}" />
@@ -114,6 +108,35 @@
                                 <Setter Property="Foreground" Value="{DynamicResource BrushSidebarTextActive}" />
                                 <Setter TargetName="ActiveBar" Property="Visibility" Value="Visible" />
                                 <Setter TargetName="ActiveBar" Property="Fill" Value="{DynamicResource BrushAccentTeal}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="HomeShortcutButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalContentAlignment" Value="Stretch" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Root"
+                                Background="Transparent"
+                                CornerRadius="{StaticResource CornerRadiusButton}">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Root" Property="Background" Value="#14000000" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Root" Property="Background" Value="#24000000" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -149,67 +172,67 @@
                         </Border.Background>
                         <StackPanel HorizontalAlignment="Center">
                             <Image Source="{StaticResource HomeHero}" Width="260" Height="180" />
-                            <TextBlock Text="Welcome to MyTools"
+                            <TextBlock Text="欢迎使用 MyTools"
                                        Style="{StaticResource MaterialDesignHeadline5TextBlock}"
                                        HorizontalAlignment="Center"
                                        Margin="0,10,0,4" />
-                            <TextBlock Text="Everything you need for clean, fast desktop workflows."
+                            <TextBlock Text="常用桌面工具集中管理，开箱即用。"
                                        Opacity="0.58"
                                        HorizontalAlignment="Center" />
                         </StackPanel>
                     </Border>
 
                     <UniformGrid Rows="1" Columns="4" Margin="0,0,0,10">
-                        <Button Command="{Binding ShowNetworkCommand}" Margin="0,0,14,0" Style="{StaticResource MaterialDesignFlatButton}">
+                        <Button Command="{Binding ShowNetworkCommand}" Margin="0,0,14,0" Style="{StaticResource HomeShortcutButtonStyle}">
                             <materialDesign:Card Padding="18" Margin="0">
                                 <StackPanel>
                                     <Border Width="34" Height="34" Background="{DynamicResource BrushAccentBlue}" CornerRadius="17">
                                         <materialDesign:PackIcon Kind="LanConnect" Width="18" Height="18" Foreground="White" VerticalAlignment="Center" HorizontalAlignment="Center" />
                                     </Border>
-                                    <TextBlock Text="Current Network" FontWeight="SemiBold" Margin="0,12,0,4" />
-                                    <TextBlock Text="Quick view for adapters, gateway, and DNS status." Opacity="0.62" TextWrapping="Wrap" />
+                                    <TextBlock Text="当前网络" FontWeight="SemiBold" Margin="0,12,0,4" />
+                                    <TextBlock Text="快速查看网卡、网关与 DNS 状态。" Opacity="0.62" TextWrapping="Wrap" />
                                 </StackPanel>
                             </materialDesign:Card>
                         </Button>
 
-                        <Button Command="{Binding ShowSystemCommand}" Margin="0,0,14,0" Style="{StaticResource MaterialDesignFlatButton}">
+                        <Button Command="{Binding ShowSystemCommand}" Margin="0,0,14,0" Style="{StaticResource HomeShortcutButtonStyle}">
                             <materialDesign:Card Padding="18" Margin="0">
                                 <StackPanel>
                                     <Border Width="34" Height="34" Background="{DynamicResource BrushAccentRose}" CornerRadius="17">
                                         <materialDesign:PackIcon Kind="Tools" Width="18" Height="18" Foreground="White" VerticalAlignment="Center" HorizontalAlignment="Center" />
                                     </Border>
-                                    <TextBlock Text="System Optimization" FontWeight="SemiBold" Margin="0,12,0,4" />
-                                    <TextBlock Text="Cleanup, hardening, and automation entry point." Opacity="0.62" TextWrapping="Wrap" />
+                                    <TextBlock Text="系统优化" FontWeight="SemiBold" Margin="0,12,0,4" />
+                                    <TextBlock Text="清理、加固与自动化操作入口。" Opacity="0.62" TextWrapping="Wrap" />
                                 </StackPanel>
                             </materialDesign:Card>
                         </Button>
 
-                        <Button Command="{Binding ShowSqlExportCommand}" Margin="0,0,14,0" Style="{StaticResource MaterialDesignFlatButton}">
+                        <Button Command="{Binding ShowSqlExportCommand}" Margin="0,0,14,0" Style="{StaticResource HomeShortcutButtonStyle}">
                             <materialDesign:Card Padding="18" Margin="0">
                                 <StackPanel>
                                     <Border Width="34" Height="34" Background="{DynamicResource BrushAccentBlue}" CornerRadius="17">
                                         <materialDesign:PackIcon Kind="DatabaseArrowDown" Width="18" Height="18" Foreground="White" VerticalAlignment="Center" HorizontalAlignment="Center" />
                                     </Border>
-                                    <TextBlock Text="SQL Export" FontWeight="SemiBold" Margin="0,12,0,4" />
-                                    <TextBlock Text="Connect, query, and export tables to Excel." Opacity="0.62" TextWrapping="Wrap" />
+                                    <TextBlock Text="SQL 导出" FontWeight="SemiBold" Margin="0,12,0,4" />
+                                    <TextBlock Text="连接数据库、执行查询并导出 Excel。" Opacity="0.62" TextWrapping="Wrap" />
                                 </StackPanel>
                             </materialDesign:Card>
                         </Button>
 
-                        <Button Command="{Binding ShowScreenshotCommand}" Margin="0" Style="{StaticResource MaterialDesignFlatButton}">
+                        <Button Command="{Binding ShowScreenshotCommand}" Margin="0" Style="{StaticResource HomeShortcutButtonStyle}">
                             <materialDesign:Card Padding="18" Margin="0">
                                 <StackPanel>
                                     <Border Width="34" Height="34" Background="{DynamicResource BrushAccentPurple}" CornerRadius="17">
                                         <materialDesign:PackIcon Kind="CameraIris" Width="18" Height="18" Foreground="White" VerticalAlignment="Center" HorizontalAlignment="Center" />
                                     </Border>
-                                    <TextBlock Text="Screenshot Tool" FontWeight="SemiBold" Margin="0,12,0,4" />
-                                    <TextBlock Text="Capture screenshots, recordings, and audio fast." Opacity="0.62" TextWrapping="Wrap" />
+                                    <TextBlock Text="截图工具" FontWeight="SemiBold" Margin="0,12,0,4" />
+                                    <TextBlock Text="支持截图、区域录像与独立录音。" Opacity="0.62" TextWrapping="Wrap" />
                                 </StackPanel>
                             </materialDesign:Card>
                         </Button>
                     </UniformGrid>
 
-                    <TextBlock Text="Tip: use the left navigation to jump between modules quickly."
+                    <TextBlock Text="提示：可通过左侧导航快速切换功能模块。"
                                HorizontalAlignment="Center"
                                Opacity="0.45"
                                Margin="0,4,0,0" />
@@ -256,7 +279,7 @@
                                        Foreground="White" VerticalAlignment="Center"
                                        Margin="10,0,0,0" />
                         </StackPanel>
-                        <TextBlock Text="Personal Toolkit"
+                        <TextBlock Text="个人工具集"
                                    FontSize="11"
                                    Opacity="0.6"
                                    Foreground="{DynamicResource BrushSidebarTextHover}"
@@ -295,22 +318,6 @@
                         <StackPanel Orientation="Horizontal">
                             <materialDesign:PackIcon Kind="RocketLaunchOutline" Width="22" Height="22" Margin="0,0,14,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentAmber}" />
                             <TextBlock Text="启动管理" VerticalAlignment="Center" FontSize="13" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
-                        </StackPanel>
-                    </Button>
-
-                    <Button Command="{Binding ShowWireGuardCommand}">
-                        <Button.Style>
-                            <Style TargetType="Button" BasedOn="{StaticResource NavItemStyle}">
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding CurrentModule}" Value="WireGuard">
-                                        <Setter Property="Tag" Value="ActiveWireGuard" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Button.Style>
-                        <StackPanel Orientation="Horizontal">
-                            <materialDesign:PackIcon Kind="ShieldLock" Width="22" Height="22" Margin="0,0,14,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentTeal}" />
-                            <TextBlock Text="VPN" VerticalAlignment="Center" FontSize="13" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                         </StackPanel>
                     </Button>
 
@@ -433,14 +440,14 @@
                     <DockPanel>
                         <Button DockPanel.Dock="Right"
                                 Style="{StaticResource MaterialDesignIconButton}"
-                                Command="{Binding RefreshCommand}" ToolTip="Refresh">
+                                Command="{Binding RefreshCommand}" ToolTip="刷新">
                             <materialDesign:PackIcon Kind="Refresh" Width="22" Height="22" />
                         </Button>
                         <StackPanel Orientation="Horizontal">
                             <materialDesign:PackIcon Kind="LanConnect" Width="32" Height="32" Margin="0,0,14,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentBlue}" />
                             <StackPanel>
-                                <TextBlock Text="Current Network" Style="{StaticResource MaterialDesignHeadline5TextBlock}" />
-                                <TextBlock Text="Real-time adapter, IP, gateway, and DNS insights." Opacity="0.55" Margin="0,2,0,0" />
+                                <TextBlock Text="当前网络" Style="{StaticResource MaterialDesignHeadline5TextBlock}" />
+                                <TextBlock Text="实时查看网卡、IP、网关与 DNS 信息。" Opacity="0.55" Margin="0,2,0,0" />
                             </StackPanel>
                         </StackPanel>
                     </DockPanel>
@@ -514,7 +521,7 @@
                                    HorizontalAlignment="Center"
                                    Opacity="0.4"
                                    Margin="0,12,0,0" />
-                        <Button Content="Refresh"
+                        <Button Content="刷新"
                                 Style="{StaticResource MaterialDesignOutlinedButton}"
                                 Command="{Binding RefreshCommand}"
                                 Margin="0,12,0,0" />
@@ -656,11 +663,6 @@
                 <Grid.Style>
                     <Style TargetType="Grid">
                         <Setter Property="Visibility" Value="Collapsed" />
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding CurrentModule}" Value="WireGuard">
-                                <Setter Property="Visibility" Value="Visible" />
-                            </DataTrigger>
-                        </Style.Triggers>
                     </Style>
                 </Grid.Style>
 
@@ -843,8 +845,8 @@
                     <StackPanel Orientation="Horizontal">
                         <materialDesign:PackIcon Kind="Tools" Width="32" Height="32" Margin="0,0,14,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentRose}" />
                         <StackPanel>
-                            <TextBlock Text="System Optimization" Style="{StaticResource MaterialDesignHeadline5TextBlock}" />
-                            <TextBlock Text="Run approved maintenance and optimization tasks." Opacity="0.55" Margin="0,2,0,0" />
+                            <TextBlock Text="系统优化" Style="{StaticResource MaterialDesignHeadline5TextBlock}" />
+                            <TextBlock Text="执行白名单维护与优化任务。" Opacity="0.55" Margin="0,2,0,0" />
                         </StackPanel>
                     </StackPanel>
                 </Border>
@@ -1764,8 +1766,8 @@
                         <StackPanel Orientation="Horizontal">
                             <materialDesign:PackIcon Kind="CameraIris" Width="32" Height="32" Margin="0,0,14,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentPurple}" />
                             <StackPanel>
-                                <TextBlock Text="Screenshot Tool" Style="{StaticResource MaterialDesignHeadline5TextBlock}" />
-                                <TextBlock Text="Full-screen capture, recording, and audio." Opacity="0.55" Margin="0,2,0,0" />
+                                <TextBlock Text="截图工具" Style="{StaticResource MaterialDesignHeadline5TextBlock}" />
+                                <TextBlock Text="支持全屏截图、区域录像与独立录音。" Opacity="0.55" Margin="0,2,0,0" />
                             </StackPanel>
                         </StackPanel>
                     </DockPanel>

@@ -123,6 +123,21 @@
 - 新增录音独立流程（`StartAudioOnlyAsync` / `StopAudioOnlyAsync`），输出 `.m4a`（AAC）。
 - 录音首设独立目录，主界面新增“录音中 mm:ss”计时与按钮图标/文案切换。
 - 录像与录音任务互斥，避免并发启动多个 ffmpeg 进程。
+## [2026-05-11] 截图稳定性与首页本地化修复
+- 修复 `ScreenshotEditorWindow` 初始化期间 `ToggleButton.Checked` 触发 `SetMode` 导致空引用的问题，避免“编辑剪贴板截图/快捷键截图”崩溃。
+- 首页 Hero 与快捷入口文案改为中文，统一主界面语言。
+- 首页快捷入口按钮改为 `HomeShortcutButtonStyle`，避免卡片内容被固定按钮高度裁切而显示为空白。
+- 侧边栏移除 VPN 导航入口，WireGuard 面板保持隐藏，不再对外显示。
+## [2026-05-11] 截图编辑器自动缩放
+- 截图编辑器新增“缩放”滑块（10%~300%）和百分比显示，支持用户手动缩放。
+- 打开截图或工作区尺寸变化时，自动按可视区域居中适配（等比缩放并预留边距），尽量铺满工作区且不挤占工具栏操作区。
+- 缩放作用于 `CanvasZoomHost`，导出/复制仍按原始画布分辨率渲染，不受显示缩放影响。
+## [2026-05-11] 截图缩放交互优化
+- 截图编辑器支持鼠标滚轮缩放，滚轮向上放大、向下缩小（步进系数 1.1）。
+- 手动缩放（滚轮/滑块）时锁定当前视口中心点，视觉上从屏幕中心向四周扩展，避免向右下角偏移。
+## [2026-05-11] 剪贴板图片读取容错
+- 修复“编辑剪贴板截图”在部分应用复制后触发 `CLIPBRD_E_BAD_DATA` 导致全局异常的问题。
+- 读取剪贴板图片改为 `ContainsImage + GetImage` 的重试流程（3 次短重试），并在失败时给出友好提示，不再让异常冒泡到 UI 全局异常处理。
 ## [2026-05-10] ???????? / ?? / ?? / ???
 - ?? `Resources/Theme.xaml`?????????????????Card ??? Badge ???
 - ?? `Resources/Illustrations.xaml`??? HomeHero / NetworkEmpty / StartupEmpty / SystemEmpty / SqlEmpty / ScreenshotEmpty / CodexEmpty / WeChatEmpty 8 ? DrawingImage ???

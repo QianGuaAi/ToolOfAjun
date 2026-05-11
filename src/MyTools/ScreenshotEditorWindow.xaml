@@ -102,6 +102,25 @@
 
                     <Rectangle Width="1" Fill="#334" Margin="12,6"/>
 
+                    <!-- Zoom -->
+                    <TextBlock Text="缩放:" Foreground="#778899" VerticalAlignment="Center" Margin="0,0,6,0" FontSize="12"/>
+                    <Slider x:Name="SldZoom"
+                            Minimum="10"
+                            Maximum="300"
+                            Value="100"
+                            Width="90"
+                            VerticalAlignment="Center"
+                            ValueChanged="SldZoom_ValueChanged"/>
+                    <TextBlock x:Name="TxtZoom"
+                               Text="100%"
+                               Foreground="#AABDD0"
+                               VerticalAlignment="Center"
+                               Margin="6,0,0,0"
+                               MinWidth="36"
+                               FontSize="12"/>
+
+                    <Rectangle Width="1" Fill="#334" Margin="12,6"/>
+
                     <!-- Drawing tools -->
                     <ToggleButton x:Name="TglPen" Style="{StaticResource MaterialDesignActionToggleButton}"
                                   Width="36" Height="36" Margin="4,0"
@@ -147,17 +166,29 @@
         </Border>
 
         <!-- Canvas area -->
-        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
+        <ScrollViewer x:Name="WorkspaceScrollViewer"
+                      HorizontalScrollBarVisibility="Auto"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalContentAlignment="Center"
+                      VerticalContentAlignment="Center"
+                      PreviewMouseWheel="WorkspaceScrollViewer_PreviewMouseWheel"
+                      SizeChanged="WorkspaceScrollViewer_SizeChanged"
+                      ScrollChanged="WorkspaceScrollViewer_ScrollChanged"
                       Background="#111827">
-            <Grid x:Name="CanvasContainer" HorizontalAlignment="Center" VerticalAlignment="Center">
-                <Image x:Name="ScreenshotImage" Stretch="None" SnapsToDevicePixels="True"
-                       RenderOptions.BitmapScalingMode="NearestNeighbor"/>
-                <Canvas x:Name="ShapesCanvas" Background="Transparent" IsHitTestVisible="False"
-                        MouseDown="ShapesCanvas_MouseDown"
-                        MouseMove="ShapesCanvas_MouseMove"
-                        MouseUp="ShapesCanvas_MouseUp"/>
-                <InkCanvas x:Name="DrawingCanvas" Background="Transparent"
-                           EditingMode="Ink"/>
+            <Grid x:Name="CanvasZoomHost" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <Grid.LayoutTransform>
+                    <ScaleTransform x:Name="CanvasZoomTransform" ScaleX="1" ScaleY="1"/>
+                </Grid.LayoutTransform>
+                <Grid x:Name="CanvasContainer" HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <Image x:Name="ScreenshotImage" Stretch="None" SnapsToDevicePixels="True"
+                           RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                    <Canvas x:Name="ShapesCanvas" Background="Transparent" IsHitTestVisible="False"
+                            MouseDown="ShapesCanvas_MouseDown"
+                            MouseMove="ShapesCanvas_MouseMove"
+                            MouseUp="ShapesCanvas_MouseUp"/>
+                    <InkCanvas x:Name="DrawingCanvas" Background="Transparent"
+                               EditingMode="Ink"/>
+                </Grid>
             </Grid>
         </ScrollViewer>
     </DockPanel>
