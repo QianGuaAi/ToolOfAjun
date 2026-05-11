@@ -5,7 +5,7 @@
                  xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
                  xmlns:viewModels="clr-namespace:MyTools.ViewModels"
                  xmlns:tb="clr-namespace:Hardcodet.Wpf.TaskbarNotification;assembly=Hardcodet.NotifyIcon.Wpf"
-                 Title="MyTools"
+                 Title="阿君的工具"
                  Width="1180"
                  Height="760"
                  MinWidth="1080"
@@ -91,6 +91,12 @@
                                 <Setter TargetName="ActiveBar" Property="Visibility" Value="Visible" />
                                 <Setter TargetName="ActiveBar" Property="Fill" Value="{DynamicResource BrushAccentRose}" />
                             </Trigger>
+                            <Trigger Property="Tag" Value="ActiveUninstall">
+                                <Setter TargetName="Root" Property="Background" Value="{DynamicResource BrushSidebarActive}" />
+                                <Setter Property="Foreground" Value="{DynamicResource BrushSidebarTextActive}" />
+                                <Setter TargetName="ActiveBar" Property="Visibility" Value="Visible" />
+                                <Setter TargetName="ActiveBar" Property="Fill" Value="{DynamicResource BrushAccentLime}" />
+                            </Trigger>
                             <Trigger Property="Tag" Value="ActiveSqlExport">
                                 <Setter TargetName="Root" Property="Background" Value="{DynamicResource BrushSidebarActive}" />
                                 <Setter Property="Foreground" Value="{DynamicResource BrushSidebarTextActive}" />
@@ -172,7 +178,7 @@
                         </Border.Background>
                         <StackPanel HorizontalAlignment="Center">
                             <Image Source="{StaticResource HomeHero}" Width="260" Height="180" />
-                            <TextBlock Text="欢迎使用 MyTools"
+                            <TextBlock Text="欢迎使用阿君的工具"
                                        Style="{StaticResource MaterialDesignHeadline5TextBlock}"
                                        HorizontalAlignment="Center"
                                        Margin="0,10,0,4" />
@@ -248,7 +254,7 @@
         </Grid.ColumnDefinitions>
 
         <tb:TaskbarIcon x:Name="TrayIcon"
-                        ToolTipText="MyTools - 个人工具集（双击恢复窗口）"
+                        ToolTipText="阿君的工具（双击恢复窗口）"
                         Visibility="Visible"
                         MenuActivation="LeftOrRightClick"
                         ContextMenu="{StaticResource TrayMenu}"
@@ -275,15 +281,10 @@
                             <Image Source="/Resources/AppIcon.png" Width="26" Height="26"
                                    RenderOptions.BitmapScalingMode="HighQuality"
                                    VerticalAlignment="Center" />
-                            <TextBlock Text="MyTools" FontWeight="Bold" FontSize="17"
+                            <TextBlock Text="阿君的工具" FontWeight="Bold" FontSize="17"
                                        Foreground="White" VerticalAlignment="Center"
                                        Margin="10,0,0,0" />
                         </StackPanel>
-                        <TextBlock Text="个人工具集"
-                                   FontSize="11"
-                                   Opacity="0.6"
-                                   Foreground="{DynamicResource BrushSidebarTextHover}"
-                                   Margin="0,6,0,0" />
                     </StackPanel>
                 </Border>
 
@@ -334,6 +335,22 @@
                         <StackPanel Orientation="Horizontal">
                             <materialDesign:PackIcon Kind="Tools" Width="22" Height="22" Margin="0,0,14,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentRose}" />
                             <TextBlock Text="系统优化" VerticalAlignment="Center" FontSize="13" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                        </StackPanel>
+                    </Button>
+
+                    <Button Command="{Binding ShowUninstallCommand}">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource NavItemStyle}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding CurrentModule}" Value="Uninstall">
+                                        <Setter Property="Tag" Value="ActiveUninstall" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                        <StackPanel Orientation="Horizontal">
+                            <materialDesign:PackIcon Kind="PackageVariantRemove" Width="22" Height="22" Margin="0,0,14,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentLime}" />
+                            <TextBlock Text="程序卸载" VerticalAlignment="Center" FontSize="13" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                         </StackPanel>
                     </Button>
 
@@ -428,9 +445,9 @@
                 </Grid.RowDefinitions>
 
                 <Border Grid.Row="0"
-                        Margin="0,0,0,20"
+                        Margin="0,0,0,10"
                         CornerRadius="{StaticResource CornerRadiusCard}"
-                        Padding="20,16">
+                        Padding="14,10">
                     <Border.Background>
                         <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
                             <GradientStop Color="{DynamicResource BrushHeaderGradientStartColor}" Offset="0" />
@@ -529,6 +546,143 @@
                 </Grid>
             </Grid>
 
+            <Grid Margin="16">
+                <Grid.Style>
+                    <Style TargetType="Grid">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding CurrentModule}" Value="Uninstall">
+                                <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Grid.Style>
+
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <Border Grid.Row="0"
+                        Margin="0,0,0,10"
+                        CornerRadius="{StaticResource CornerRadiusCard}"
+                        Padding="14,10">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                            <GradientStop Color="{DynamicResource BrushHeaderGradientStartColor}" Offset="0" />
+                            <GradientStop Color="{DynamicResource BrushHeaderGradientEndColor}" Offset="1" />
+                        </LinearGradientBrush>
+                    </Border.Background>
+                    <DockPanel>
+                        <StackPanel DockPanel.Dock="Right"
+                                    Orientation="Horizontal"
+                                    VerticalAlignment="Center">
+                            <Border Style="{StaticResource BadgeInfo}"
+                                    Margin="0,0,12,0"
+                                    Background="{DynamicResource BrushAccentLime}">
+                                <TextBlock Text="{Binding InstalledProgramsCountText}" />
+                            </Border>
+                            <ProgressBar Style="{StaticResource MaterialDesignCircularProgressBar}"
+                                         IsIndeterminate="True"
+                                         Width="22"
+                                         Height="22"
+                                         Margin="0,0,8,0"
+                                         VerticalAlignment="Center"
+                                         Visibility="{Binding IsInstalledProgramsBusy, Converter={StaticResource BoolToVis}}" />
+                            <Button Style="{StaticResource MaterialDesignIconButton}"
+                                    Command="{Binding RefreshInstalledProgramsCommand}"
+                                    ToolTip="刷新程序列表">
+                                <materialDesign:PackIcon Kind="Refresh" Width="22" Height="22" />
+                            </Button>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <materialDesign:PackIcon Kind="PackageVariantRemove"
+                                                     Width="32"
+                                                     Height="32"
+                                                     Margin="0,0,14,0"
+                                                     VerticalAlignment="Center"
+                                                     Foreground="{DynamicResource BrushAccentLime}" />
+                            <StackPanel>
+                                <TextBlock Text="程序卸载" Style="{StaticResource MaterialDesignHeadline5TextBlock}" />
+                                <TextBlock Text="{Binding InstalledProgramsStatusMessage}" Opacity="0.55" Margin="0,2,0,0" />
+                            </StackPanel>
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+
+                <Grid Grid.Row="1">
+                    <DataGrid ItemsSource="{Binding InstalledPrograms}"
+                              AutoGenerateColumns="False"
+                              CanUserAddRows="False"
+                              CanUserDeleteRows="False"
+                              IsReadOnly="True"
+                              GridLinesVisibility="Horizontal"
+                              HeadersVisibility="Column"
+                              RowHeight="42"
+                              Style="{StaticResource MaterialDesignDataGrid}"
+                              materialDesign:DataGridAssist.CellPadding="10 4 10 4"
+                              materialDesign:DataGridAssist.ColumnHeaderPadding="10 8 10 8">
+                        <DataGrid.Columns>
+                            <DataGridTemplateColumn Header="程序" Width="2.1*">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding DisplayName}"
+                                                       FontWeight="SemiBold"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       ToolTip="{Binding DisplayName}" />
+                                            <TextBlock Text="{Binding PublisherDisplay}"
+                                                       FontSize="11"
+                                                       Opacity="0.55"
+                                                       TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTextColumn Header="版本" Width="120" Binding="{Binding VersionDisplay}" />
+                            <DataGridTextColumn Header="安装日期" Width="110" Binding="{Binding InstallDateDisplay}" />
+                            <DataGridTextColumn Header="大小" Width="90" Binding="{Binding EstimatedSizeDisplay}" />
+                            <DataGridTextColumn Header="来源" Width="120" Binding="{Binding Source}" />
+                            <DataGridTextColumn Header="安装位置" Width="1.5*" Binding="{Binding InstallLocationDisplay}" />
+                            <DataGridTemplateColumn Header="卸载" Width="86">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Button Style="{StaticResource MaterialDesignIconButton}"
+                                                Command="{Binding DataContext.UninstallProgramCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                CommandParameter="{Binding}"
+                                                ToolTip="{Binding RequiresAdminDisplay}">
+                                            <materialDesign:PackIcon Kind="TrashCanOutline"
+                                                                     Width="20"
+                                                                     Height="20"
+                                                                     Foreground="{DynamicResource BrushError}" />
+                                        </Button>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <StackPanel VerticalAlignment="Center"
+                                HorizontalAlignment="Center"
+                                Visibility="{Binding HasNoInstalledPrograms, Converter={StaticResource BoolToVis}}">
+                        <materialDesign:PackIcon Kind="PackageVariant"
+                                                 Width="76"
+                                                 Height="76"
+                                                 Opacity="0.28"
+                                                 HorizontalAlignment="Center" />
+                        <TextBlock Text="未加载可卸载程序"
+                                   Style="{StaticResource MaterialDesignSubtitle1TextBlock}"
+                                   HorizontalAlignment="Center"
+                                   Opacity="0.5"
+                                   Margin="0,12,0,0" />
+                        <Button Content="刷新列表"
+                                Style="{StaticResource MaterialDesignOutlinedButton}"
+                                Command="{Binding RefreshInstalledProgramsCommand}"
+                                Margin="0,12,0,0" />
+                    </StackPanel>
+                </Grid>
+            </Grid>
+
             <Grid Margin="20">
                 <Grid.Style>
                     <Style TargetType="Grid">
@@ -547,9 +701,9 @@
                 </Grid.RowDefinitions>
 
                 <Border Grid.Row="0"
-                        Margin="0,0,0,20"
+                        Margin="0,0,0,8"
                         CornerRadius="{StaticResource CornerRadiusCard}"
-                        Padding="20,16">
+                        Padding="12,8">
                     <Border.Background>
                         <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
                             <GradientStop Color="{DynamicResource BrushHeaderGradientStartColor}" Offset="0" />
@@ -815,7 +969,7 @@
                 </Grid>
             </Grid>
 
-            <Grid Margin="20">
+            <Grid Margin="16">
                 <Grid.Style>
                     <Style TargetType="Grid">
                         <Setter Property="Visibility" Value="Collapsed" />
@@ -833,9 +987,9 @@
                 </Grid.RowDefinitions>
 
                 <Border Grid.Row="0"
-                        Margin="0,0,0,20"
+                        Margin="0,0,0,8"
                         CornerRadius="{StaticResource CornerRadiusCard}"
-                        Padding="20,16">
+                        Padding="12,8">
                     <Border.Background>
                         <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
                             <GradientStop Color="{DynamicResource BrushHeaderGradientStartColor}" Offset="0" />
@@ -843,50 +997,53 @@
                         </LinearGradientBrush>
                     </Border.Background>
                     <StackPanel Orientation="Horizontal">
-                        <materialDesign:PackIcon Kind="Tools" Width="32" Height="32" Margin="0,0,14,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentRose}" />
+                        <materialDesign:PackIcon Kind="Tools" Width="24" Height="24" Margin="0,0,10,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentRose}" />
                         <StackPanel>
-                            <TextBlock Text="系统优化" Style="{StaticResource MaterialDesignHeadline5TextBlock}" />
-                            <TextBlock Text="执行白名单维护与优化任务。" Opacity="0.55" Margin="0,2,0,0" />
+                            <TextBlock Text="系统优化" Style="{StaticResource MaterialDesignHeadline6TextBlock}" />
+                            <TextBlock Text="执行白名单维护与优化任务。" FontSize="12" Opacity="0.55" Margin="0,1,0,0" />
                         </StackPanel>
                     </StackPanel>
                 </Border>
 
                 <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
                     <StackPanel>
-                        <materialDesign:Card Padding="20" Margin="0,0,0,20">
+                        <materialDesign:Card Padding="14,10" Margin="0,0,0,8">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel>
-                                    <TextBlock Text="锁定 Windows 10 版本 (22H2)" Style="{StaticResource MaterialDesignSubtitle1TextBlock}" FontWeight="Bold" />
+                                    <TextBlock Text="锁定 Windows 10 版本 (22H2)" Style="{StaticResource MaterialDesignSubtitle2TextBlock}" FontWeight="Bold" />
                                     <TextBlock Text="防止系统自动升级到 Windows 11 或更高版本，适用于希望继续停留在 Win10 22H2 的用户。"
                                                Style="{StaticResource MaterialDesignBody2TextBlock}"
+                                               FontSize="12"
                                                Opacity="0.6"
                                                TextWrapping="Wrap"
-                                               Margin="0,5,20,0" />
+                                               Margin="0,3,18,0" />
                                 </StackPanel>
                                 <Button Grid.Column="1"
+                                        Width="86"
+                                        Height="32"
                                         Content="执行锁定"
                                         Command="{Binding LockWin10Command}"
                                         Style="{StaticResource MaterialDesignRaisedButton}" />
                             </Grid>
                         </materialDesign:Card>
 
-                        <materialDesign:Card Padding="20" Margin="0,0,0,20">
+                        <materialDesign:Card Padding="14,10" Margin="0,0,0,8">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel>
-                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
                                         <TextBlock Text="Windows Defender 实时防护"
-                                                   Style="{StaticResource MaterialDesignSubtitle1TextBlock}"
+                                                   Style="{StaticResource MaterialDesignSubtitle2TextBlock}"
                                                    FontWeight="Bold"
                                                    VerticalAlignment="Center" />
-                                        <Border CornerRadius="4" Padding="8,2" Margin="12,0,0,0" VerticalAlignment="Center">
+                                        <Border CornerRadius="4" Padding="6,1" Margin="8,0,0,0" VerticalAlignment="Center">
                                             <Border.Style>
                                                 <Style TargetType="Border">
                                                     <Setter Property="Background" Value="#2E7D32" />
@@ -913,12 +1070,13 @@
                                     </StackPanel>
                                     <TextBlock Text="关闭或恢复 Windows 安全中心的实时防护。Win11 需先在安全中心手动关闭「篡改保护」，否则命令将被拒绝。"
                                                Style="{StaticResource MaterialDesignBody2TextBlock}"
+                                               FontSize="12"
                                                Opacity="0.6"
                                                TextWrapping="Wrap"
-                                               Margin="0,0,20,0" />
+                                               Margin="0,0,18,0" />
                                 </StackPanel>
                                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                                    <Button Width="90" Margin="0,0,8,0" Command="{Binding ToggleDefenderCommand}">
+                                    <Button Width="86" Height="32" Margin="0,0,6,0" Command="{Binding ToggleDefenderCommand}">
                                         <Button.Style>
                                             <Style TargetType="Button" BasedOn="{StaticResource MaterialDesignOutlinedButton}">
                                                 <Setter Property="Content" Value="关闭防护" />
@@ -935,27 +1093,29 @@
                                         </Button.Style>
                                     </Button>
                                     <Button Style="{StaticResource MaterialDesignIconButton}"
+                                            Width="32"
+                                            Height="32"
                                             Command="{Binding RefreshSystemStatusCommand}"
                                             ToolTip="刷新状态">
-                                        <materialDesign:PackIcon Kind="Refresh" />
+                                        <materialDesign:PackIcon Kind="Refresh" Width="20" Height="20" />
                                     </Button>
                                 </StackPanel>
                             </Grid>
                         </materialDesign:Card>
 
-                        <materialDesign:Card Padding="20" Margin="0,0,0,20">
+                        <materialDesign:Card Padding="14,10" Margin="0,0,0,8">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel>
-                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
                                         <TextBlock Text="Windows 自动更新"
-                                                   Style="{StaticResource MaterialDesignSubtitle1TextBlock}"
+                                                   Style="{StaticResource MaterialDesignSubtitle2TextBlock}"
                                                    FontWeight="Bold"
                                                    VerticalAlignment="Center" />
-                                        <Border CornerRadius="4" Padding="8,2" Margin="12,0,0,0" VerticalAlignment="Center">
+                                        <Border CornerRadius="4" Padding="6,1" Margin="8,0,0,0" VerticalAlignment="Center">
                                             <Border.Style>
                                                 <Style TargetType="Border">
                                                     <Setter Property="Background" Value="#1565C0" />
@@ -982,12 +1142,13 @@
                                     </StackPanel>
                                     <TextBlock Text="停止 Windows 后台自动更新，或手动触发立即检查并安装所有可用更新（以前台最高优先级下载安装，速度最快）。"
                                                Style="{StaticResource MaterialDesignBody2TextBlock}"
+                                               FontSize="12"
                                                Opacity="0.6"
                                                TextWrapping="Wrap"
-                                               Margin="0,0,20,0" />
+                                               Margin="0,0,18,0" />
                                 </StackPanel>
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,0,0">
-                                    <Button Width="90" Margin="0,0,0,8" Command="{Binding ToggleAutoUpdateCommand}">
+                                    <Button Width="86" Height="32" Margin="0,0,0,6" Command="{Binding ToggleAutoUpdateCommand}">
                                         <Button.Style>
                                             <Style TargetType="Button" BasedOn="{StaticResource MaterialDesignOutlinedButton}">
                                                 <Setter Property="Content" Value="停止更新" />
@@ -1003,7 +1164,8 @@
                                             </Style>
                                         </Button.Style>
                                     </Button>
-                                    <Button Width="90"
+                                    <Button Width="86"
+                                            Height="32"
                                             Content="立即更新"
                                             Command="{Binding TriggerUpdateNowCommand}"
                                             Style="{StaticResource MaterialDesignRaisedButton}" />
@@ -1015,53 +1177,63 @@
                                    Style="{StaticResource MaterialDesignCaptionTextBlock}"
                                    Opacity="0.7"
                                    TextWrapping="Wrap"
-                                   Margin="4,0,0,16" />
+                                   Margin="4,0,0,8" />
 
-                        <materialDesign:Card Padding="20" Background="{DynamicResource PrimaryHueLightBrush}">
-                            <StackPanel>
-                                <TextBlock Text="温馨提示" Style="{StaticResource MaterialDesignSubtitle1TextBlock}" Foreground="White" FontWeight="Bold" />
+                        <materialDesign:Card Padding="14,10" Margin="0,0,0,8" Background="{DynamicResource PrimaryHueLightBrush}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="温馨提示" Style="{StaticResource MaterialDesignSubtitle2TextBlock}" Foreground="White" FontWeight="Bold" Margin="0,0,14,0" />
                                 <TextBlock Text="部分优化操作需要管理员权限，执行过程中请留意系统弹出的 UAC 授权窗口。"
+                                           Grid.Column="1"
                                            Style="{StaticResource MaterialDesignBody2TextBlock}"
+                                           FontSize="12"
                                            Foreground="White"
                                            Opacity="0.9"
                                            TextWrapping="Wrap"
-                                           Margin="0,5,0,0" />
-                            </StackPanel>
+                                           VerticalAlignment="Center" />
+                            </Grid>
                         </materialDesign:Card>
 
-                        <materialDesign:Card Padding="20" Margin="0,16,0,16">
+                        <materialDesign:Card Padding="14,10" Margin="0,0,0,8">
                             <StackPanel>
                                 <TextBlock Text="自动优化与报告"
-                                           Style="{StaticResource MaterialDesignSubtitle1TextBlock}"
+                                           Style="{StaticResource MaterialDesignSubtitle2TextBlock}"
                                            FontWeight="Bold" />
                                 <TextBlock Text="按白名单步骤自动执行系统优化，完成后自动生成可追溯报告。"
                                            Style="{StaticResource MaterialDesignBody2TextBlock}"
+                                           FontSize="12"
                                            Opacity="0.65"
-                                           Margin="0,6,0,12"
+                                           Margin="0,3,0,8"
                                            TextWrapping="Wrap" />
                                 <StackPanel Orientation="Horizontal">
                                     <Button Content="开始自动优化"
+                                            Height="32"
                                             Style="{StaticResource MaterialDesignRaisedButton}"
                                             Command="{Binding StartAutoOptimizeCommand}" />
-                                    <ProgressBar Width="28" Height="28"
-                                                 Margin="12,0,0,0"
+                                    <ProgressBar Width="22" Height="22"
+                                                 Margin="10,0,0,0"
                                                  IsIndeterminate="True"
                                                  Visibility="{Binding IsAutoOptimizeBusy, Converter={StaticResource BoolToVis}}"
                                                  Style="{StaticResource MaterialDesignCircularProgressBar}" />
                                 </StackPanel>
                                 <TextBlock Text="{Binding AutoOptimizeStatusMessage}"
                                            Style="{StaticResource MaterialDesignCaptionTextBlock}"
-                                           Margin="0,10,0,10"
+                                           Margin="0,6,0,6"
                                            TextWrapping="Wrap" />
 
                                 <DataGrid ItemsSource="{Binding OptimizationReports}"
                                           AutoGenerateColumns="False"
                                           CanUserAddRows="False"
                                           SelectionMode="Single"
-                                          MinHeight="180"
+                                          MinHeight="120"
+                                          MaxHeight="220"
+                                          VerticalScrollBarVisibility="Auto"
                                           GridLinesVisibility="Horizontal"
                                           HeadersVisibility="Column"
-                                          Margin="0,0,0,10">
+                                          Margin="0,0,0,6">
                                     <DataGrid.Columns>
                                         <DataGridTemplateColumn Header="选择" Width="58">
                                             <DataGridTemplateColumn.CellTemplate>
@@ -1091,32 +1263,36 @@
                                 </DataGrid>
 
                                 <Button Content="删除选中"
-                                        Width="110"
+                                        Width="96"
+                                        Height="32"
                                         HorizontalAlignment="Right"
                                         Command="{Binding DeleteSelectedReportsCommand}" />
                             </StackPanel>
                         </materialDesign:Card>
 
-                        <materialDesign:Card Padding="20" Margin="0,0,0,16">
+                        <materialDesign:Card Padding="14,10" Margin="0,0,0,8">
                             <StackPanel>
                                 <TextBlock Text="垃圾清理"
-                                           Style="{StaticResource MaterialDesignSubtitle1TextBlock}"
+                                           Style="{StaticResource MaterialDesignSubtitle2TextBlock}"
                                            FontWeight="Bold" />
                                 <TextBlock Text="扫描并清理白名单目录中的临时垃圾文件，执行前会进行二次确认。"
                                            Style="{StaticResource MaterialDesignBody2TextBlock}"
+                                           FontSize="12"
                                            Opacity="0.65"
-                                           Margin="0,6,0,12"
+                                           Margin="0,3,0,8"
                                            TextWrapping="Wrap" />
 
-                                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                                     <Button Content="开始扫描"
+                                            Height="32"
                                             Style="{StaticResource MaterialDesignRaisedButton}"
                                             Command="{Binding StartJunkScanCommand}" />
                                     <Button Content="立即清理"
-                                            Margin="10,0,0,0"
+                                            Height="32"
+                                            Margin="8,0,0,0"
                                             Command="{Binding RunJunkCleanupCommand}" />
-                                    <ProgressBar Width="28" Height="28"
-                                                 Margin="12,0,0,0"
+                                    <ProgressBar Width="22" Height="22"
+                                                 Margin="10,0,0,0"
                                                  IsIndeterminate="True"
                                                  Visibility="{Binding IsJunkBusy, Converter={StaticResource BoolToVis}}"
                                                  Style="{StaticResource MaterialDesignCircularProgressBar}" />
@@ -1125,12 +1301,14 @@
                                 <TextBlock Text="{Binding JunkStatusMessage}"
                                            Style="{StaticResource MaterialDesignCaptionTextBlock}"
                                            TextWrapping="Wrap"
-                                           Margin="0,0,0,10" />
+                                           Margin="0,0,0,6" />
 
                                 <DataGrid ItemsSource="{Binding JunkCandidates}"
                                           AutoGenerateColumns="False"
                                           CanUserAddRows="False"
-                                          MinHeight="140"
+                                          MinHeight="110"
+                                          MaxHeight="210"
+                                          VerticalScrollBarVisibility="Auto"
                                           GridLinesVisibility="Horizontal">
                                     <DataGrid.Columns>
                                         <DataGridTemplateColumn Header="选择" Width="58">
@@ -1149,18 +1327,19 @@
                             </StackPanel>
                         </materialDesign:Card>
 
-                        <materialDesign:Card Padding="20" Margin="0,0,0,16">
+                        <materialDesign:Card Padding="14,10" Margin="0,0,0,8">
                             <StackPanel>
                                 <TextBlock Text="微信清理"
-                                           Style="{StaticResource MaterialDesignSubtitle1TextBlock}"
+                                           Style="{StaticResource MaterialDesignSubtitle2TextBlock}"
                                            FontWeight="Bold" />
                                 <TextBlock Text="微信运行中清理可能导致部分图片/视频缩略图丢失，建议先关闭微信后再清理。"
                                            Foreground="#C62828"
                                            Style="{StaticResource MaterialDesignBody2TextBlock}"
+                                           FontSize="12"
                                            TextWrapping="Wrap"
-                                           Margin="0,6,0,12" />
+                                           Margin="0,3,0,8" />
 
-                                <Grid Margin="0,0,0,8">
+                                <Grid Margin="0,0,0,6">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="2*" />
                                         <ColumnDefinition Width="Auto" />
@@ -1176,20 +1355,20 @@
                                               DisplayMemberPath="WxIdOrUserName" />
                                 </Grid>
 
-                                <WrapPanel Margin="0,0,0,10">
-                                    <CheckBox Content="文字" IsChecked="{Binding WeChatCleanupIncludeText}" Margin="0,0,12,6" />
-                                    <CheckBox Content="图像" IsChecked="{Binding WeChatCleanupIncludeImage}" Margin="0,0,12,6" />
-                                    <CheckBox Content="视频" IsChecked="{Binding WeChatCleanupIncludeVideo}" Margin="0,0,12,6" />
-                                    <CheckBox Content="语音" IsChecked="{Binding WeChatCleanupIncludeVoice}" Margin="0,0,12,6" />
-                                    <CheckBox Content="其它文件" IsChecked="{Binding WeChatCleanupIncludeFile}" Margin="0,0,12,6" />
-                                    <CheckBox Content="缓存" IsChecked="{Binding WeChatCleanupIncludeCache}" Margin="0,0,12,6" />
+                                <WrapPanel Margin="0,0,0,6">
+                                    <CheckBox Content="文字" IsChecked="{Binding WeChatCleanupIncludeText}" Margin="0,0,10,4" />
+                                    <CheckBox Content="图像" IsChecked="{Binding WeChatCleanupIncludeImage}" Margin="0,0,10,4" />
+                                    <CheckBox Content="视频" IsChecked="{Binding WeChatCleanupIncludeVideo}" Margin="0,0,10,4" />
+                                    <CheckBox Content="语音" IsChecked="{Binding WeChatCleanupIncludeVoice}" Margin="0,0,10,4" />
+                                    <CheckBox Content="其它文件" IsChecked="{Binding WeChatCleanupIncludeFile}" Margin="0,0,10,4" />
+                                    <CheckBox Content="缓存" IsChecked="{Binding WeChatCleanupIncludeCache}" Margin="0,0,10,4" />
                                 </WrapPanel>
 
-                                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
-                                    <Button Content="扫描" Command="{Binding ScanWeChatCleanupCommand}" Style="{StaticResource MaterialDesignRaisedButton}" />
-                                    <Button Content="开始清理" Margin="10,0,0,0" Command="{Binding StartWeChatCleanupCommand}" />
-                                    <ProgressBar Width="28" Height="28"
-                                                 Margin="12,0,0,0"
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                    <Button Content="扫描" Height="32" Command="{Binding ScanWeChatCleanupCommand}" Style="{StaticResource MaterialDesignRaisedButton}" />
+                                    <Button Content="开始清理" Height="32" Margin="8,0,0,0" Command="{Binding StartWeChatCleanupCommand}" />
+                                    <ProgressBar Width="22" Height="22"
+                                                 Margin="10,0,0,0"
                                                  IsIndeterminate="True"
                                                  Visibility="{Binding IsWeChatCleanupBusy, Converter={StaticResource BoolToVis}}"
                                                  Style="{StaticResource MaterialDesignCircularProgressBar}" />
@@ -1198,12 +1377,14 @@
                                 <TextBlock Text="{Binding WeChatCleanupStatusMessage}"
                                            Style="{StaticResource MaterialDesignCaptionTextBlock}"
                                            TextWrapping="Wrap"
-                                           Margin="0,0,0,10" />
+                                           Margin="0,0,0,6" />
 
                                 <DataGrid ItemsSource="{Binding WeChatCleanupCandidates}"
                                           AutoGenerateColumns="False"
                                           CanUserAddRows="False"
-                                          MinHeight="160"
+                                          MinHeight="120"
+                                          MaxHeight="220"
+                                          VerticalScrollBarVisibility="Auto"
                                           GridLinesVisibility="Horizontal">
                                     <DataGrid.Columns>
                                         <DataGridTemplateColumn Header="选择" Width="58">
@@ -1222,18 +1403,19 @@
                             </StackPanel>
                         </materialDesign:Card>
 
-                        <materialDesign:Card Padding="20" Margin="0,0,0,16">
+                        <materialDesign:Card Padding="14,10" Margin="0,0,0,8">
                             <StackPanel>
                                 <TextBlock Text="微信备份"
-                                           Style="{StaticResource MaterialDesignSubtitle1TextBlock}"
+                                           Style="{StaticResource MaterialDesignSubtitle2TextBlock}"
                                            FontWeight="Bold" />
                                 <TextBlock Text="按日期和类别备份为单个 ZIP，包含 manifest.json 与 SHA256 校验信息。"
                                            Style="{StaticResource MaterialDesignBody2TextBlock}"
+                                           FontSize="12"
                                            Opacity="0.65"
-                                           Margin="0,6,0,12"
+                                           Margin="0,3,0,8"
                                            TextWrapping="Wrap" />
 
-                                <Grid Margin="0,0,0,8">
+                                <Grid Margin="0,0,0,6">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="2*" />
                                         <ColumnDefinition Width="Auto" />
@@ -1249,25 +1431,27 @@
                                               DisplayMemberPath="WxIdOrUserName" />
                                 </Grid>
 
-                                <WrapPanel Margin="0,0,0,10">
-                                    <CheckBox Content="文字" IsChecked="{Binding WeChatBackupIncludeText}" Margin="0,0,12,6" />
-                                    <CheckBox Content="图像" IsChecked="{Binding WeChatBackupIncludeImage}" Margin="0,0,12,6" />
-                                    <CheckBox Content="视频" IsChecked="{Binding WeChatBackupIncludeVideo}" Margin="0,0,12,6" />
-                                    <CheckBox Content="语音" IsChecked="{Binding WeChatBackupIncludeVoice}" Margin="0,0,12,6" />
-                                    <CheckBox Content="其它文件" IsChecked="{Binding WeChatBackupIncludeFile}" Margin="0,0,12,6" />
-                                    <CheckBox Content="缓存" IsChecked="{Binding WeChatBackupIncludeCache}" Margin="0,0,12,6" />
+                                <WrapPanel Margin="0,0,0,6">
+                                    <CheckBox Content="文字" IsChecked="{Binding WeChatBackupIncludeText}" Margin="0,0,10,4" />
+                                    <CheckBox Content="图像" IsChecked="{Binding WeChatBackupIncludeImage}" Margin="0,0,10,4" />
+                                    <CheckBox Content="视频" IsChecked="{Binding WeChatBackupIncludeVideo}" Margin="0,0,10,4" />
+                                    <CheckBox Content="语音" IsChecked="{Binding WeChatBackupIncludeVoice}" Margin="0,0,10,4" />
+                                    <CheckBox Content="其它文件" IsChecked="{Binding WeChatBackupIncludeFile}" Margin="0,0,10,4" />
+                                    <CheckBox Content="缓存" IsChecked="{Binding WeChatBackupIncludeCache}" Margin="0,0,10,4" />
                                 </WrapPanel>
 
-                                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                                     <Button Content="选择保存目录"
+                                            Height="32"
                                             Command="{Binding SelectWeChatBackupOutputFolderCommand}"
                                             Style="{StaticResource MaterialDesignOutlinedButton}" />
                                     <Button Content="开始备份"
-                                            Margin="10,0,0,0"
+                                            Height="32"
+                                            Margin="8,0,0,0"
                                             Command="{Binding StartWeChatBackupCommand}"
                                             Style="{StaticResource MaterialDesignRaisedButton}" />
-                                    <ProgressBar Width="28" Height="28"
-                                                 Margin="12,0,0,0"
+                                    <ProgressBar Width="22" Height="22"
+                                                 Margin="10,0,0,0"
                                                  IsIndeterminate="True"
                                                  Visibility="{Binding IsWeChatBackupBusy, Converter={StaticResource BoolToVis}}"
                                                  Style="{StaticResource MaterialDesignCircularProgressBar}" />
@@ -1279,47 +1463,51 @@
                                            TextWrapping="Wrap" />
                                 <TextBlock Text="{Binding WeChatBackupStatusMessage}"
                                            Style="{StaticResource MaterialDesignCaptionTextBlock}"
-                                           Margin="0,6,0,0"
+                                           Margin="0,4,0,0"
                                            TextWrapping="Wrap" />
                             </StackPanel>
                         </materialDesign:Card>
 
-                        <materialDesign:Card Padding="20">
+                        <materialDesign:Card Padding="14,10">
                             <StackPanel>
                                 <TextBlock Text="微信恢复"
-                                           Style="{StaticResource MaterialDesignSubtitle1TextBlock}"
+                                           Style="{StaticResource MaterialDesignSubtitle2TextBlock}"
                                            FontWeight="Bold" />
                                 <TextBlock Text="从备份 ZIP 读取 manifest 后恢复到原路径或自定义目录；同名文件自动改名防覆盖。"
                                            Style="{StaticResource MaterialDesignBody2TextBlock}"
+                                           FontSize="12"
                                            Opacity="0.65"
-                                           Margin="0,6,0,12"
+                                           Margin="0,3,0,8"
                                            TextWrapping="Wrap" />
 
-                                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                                     <Button Content="选择备份文件"
+                                            Height="32"
                                             Command="{Binding SelectWeChatRestoreZipCommand}"
                                             Style="{StaticResource MaterialDesignOutlinedButton}" />
                                     <Button Content="选择恢复目录"
-                                            Margin="10,0,0,0"
+                                            Height="32"
+                                            Margin="8,0,0,0"
                                             Command="{Binding SelectWeChatRestoreTargetRootCommand}"
                                             IsEnabled="{Binding RestoreToCustom}"
                                             Style="{StaticResource MaterialDesignOutlinedButton}" />
                                     <Button Content="开始恢复"
-                                            Margin="10,0,0,0"
+                                            Height="32"
+                                            Margin="8,0,0,0"
                                             Command="{Binding StartWeChatRestoreCommand}"
                                             Style="{StaticResource MaterialDesignRaisedButton}" />
-                                    <ProgressBar Width="28" Height="28"
-                                                 Margin="12,0,0,0"
+                                    <ProgressBar Width="22" Height="22"
+                                                 Margin="10,0,0,0"
                                                  IsIndeterminate="True"
                                                  Visibility="{Binding IsWeChatRestoreBusy, Converter={StaticResource BoolToVis}}"
                                                  Style="{StaticResource MaterialDesignCircularProgressBar}" />
                                 </StackPanel>
 
-                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                                     <RadioButton Content="恢复到原微信目录"
-                                                 IsChecked="{Binding RestoreToOriginal, Mode=TwoWay}"
-                                                 GroupName="RestoreMode"
-                                                 Margin="0,0,20,0" />
+                                                  IsChecked="{Binding RestoreToOriginal, Mode=TwoWay}"
+                                                  GroupName="RestoreMode"
+                                                  Margin="0,0,16,0" />
                                     <RadioButton Content="恢复到自定义目录"
                                                  IsChecked="{Binding RestoreToCustom, Mode=TwoWay}"
                                                  GroupName="RestoreMode" />
@@ -1332,15 +1520,15 @@
                                 <TextBlock Text="{Binding WeChatRestoreTargetRoot}"
                                            Style="{StaticResource MaterialDesignCaptionTextBlock}"
                                            Opacity="0.75"
-                                           Margin="0,4,0,0"
+                                           Margin="0,3,0,0"
                                            TextWrapping="Wrap" />
                                 <TextBlock Text="{Binding WeChatRestoreManifestSummary}"
                                            Style="{StaticResource MaterialDesignCaptionTextBlock}"
-                                           Margin="0,8,0,0"
+                                           Margin="0,5,0,0"
                                            TextWrapping="Wrap" />
                                 <TextBlock Text="{Binding WeChatRestoreStatusMessage}"
                                            Style="{StaticResource MaterialDesignCaptionTextBlock}"
-                                           Margin="0,8,0,0"
+                                           Margin="0,5,0,0"
                                            TextWrapping="Wrap" />
                             </StackPanel>
                         </materialDesign:Card>
@@ -1378,17 +1566,17 @@
                     <DockPanel>
                         <Border DockPanel.Dock="Right"
                                 Margin="16,0,0,0"
-                                Padding="10,4"
+                                Padding="8,3"
                                 CornerRadius="12"
                                 Background="#1F1976D2"
                                 VerticalAlignment="Center">
                             <TextBlock Text="SQL Server / PostgreSQL / MySQL" Foreground="#1976D2" FontWeight="SemiBold" />
                         </Border>
                         <StackPanel Orientation="Horizontal">
-                            <materialDesign:PackIcon Kind="DatabaseArrowDown" Width="32" Height="32" Margin="0,0,14,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentBlue}" />
+                            <materialDesign:PackIcon Kind="DatabaseArrowDown" Width="24" Height="24" Margin="0,0,10,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentBlue}" />
                             <StackPanel>
-                                <TextBlock Text="SQL Export Toolkit" Style="{StaticResource MaterialDesignHeadline5TextBlock}" />
-                                <TextBlock Text="Batch export database tables to .xlsx." Opacity="0.55" Margin="0,2,0,0" />
+                                <TextBlock Text="SQL Export Toolkit" Style="{StaticResource MaterialDesignHeadline6TextBlock}" />
+                                <TextBlock Text="Batch export database tables to .xlsx." Opacity="0.55" FontSize="12" Margin="0,1,0,0" />
                             </StackPanel>
                         </StackPanel>
                     </DockPanel>
@@ -1397,11 +1585,10 @@
                 <Grid Grid.Row="1">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
 
-                    <materialDesign:Card Padding="20" Margin="0,0,0,16">
+                    <materialDesign:Card Padding="12" Margin="0,0,0,8">
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" />
@@ -1409,42 +1596,45 @@
                                 <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="2*" />
-                                <ColumnDefinition Width="120" />
-                                <ColumnDefinition Width="1.4*" />
-                                <ColumnDefinition Width="1.4*" />
+                                <ColumnDefinition Width="1.1*" />
+                                <ColumnDefinition Width="1.7*" />
+                                <ColumnDefinition Width="86" />
+                                <ColumnDefinition Width="1.25*" />
+                                <ColumnDefinition Width="1.25*" />
                             </Grid.ColumnDefinitions>
 
-                            <StackPanel Grid.Row="0"
-                                        Grid.Column="0"
-                                        Margin="0,0,12,12">
-                                <ComboBox Margin="0,0,0,8"
-                                          ItemsSource="{Binding SqlProviderOptions}"
-                                          SelectedValuePath="Kind"
-                                          DisplayMemberPath="DisplayName"
-                                          SelectedValue="{Binding SelectedSqlProvider, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                          Style="{StaticResource MaterialDesignFloatingHintComboBox}"
-                                          materialDesign:HintAssist.Hint="数据库类型" />
-                                <ComboBox IsEditable="True"
-                                          IsReadOnly="False"
-                                          IsTextSearchEnabled="False"
-                                          StaysOpenOnEdit="True"
-                                          ItemsSource="{Binding SqlServerAddressHistory}"
-                                          Text="{Binding SqlServerAddress, UpdateSourceTrigger=PropertyChanged}"
-                                          Style="{StaticResource MaterialDesignFloatingHintComboBox}"
-                                          materialDesign:HintAssist.Hint="服务器地址或 IP" />
-                            </StackPanel>
+                            <ComboBox Grid.Row="0"
+                                      Grid.Column="0"
+                                      Margin="0,0,8,6"
+                                      ItemsSource="{Binding SqlProviderOptions}"
+                                      SelectedValuePath="Kind"
+                                      DisplayMemberPath="DisplayName"
+                                      SelectedValue="{Binding SelectedSqlProvider, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                      Style="{StaticResource MaterialDesignFloatingHintComboBox}"
+                                      materialDesign:HintAssist.Hint="数据库类型" />
+
+                            <ComboBox Grid.Row="0"
+                                      Grid.Column="1"
+                                      Margin="0,0,8,6"
+                                      IsEditable="True"
+                                      IsReadOnly="False"
+                                      IsTextSearchEnabled="False"
+                                      StaysOpenOnEdit="True"
+                                      ItemsSource="{Binding SqlServerAddressHistory}"
+                                      Text="{Binding SqlServerAddress, UpdateSourceTrigger=PropertyChanged}"
+                                      Style="{StaticResource MaterialDesignFloatingHintComboBox}"
+                                      materialDesign:HintAssist.Hint="服务器地址或 IP" />
 
                             <TextBox Grid.Row="0"
-                             Grid.Column="1"
-                             Margin="0,0,12,12"
-                             Text="{Binding SqlPort, UpdateSourceTrigger=PropertyChanged}"
-                             Style="{StaticResource MaterialDesignFloatingHintTextBox}"
+                                     Grid.Column="2"
+                                     Margin="0,0,8,6"
+                                     Text="{Binding SqlPort, UpdateSourceTrigger=PropertyChanged}"
+                                     Style="{StaticResource MaterialDesignFloatingHintTextBox}"
                                      materialDesign:HintAssist.Hint="{Binding SqlPortHint}" />
 
                             <ComboBox Grid.Row="0"
-                                      Grid.Column="2"
-                                      Margin="0,0,12,12"
+                                      Grid.Column="3"
+                                      Margin="0,0,8,6"
                                       IsEditable="True"
                                       IsTextSearchEnabled="False"
                                       ItemsSource="{Binding SqlUsernameHistory}"
@@ -1453,8 +1643,8 @@
                                       materialDesign:HintAssist.Hint="用户名" />
 
                             <Grid Grid.Row="0"
-                                  Grid.Column="3"
-                                  Margin="0,0,0,12">
+                                  Grid.Column="4"
+                                  Margin="0,0,0,6">
                                 <PasswordBox x:Name="SqlPasswordBox"
                                              Padding="0,0,38,0"
                                              Style="{StaticResource MaterialDesignFloatingHintPasswordBox}"
@@ -1489,7 +1679,7 @@
                             <ComboBox Grid.Row="1"
                                       Grid.Column="0"
                                       Grid.ColumnSpan="2"
-                                      Margin="0,0,12,12"
+                                      Margin="0,0,8,6"
                                       ItemsSource="{Binding SqlDatabaseList}"
                                       SelectedItem="{Binding SelectedSqlDatabase}"
                                       DisplayMemberPath="Name"
@@ -1499,7 +1689,7 @@
                             <ComboBox Grid.Row="1"
                                       Grid.Column="2"
                                       Grid.ColumnSpan="2"
-                                      Margin="0,0,0,12"
+                                      Margin="0,0,8,6"
                                       IsEditable="True"
                                       IsTextSearchEnabled="False"
                                       StaysOpenOnEdit="True"
@@ -1510,82 +1700,81 @@
                                       Style="{StaticResource MaterialDesignFilledComboBox}"
                                       materialDesign:HintAssist.Hint="数据表" />
 
-                            <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="4" Orientation="Horizontal">
-                                <Button Width="150"
-                                        Height="42"
-                                        Margin="0,0,12,0"
+                            <StackPanel Grid.Row="1" Grid.Column="4" Orientation="Horizontal">
+                                <Button Width="88"
+                                        Height="34"
+                                        Margin="0,0,8,0"
                                         Command="{Binding TestSqlConnectionCommand}"
                                         Style="{StaticResource MaterialDesignRaisedButton}"
                                         Content="测试连接" />
 
-                                <Button Width="160"
-                                        Height="42"
+                                <Button Width="104"
+                                        Height="34"
                                         Command="{Binding ExportSqlTableCommand}"
                                         Style="{StaticResource MaterialDesignRaisedAccentButton}"
                                         Content="导出为 Excel" />
                             </StackPanel>
-                        </Grid>
-                    </materialDesign:Card>
 
-                    <materialDesign:Card Grid.Row="1" Padding="16" Margin="0,0,0,16">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel>
-                                <TextBlock Text="状态" FontWeight="Bold" />
-                                <Border Style="{StaticResource BadgeInfo}" Margin="0,8,0,0">
+                            <Grid Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="5" Margin="0,2,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Border Style="{StaticResource BadgeInfo}" Padding="8,2">
                                     <StackPanel Orientation="Horizontal">
                                         <materialDesign:PackIcon Kind="InformationOutline" Width="12" Height="12" Margin="0,0,4,0" />
-                                        <TextBlock Text="{Binding SqlStatusMessage}" TextWrapping="Wrap" />
+                                        <TextBlock Text="{Binding SqlStatusMessage}" TextWrapping="Wrap" FontSize="12" />
                                     </StackPanel>
                                 </Border>
-                            </StackPanel>
 
-                            <ProgressBar Grid.Column="1"
-                                         Width="180"
-                                         Height="6"
-                                         Margin="20,0,0,0"
-                                         VerticalAlignment="Center"
-                                         IsIndeterminate="True"
-                                         Visibility="{Binding IsSqlBusy, Converter={StaticResource BoolToVis}}" />
+                                <ProgressBar Grid.Column="1"
+                                             Width="140"
+                                             Height="5"
+                                             Margin="12,0,0,0"
+                                             VerticalAlignment="Center"
+                                             IsIndeterminate="True"
+                                             Visibility="{Binding IsSqlBusy, Converter={StaticResource BoolToVis}}" />
+                            </Grid>
                         </Grid>
                     </materialDesign:Card>
 
-                    <TabControl Grid.Row="2"
+                    <TabControl Grid.Row="1"
                                 Style="{StaticResource MaterialDesignTabControl}"
+                                HorizontalContentAlignment="Stretch"
+                                VerticalContentAlignment="Stretch"
+                                MinHeight="260"
                                 materialDesign:ColorZoneAssist.Mode="PrimaryMid">
 
                         <TabItem Header="使用说明">
-                            <materialDesign:Card Padding="20" Margin="0,10,0,0">
-                                <StackPanel>
-                                    <TextBlock Text="使用说明" Style="{StaticResource MaterialDesignSubtitle1TextBlock}" FontWeight="Bold" />
-                                    <TextBlock Margin="0,10,0,0" TextWrapping="Wrap">
-                                        支持 SQL Server / PostgreSQL / MySQL 账号密码连接。流程：测试连接 → 选择数据库 → 选择表 → 导出整表。
-                                    </TextBlock>
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <materialDesign:Card Padding="14" Margin="0,6,0,0">
+                                    <StackPanel>
+                                        <TextBlock Text="使用说明" Style="{StaticResource MaterialDesignSubtitle1TextBlock}" FontWeight="Bold" />
+                                        <TextBlock Margin="0,8,0,0" TextWrapping="Wrap">
+                                            支持 SQL Server / PostgreSQL / MySQL 账号密码连接。流程：测试连接 → 选择数据库 → 选择表 → 导出整表。
+                                        </TextBlock>
                                         <TextBlock Margin="0,6,0,0" TextWrapping="Wrap">
                                             SQL 查询标签页支持执行任意查询语句，结果可直接导出 Excel。
                                         </TextBlock>
-                                    <TextBlock Margin="0,6,0,0" TextWrapping="Wrap">
-                                        目标表超过 Excel 单工作表上限 1,048,576 行时，程序会阻止导出并给出提示。
-                                    </TextBlock>
-                                </StackPanel>
-                            </materialDesign:Card>
+                                        <TextBlock Margin="0,6,0,0" TextWrapping="Wrap">
+                                            目标表超过 Excel 单工作表上限 1,048,576 行时，程序会阻止导出并给出提示。
+                                        </TextBlock>
+                                    </StackPanel>
+                                </materialDesign:Card>
+                            </ScrollViewer>
                         </TabItem>
 
                         <TabItem Header="SQL 查询">
-                            <Grid Margin="0,10,0,0">
+                            <Grid Margin="0,6,0,0">
                                 <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="*" />
                                 </Grid.RowDefinitions>
 
-                                <materialDesign:Card Grid.Row="0" Padding="16" Margin="0,0,0,8">
+                                <materialDesign:Card Grid.Row="0" Padding="8" Margin="0,0,0,6">
                                     <Grid>
                                         <Grid.RowDefinitions>
-                                            <RowDefinition Height="130" />
+                                            <RowDefinition Height="72" />
                                             <RowDefinition Height="Auto" />
                                         </Grid.RowDefinitions>
                                         <TextBox Grid.Row="0"
@@ -1595,13 +1784,13 @@
                                                  HorizontalScrollBarVisibility="Auto"
                                                  VerticalScrollBarVisibility="Auto"
                                                  FontFamily="Consolas"
-                                                 FontSize="13"
+                                                 FontSize="12"
                                                  Style="{StaticResource MaterialDesignOutlinedTextBox}"
                                                  materialDesign:HintAssist.Hint="输入 SQL 语句，例如：SELECT * FROM schema.table LIMIT 100" />
 
-                                        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,10,0,0">
-                                            <Button Width="110" Height="38"
-                                                    Margin="0,0,10,0"
+                                        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,6,0,0">
+                                            <Button Width="100" Height="32"
+                                                    Margin="0,0,8,0"
                                                     Content="执行查询"
                                                     Command="{Binding ExecuteSqlQueryCommand}"
                                                     Style="{StaticResource MaterialDesignRaisedButton}">
@@ -1614,8 +1803,8 @@
                                                     </DataTemplate>
                                                 </Button.ContentTemplate>
                                             </Button>
-                                            <Button Width="130" Height="38"
-                                                    Margin="0,0,16,0"
+                                            <Button Width="116" Height="32"
+                                                    Margin="0,0,12,0"
                                                     Content="导出结果"
                                                     Command="{Binding ExportQueryResultCommand}"
                                                     Style="{StaticResource MaterialDesignOutlinedButton}">
@@ -1630,26 +1819,28 @@
                                             </Button>
                                             <ProgressBar Style="{StaticResource MaterialDesignCircularProgressBar}"
                                                          IsIndeterminate="True"
-                                                         Width="20" Height="20"
+                                                         Width="18" Height="18"
                                                          VerticalAlignment="Center"
-                                                         Margin="0,0,12,0"
+                                                         Margin="0,0,10,0"
                                                          Visibility="{Binding IsQueryBusy, Converter={StaticResource BoolToVis}}" />
                                             <TextBlock Text="{Binding QueryStatusMessage}"
                                                        Style="{StaticResource MaterialDesignCaptionTextBlock}"
                                                        VerticalAlignment="Center"
+                                                       TextTrimming="CharacterEllipsis"
                                                        Opacity="0.7" />
                                         </StackPanel>
                                     </Grid>
                                 </materialDesign:Card>
 
-                                <DataGrid Grid.Row="2"
+                                <DataGrid Grid.Row="1"
                                           ItemsSource="{Binding SqlQueryResult}"
                                           AutoGenerateColumns="True"
                                           IsReadOnly="True"
                                           CanUserAddRows="False"
                                           CanUserDeleteRows="False"
                                           CanUserSortColumns="True"
-                                          VerticalScrollBarVisibility="Auto"
+                                          MinHeight="180"
+                                          VerticalScrollBarVisibility="Visible"
                                           HorizontalScrollBarVisibility="Auto"
                                           SelectionMode="Extended"
                                           Style="{StaticResource MaterialDesignDataGrid}"
@@ -1868,12 +2059,17 @@
 
                                 <Grid>
                                     <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
-                                    <StackPanel>
+                                    <CheckBox Grid.Column="0"
+                                              IsChecked="{Binding ShowEditorAfterCapture}"
+                                              VerticalAlignment="Top"
+                                              Margin="0,2,12,0" />
+                                    <StackPanel Grid.Column="1">
                                         <TextBlock Text="截图后打开编辑器"
-                                                   Style="{StaticResource MaterialDesignSubtitle2TextBlock}" FontWeight="Medium"/>
+                                                   Style="{StaticResource MaterialDesignSubtitle2TextBlock}"
+                                                   FontWeight="Medium"/>
                                         <TextBlock Margin="0,4,20,0" Opacity="0.6" TextWrapping="Wrap">
                                             <TextBlock.Style>
                                                 <Style TargetType="TextBlock" BasedOn="{StaticResource MaterialDesignBody2TextBlock}">
@@ -1887,8 +2083,6 @@
                                             </TextBlock.Style>
                                         </TextBlock>
                                     </StackPanel>
-                                    <ToggleButton Grid.Column="1" VerticalAlignment="Center"
-                                                  IsChecked="{Binding ShowEditorAfterCapture}" />
                                 </Grid>
                             </StackPanel>
                         </materialDesign:Card>
@@ -1909,7 +2103,7 @@
             </Grid>
 
             <!-- Codex config profiles panel -->
-            <Grid Margin="20">
+            <Grid Margin="16">
                 <Grid.Style>
                     <Style TargetType="Grid">
                         <Setter Property="Visibility" Value="Collapsed" />
@@ -1927,9 +2121,9 @@
                 </Grid.RowDefinitions>
 
                 <Border Grid.Row="0"
-                        Margin="0,0,0,20"
+                        Margin="0,0,0,8"
                         CornerRadius="{StaticResource CornerRadiusCard}"
-                        Padding="20,16">
+                        Padding="12,8">
                     <Border.Background>
                         <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
                             <GradientStop Color="{DynamicResource BrushHeaderGradientStartColor}" Offset="0" />
@@ -1937,23 +2131,22 @@
                         </LinearGradientBrush>
                     </Border.Background>
                     <DockPanel>
-                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
                             <Button Style="{StaticResource MaterialDesignRaisedButton}"
-                                    Height="36"
-                                    Padding="12,0"
-                                    Margin="0,0,8,0"
+                                    Height="32"
+                                    Padding="10,0"
                                     Command="{Binding ImportCodexProfileCommand}">
                                 <StackPanel Orientation="Horizontal">
-                                    <materialDesign:PackIcon Kind="Import" Width="16" Height="16" Margin="0,0,6,0" />
+                                    <materialDesign:PackIcon Kind="Import" Width="15" Height="15" Margin="0,0,5,0" />
                                     <TextBlock Text="导入" />
                                 </StackPanel>
                             </Button>
                         </StackPanel>
                         <StackPanel Orientation="Horizontal">
-                            <materialDesign:PackIcon Kind="FolderCogOutline" Width="32" Height="32" Margin="0,0,14,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentTeal}" />
+                            <materialDesign:PackIcon Kind="FolderCogOutline" Width="24" Height="24" Margin="0,0,10,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentTeal}" />
                             <StackPanel>
-                                <TextBlock Text="Codex Profiles" Style="{StaticResource MaterialDesignHeadline5TextBlock}" />
-                                <TextBlock Text="Switch between Codex profile sets in one click." Opacity="0.55" Margin="0,2,0,0" />
+                                <TextBlock Text="Codex Profiles" Style="{StaticResource MaterialDesignHeadline6TextBlock}" />
+                                <TextBlock Text="Switch between Codex profile sets in one click." FontSize="12" Opacity="0.55" Margin="0,1,0,0" />
                             </StackPanel>
                         </StackPanel>
                     </DockPanel>
@@ -1964,27 +2157,35 @@
                         <Border BorderBrush="{DynamicResource MaterialDesignDivider}"
                                 BorderThickness="1"
                                 CornerRadius="6"
-                                Padding="18"
-                                Margin="0,0,0,16"
+                                Padding="12,8"
+                                Margin="0,0,0,8"
                                 Background="{DynamicResource MaterialDesignPaper}">
-                            <StackPanel>
-                                <TextBlock Text="将包含 config.toml 和 auth.json 的文件夹拖入窗口"
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0"
+                                           Text="拖入包含 config.toml 和 auth.json 的文件夹"
                                            FontWeight="SemiBold"
-                                           Margin="0,0,0,6" />
-                                <Border Style="{StaticResource BadgeInfo}" Margin="0,2,0,0">
+                                           FontSize="12"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,12,0" />
+                                <Border Grid.Column="1" Style="{StaticResource BadgeInfo}" Padding="8,2" VerticalAlignment="Center">
                                     <StackPanel Orientation="Horizontal">
                                         <materialDesign:PackIcon Kind="InformationOutline" Width="12" Height="12" Margin="0,0,4,0" />
                                         <TextBlock Text="{Binding CodexProfilesStatusMessage}"
+                                                   FontSize="12"
                                                    TextWrapping="Wrap" />
                                     </StackPanel>
                                 </Border>
-                            </StackPanel>
+                            </Grid>
                         </Border>
 
                         <ItemsControl ItemsSource="{Binding CodexProfiles}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <materialDesign:Card Padding="16" Margin="0,0,0,12">
+                                    <materialDesign:Card Padding="12,8" Margin="0,0,0,8">
                                         <Grid>
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="2*" />
@@ -1992,35 +2193,41 @@
                                                 <ColumnDefinition Width="Auto" />
                                             </Grid.ColumnDefinitions>
 
-                                            <StackPanel Grid.Column="0" Margin="0,0,16,0">
-                                                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                            <StackPanel Grid.Column="0" Margin="0,0,12,0">
+                                                <StackPanel Orientation="Horizontal" Margin="0,0,0,3">
                                                     <materialDesign:PackIcon Kind="FolderOutline"
-                                                                             Width="20"
-                                                                             Height="20"
-                                                                             Margin="0,0,8,0"
+                                                                             Width="16"
+                                                                             Height="16"
+                                                                             Margin="0,0,6,0"
                                                                              Foreground="{DynamicResource PrimaryHueMidBrush}" />
                                                     <TextBlock Text="{Binding Name}"
                                                                FontWeight="SemiBold"
+                                                               FontSize="13"
                                                                VerticalAlignment="Center" />
                                                 </StackPanel>
                                                 <TextBlock Text="{Binding FolderPath}"
+                                                           FontSize="12"
                                                            Opacity="0.58"
-                                                           TextWrapping="Wrap" />
+                                                           TextTrimming="CharacterEllipsis"
+                                                           ToolTip="{Binding FolderPath}" />
                                                 <TextBlock Text="{Binding ContentStorageSummary}"
-                                                           Margin="0,4,0,0"
+                                                           FontSize="12"
+                                                           Margin="0,2,0,0"
                                                            Opacity="0.72"
-                                                           TextWrapping="Wrap" />
-                                                <Border Style="{StaticResource BadgeInfo}" Margin="0,8,0,0">
+                                                           TextTrimming="CharacterEllipsis" />
+                                                <Border Style="{StaticResource BadgeInfo}" Margin="0,5,0,0" Padding="8,2">
                                                     <StackPanel Orientation="Horizontal">
                                                         <materialDesign:PackIcon Kind="InformationOutline" Width="12" Height="12" Margin="0,0,4,0" />
-                                                        <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" />
+                                                        <TextBlock Text="{Binding StatusMessage}" FontSize="12" TextWrapping="Wrap" />
                                                     </StackPanel>
                                                 </Border>
                                             </StackPanel>
 
                                             <TextBox Grid.Column="1"
-                                                     Margin="0,0,16,0"
+                                                     Margin="0,0,12,0"
+                                                     Height="42"
                                                      MinWidth="220"
+                                                     VerticalAlignment="Center"
                                                      Text="{Binding Remark, UpdateSourceTrigger=LostFocus}"
                                                      Style="{StaticResource MaterialDesignFloatingHintTextBox}"
                                                      materialDesign:HintAssist.Hint="备注" />
@@ -2028,40 +2235,40 @@
                                             <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
                                                 <ProgressBar Style="{StaticResource MaterialDesignCircularProgressBar}"
                                                              IsIndeterminate="True"
-                                                             Width="22"
-                                                             Height="22"
-                                                             Margin="0,0,10,0"
+                                                             Width="18"
+                                                             Height="18"
+                                                             Margin="0,0,8,0"
                                                              Visibility="{Binding IsApplying, Converter={StaticResource BoolToVis}}" />
-                                                <Button Height="36"
-                                                        Padding="12,0"
-                                                        Margin="0,0,8,0"
+                                                <Button Height="32"
+                                                        Padding="10,0"
+                                                        Margin="0,0,6,0"
                                                         Command="{Binding DataContext.ApplyCodexProfileCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                         CommandParameter="{Binding}"
                                                         Style="{StaticResource MaterialDesignRaisedButton}">
                                                     <StackPanel Orientation="Horizontal">
-                                                        <materialDesign:PackIcon Kind="Check" Width="16" Height="16" Margin="0,0,6,0"/>
+                                                        <materialDesign:PackIcon Kind="Check" Width="15" Height="15" Margin="0,0,5,0"/>
                                                         <TextBlock Text="应用"/>
                                                     </StackPanel>
                                                 </Button>
                                                 <Button Style="{StaticResource MaterialDesignOutlinedButton}"
-                                                        Height="36"
-                                                        Padding="12,0"
-                                                        Margin="0,0,8,0"
+                                                        Height="32"
+                                                        Padding="10,0"
+                                                        Margin="0,0,6,0"
                                                         Command="{Binding DataContext.ExportCodexProfileCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                         CommandParameter="{Binding}">
                                                     <StackPanel Orientation="Horizontal">
-                                                        <materialDesign:PackIcon Kind="Export" Width="16" Height="16" Margin="0,0,6,0"/>
+                                                        <materialDesign:PackIcon Kind="Export" Width="15" Height="15" Margin="0,0,5,0"/>
                                                         <TextBlock Text="导出"/>
                                                     </StackPanel>
                                                 </Button>
-                                                <Button Height="36"
-                                                        Width="36"
+                                                <Button Height="32"
+                                                        Width="32"
                                                         Padding="0"
                                                         Command="{Binding DataContext.DeleteCodexProfileCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                         CommandParameter="{Binding}"
                                                         Style="{StaticResource MaterialDesignIconButton}"
                                                         ToolTip="删除记录">
-                                                    <materialDesign:PackIcon Kind="DeleteOutline" Width="18" Height="18"/>
+                                                    <materialDesign:PackIcon Kind="DeleteOutline" Width="17" Height="17"/>
                                                 </Button>
                                             </StackPanel>
                                         </Grid>

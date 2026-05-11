@@ -107,7 +107,7 @@ namespace MyTools
         private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
         {
             LogException("UI 线程未处理异常", e.Exception);
-            MessageBox.Show(BuildUserMessage(e.Exception), "MyTools 运行错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(BuildUserMessage(e.Exception), "阿君的工具运行错误", MessageBoxButton.OK, MessageBoxImage.Error);
             e.Handled = true;
             Shutdown(-1);
         }

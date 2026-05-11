@@ -208,6 +208,7 @@ namespace MyTools
             if (DataContext is MainViewModel viewModel)
             {
                 viewModel.PropertyChanged -= ViewModel_OnPropertyChanged;
+                viewModel.Dispose();
             }
 
             base.OnClosed(e);

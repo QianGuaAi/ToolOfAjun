@@ -12,11 +12,17 @@ namespace MyTools.Services
 {
     public sealed class RecordingService
     {
+        private const int MaxImmediateFfmpegInfoLines = 12;
+        private static readonly TimeSpan FfmpegInfoLogInterval = TimeSpan.FromSeconds(30);
         private readonly object _syncRoot = new object();
+        private readonly object _ffmpegLogSyncRoot = new object();
         private Process _activeProcess;
         private RecordingTaskKind _activeTaskKind = RecordingTaskKind.None;
         private string _activeOutputPath = string.Empty;
         private DateTime _startedAtUtc = DateTime.UtcNow;
+        private DateTime _lastFfmpegInfoLogUtc = DateTime.MinValue;
+        private int _ffmpegInfoLinesLogged;
+        private int _suppressedFfmpegInfoLines;
 
         public string ExpectedFfmpegPath =>
             Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "NativeBinaries", "ffmpeg", "ffmpeg.exe");
@@ -36,7 +42,36 @@ namespace MyTools.Services
                 return true;
             }
 
+            if (TryFindFfmpegFromPath(out ffmpegPath))
+            {
+                return true;
+            }
+
             ffmpegPath = string.Empty;
+            return false;
+        }
+
+        private static bool TryFindFfmpegFromPath(out string ffmpegPath)
+        {
+            ffmpegPath = string.Empty;
+            var pathValue = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
+            foreach (var pathPart in pathValue.Split(new[] { Path.PathSeparator }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                try
+                {
+                    var candidate = Path.Combine(pathPart.Trim(), "ffmpeg.exe");
+                    if (File.Exists(candidate))
+                    {
+                        ffmpegPath = candidate;
+                        return true;
+                    }
+                }
+                catch
+                {
+                    // Ignore malformed PATH entries.
+                }
+            }
+
             return false;
         }
 
@@ -111,7 +146,7 @@ namespace MyTools.Services
             string outputPath;
             lock (_syncRoot)
             {
-                if (_activeProcess == null || _activeProcess.HasExited || _activeTaskKind != expectedTaskKind)
+                if (_activeProcess == null || _activeTaskKind != expectedTaskKind)
                 {
                     return new RecordingStopResult();
                 }
@@ -175,6 +210,7 @@ namespace MyTools.Services
             }
             finally
             {
+                process.ErrorDataReceived -= HandleFfmpegErrorData;
                 CleanupProcessState();
                 process.Dispose();
             }
@@ -202,16 +238,26 @@ namespace MyTools.Services
                 EnableRaisingEvents = true
             };
 
+            ResetFfmpegLogState();
             process.ErrorDataReceived += HandleFfmpegErrorData;
 
-            cancellationToken.ThrowIfCancellationRequested();
-            if (!process.Start())
+            try
             {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!process.Start())
+                {
+                    throw new InvalidOperationException("无法启动 ffmpeg 进程。");
+                }
+
+                process.BeginErrorReadLine();
+            }
+            catch
+            {
+                process.ErrorDataReceived -= HandleFfmpegErrorData;
                 process.Dispose();
-                throw new InvalidOperationException("无法启动 ffmpeg 进程。");
+                throw;
             }
 
-            process.BeginErrorReadLine();
             lock (_syncRoot)
             {
                 _activeProcess = process;
@@ -223,7 +269,7 @@ namespace MyTools.Services
             await Task.CompletedTask.ConfigureAwait(false);
         }
 
-        private static void HandleFfmpegErrorData(object sender, DataReceivedEventArgs e)
+        private void HandleFfmpegErrorData(object sender, DataReceivedEventArgs e)
         {
             if (string.IsNullOrWhiteSpace(e.Data))
             {
@@ -236,7 +282,58 @@ namespace MyTools.Services
             }
             else
             {
-                AppLogService.Information("ffmpeg: {Line}", e.Data);
+                LogFfmpegInfoLine(e.Data);
+            }
+        }
+
+        private void LogFfmpegInfoLine(string line)
+        {
+            var now = DateTime.UtcNow;
+            var suppressedCount = 0;
+            var shouldLog = false;
+
+            lock (_ffmpegLogSyncRoot)
+            {
+                if (_ffmpegInfoLinesLogged < MaxImmediateFfmpegInfoLines)
+                {
+                    _ffmpegInfoLinesLogged++;
+                    _lastFfmpegInfoLogUtc = now;
+                    shouldLog = true;
+                }
+                else if (now - _lastFfmpegInfoLogUtc >= FfmpegInfoLogInterval)
+                {
+                    suppressedCount = _suppressedFfmpegInfoLines;
+                    _suppressedFfmpegInfoLines = 0;
+                    _lastFfmpegInfoLogUtc = now;
+                    shouldLog = true;
+                }
+                else
+                {
+                    _suppressedFfmpegInfoLines++;
+                }
+            }
+
+            if (!shouldLog)
+            {
+                return;
+            }
+
+            if (suppressedCount > 0)
+            {
+                AppLogService.Information("ffmpeg status ({SuppressedCount} lines suppressed): {Line}", suppressedCount, line);
+                return;
+            }
+
+            AppLogService.Information("ffmpeg: {Line}", line);
+        }
+
+        private void ResetFfmpegLogState()
+        {
+            lock (_ffmpegLogSyncRoot)
+            {
+                _lastFfmpegInfoLogUtc = DateTime.MinValue;
+                _ffmpegInfoLinesLogged = 0;
+                _suppressedFfmpegInfoLines = 0;
             }
         }
 

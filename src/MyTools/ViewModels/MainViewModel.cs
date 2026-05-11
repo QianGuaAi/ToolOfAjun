@@ -21,13 +21,14 @@ using WinForms = System.Windows.Forms;
 
 namespace MyTools.ViewModels
 {
-    public class MainViewModel : INotifyPropertyChanged
+    public class MainViewModel : INotifyPropertyChanged, IDisposable
     {
         private ObservableCollection<NetworkData> _networkList;
         private ObservableCollection<StartupItem> _startupList;
         private ObservableCollection<DatabaseItem> _sqlDatabaseList;
         private ObservableCollection<TableItem> _sqlTableList;
         private ObservableCollection<TableItem> _allSqlTableList;
+        private ObservableCollection<InstalledProgram> _installedPrograms;
         private ObservableCollection<string> _sqlServerAddressHistory;
         private ObservableCollection<string> _sqlUsernameHistory;
         private ObservableCollection<string> _sqlPasswordHistory;
@@ -65,6 +66,8 @@ namespace MyTools.ViewModels
         private DataView _sqlQueryResult;
         private bool _isQueryBusy;
         private string _queryStatusMessage = string.Empty;
+        private bool _isInstalledProgramsBusy;
+        private string _installedProgramsStatusMessage = "点击刷新加载可卸载程序列表。";
         private ObservableCollection<OptimizationReportItem> _optimizationReports;
         private ObservableCollection<JunkCandidate> _junkCandidates;
         private ObservableCollection<WeChatCleanupCandidate> _weChatCleanupCandidates;
@@ -111,6 +114,7 @@ namespace MyTools.ViewModels
         private readonly RecordingService _recordingService = new RecordingService();
         private bool _isVideoRecording;
         private bool _isAudioRecording;
+        private bool _isDisposed;
         private DateTime _audioRecordingStartedAt;
         private string _audioRecordingIndicator = string.Empty;
         private string _activeVideoOutputPath = string.Empty;
@@ -127,6 +131,8 @@ namespace MyTools.ViewModels
         private readonly AsyncRelayCommand _importCodexProfileCommand;
         private readonly AsyncRelayCommand _openRecordRegionCommand;
         private readonly AsyncRelayCommand _toggleAudioRecordingCommand;
+        private readonly AsyncRelayCommand _refreshInstalledProgramsCommand;
+        private readonly AsyncRelayParameterCommand _uninstallProgramCommand;
 
         private readonly AsyncRelayCommand _testSqlConnectionCommand;
         private readonly AsyncRelayCommand _exportSqlTableCommand;
@@ -166,6 +172,7 @@ namespace MyTools.ViewModels
             SqlDatabaseList = new ObservableCollection<DatabaseItem>();
             SqlTableList = new ObservableCollection<TableItem>();
             AllSqlTableList = new ObservableCollection<TableItem>();
+            InstalledPrograms = new ObservableCollection<InstalledProgram>();
             SqlServerAddressHistory = new ObservableCollection<string>();
             SqlUsernameHistory = new ObservableCollection<string>();
             SqlPasswordHistory = new ObservableCollection<string>();
@@ -180,13 +187,14 @@ namespace MyTools.ViewModels
             {
                 Interval = TimeSpan.FromSeconds(1)
             };
-            _audioRecordingTimer.Tick += (sender, args) => UpdateAudioRecordingIndicator();
+            _audioRecordingTimer.Tick += AudioRecordingTimer_OnTick;
 
             RefreshCommand = new RelayCommand(Refresh);
             ShowNetworkCommand = new RelayCommand(() => { CurrentModule = "Network"; Refresh(); });
             ShowStartupCommand = new RelayCommand(() => { CurrentModule = "Startup"; Refresh(); });
             ShowWireGuardCommand = new RelayCommand(() => { CurrentModule = "WireGuard"; Refresh(); });
             ShowSystemCommand = new RelayCommand(() => { CurrentModule = "System"; Refresh(); });
+            ShowUninstallCommand = new RelayCommand(() => { CurrentModule = "Uninstall"; _ = LoadInstalledProgramsAsync(); });
             ShowSqlExportCommand = new RelayCommand(() => { CurrentModule = "SqlExport"; Refresh(); });
             ShowCodexProfilesCommand = new RelayCommand(() => { CurrentModule = "CodexProfiles"; });
             ToggleStartupCommand = new RelayParameterCommand(obj =>
@@ -259,6 +267,10 @@ namespace MyTools.ViewModels
             _exportSqlTableCommand = new AsyncRelayCommand(ExportSelectedTableAsync, CanExportSqlTable);
             TestSqlConnectionCommand = _testSqlConnectionCommand;
             ExportSqlTableCommand = _exportSqlTableCommand;
+            _refreshInstalledProgramsCommand = new AsyncRelayCommand(LoadInstalledProgramsAsync, () => !IsInstalledProgramsBusy);
+            _uninstallProgramCommand = new AsyncRelayParameterCommand(UninstallProgramAsync, parameter => !IsInstalledProgramsBusy && parameter is InstalledProgram);
+            RefreshInstalledProgramsCommand = _refreshInstalledProgramsCommand;
+            UninstallProgramCommand = _uninstallProgramCommand;
 
             ShowScreenshotCommand = new RelayCommand(() => { CurrentModule = "Screenshot"; });
             TakeScreenshotNowCommand = new AsyncRelayCommand(TriggerScreenshotAsync);
@@ -321,6 +333,18 @@ namespace MyTools.ViewModels
         {
             get => _allSqlTableList;
             set { _allSqlTableList = value; OnPropertyChanged(); }
+        }
+
+        public ObservableCollection<InstalledProgram> InstalledPrograms
+        {
+            get => _installedPrograms;
+            set
+            {
+                _installedPrograms = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(HasNoInstalledPrograms));
+                OnPropertyChanged(nameof(InstalledProgramsCountText));
+            }
         }
 
         public ICollectionView FilteredSqlTableView
@@ -625,6 +649,7 @@ namespace MyTools.ViewModels
         public ICommand ShowStartupCommand { get; }
         public ICommand ShowWireGuardCommand { get; }
         public ICommand ShowSystemCommand { get; }
+        public ICommand ShowUninstallCommand { get; }
         public ICommand ShowSqlExportCommand { get; }
         public ICommand ShowCodexProfilesCommand { get; }
         public ICommand ToggleStartupCommand { get; }
@@ -639,6 +664,12 @@ namespace MyTools.ViewModels
         }
 
         public bool HasNoStartupItems => StartupList.Count == 0;
+
+        public bool HasNoInstalledPrograms => InstalledPrograms.Count == 0 && !IsInstalledProgramsBusy;
+
+        public string InstalledProgramsCountText => InstalledPrograms.Count == 0
+            ? "未加载"
+            : $"共 {InstalledPrograms.Count} 个";
 
         public bool WgExeFound => WireGuardService.IsExeAvailable;
         public bool WgExeNotFound => !WireGuardService.IsExeAvailable;
@@ -665,6 +696,24 @@ namespace MyTools.ViewModels
         {
             get => _queryStatusMessage;
             set { _queryStatusMessage = value; OnPropertyChanged(); }
+        }
+
+        public bool IsInstalledProgramsBusy
+        {
+            get => _isInstalledProgramsBusy;
+            set
+            {
+                _isInstalledProgramsBusy = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(HasNoInstalledPrograms));
+                TriggerCommandRequery();
+            }
+        }
+
+        public string InstalledProgramsStatusMessage
+        {
+            get => _installedProgramsStatusMessage;
+            set { _installedProgramsStatusMessage = value; OnPropertyChanged(); }
         }
 
         public ICommand ExecuteSqlQueryCommand { get; }
@@ -1053,6 +1102,8 @@ namespace MyTools.ViewModels
         public ICommand ToggleAutoUpdateCommand { get; }
         public ICommand TriggerUpdateNowCommand { get; }
         public ICommand RefreshSystemStatusCommand { get; }
+        public ICommand RefreshInstalledProgramsCommand { get; }
+        public ICommand UninstallProgramCommand { get; }
         public ICommand StartAutoOptimizeCommand { get; }
         public ICommand StartJunkScanCommand { get; }
         public ICommand RunJunkCleanupCommand { get; }
@@ -1814,20 +1865,35 @@ namespace MyTools.ViewModels
 
             var recordWindow = new RecordRegionWindow();
             recordWindow.ToggleRecordingRequested += RecordRegionWindow_OnToggleRecordingRequested;
-            recordWindow.Closed += async (sender, args) =>
-            {
-                _recordRegionWindow = null;
-                if (IsVideoRecording)
-                {
-                    await StopVideoRecordingInternalAsync(showMessage: true);
-                }
-
-                RestoreWindow();
-            };
+            recordWindow.Closed += RecordRegionWindow_OnClosed;
 
             _recordRegionWindow = recordWindow;
             recordWindow.Show();
             recordWindow.Activate();
+        }
+
+        private async void RecordRegionWindow_OnClosed(object sender, EventArgs e)
+        {
+            if (sender is RecordRegionWindow window)
+            {
+                window.ToggleRecordingRequested -= RecordRegionWindow_OnToggleRecordingRequested;
+                window.Closed -= RecordRegionWindow_OnClosed;
+            }
+
+            if (ReferenceEquals(_recordRegionWindow, sender))
+            {
+                _recordRegionWindow = null;
+            }
+
+            if (IsVideoRecording)
+            {
+                await StopVideoRecordingInternalAsync(showMessage: !App.IsExiting);
+            }
+
+            if (!App.IsExiting)
+            {
+                RestoreWindow();
+            }
         }
 
         private async void RecordRegionWindow_OnToggleRecordingRequested(object sender, EventArgs e)
@@ -2013,6 +2079,11 @@ namespace MyTools.ViewModels
             AudioRecordingIndicator = $"录音中 {elapsed:mm\\:ss}";
         }
 
+        private void AudioRecordingTimer_OnTick(object sender, EventArgs e)
+        {
+            UpdateAudioRecordingIndicator();
+        }
+
         private bool EnsureFfmpegAvailable()
         {
             if (_recordingService.TryGetFfmpegPath(out _))
@@ -2020,11 +2091,34 @@ namespace MyTools.ViewModels
                 return true;
             }
 
-            MessageBox.Show(
-                $"请将 ffmpeg.exe 放到 {_recordingService.ExpectedFfmpegPath} 后再试。",
+            var expectedPath = _recordingService.ExpectedFfmpegPath;
+            var expectedFolder = Path.GetDirectoryName(expectedPath) ?? AppDomain.CurrentDomain.BaseDirectory;
+            var result = MessageBox.Show(
+                "录像和录音需要 ffmpeg.exe。\n\n"
+                + "请将 ffmpeg.exe 放到：\n"
+                + expectedPath
+                + "\n\n也可以把 ffmpeg.exe 所在目录加入系统 PATH。\n\n是否现在打开应放置的文件夹？",
                 "缺少 ffmpeg",
-                MessageBoxButton.OK,
+                MessageBoxButton.YesNo,
                 MessageBoxImage.Warning);
+            if (result == MessageBoxResult.Yes)
+            {
+                try
+                {
+                    Directory.CreateDirectory(expectedFolder);
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = expectedFolder,
+                        UseShellExecute = true
+                    });
+                }
+                catch (Exception ex)
+                {
+                    AppLogService.Error(ex, "Opening ffmpeg folder failed.");
+                    MessageBox.Show("无法打开目录：" + ex.Message, "打开目录失败", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+
             return false;
         }
 
@@ -2539,6 +2633,72 @@ namespace MyTools.ViewModels
             }
         }
 
+        private async Task LoadInstalledProgramsAsync()
+        {
+            if (IsInstalledProgramsBusy)
+            {
+                return;
+            }
+
+            try
+            {
+                IsInstalledProgramsBusy = true;
+                InstalledProgramsStatusMessage = "正在读取可卸载程序列表...";
+                var programs = await Task.Run(() => InstalledProgramService.GetUninstallablePrograms()).ConfigureAwait(false);
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    ReplaceItems(InstalledPrograms, programs);
+                    OnPropertyChanged(nameof(HasNoInstalledPrograms));
+                    OnPropertyChanged(nameof(InstalledProgramsCountText));
+                });
+
+                InstalledProgramsStatusMessage = programs.Count == 0
+                    ? "未发现带卸载命令的程序。"
+                    : $"已加载 {programs.Count} 个可卸载程序。";
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "Loading installed programs failed.");
+                InstalledProgramsStatusMessage = "读取可卸载程序失败：" + ex.Message;
+                MessageBox.Show(ex.Message, "读取失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                IsInstalledProgramsBusy = false;
+            }
+        }
+
+        private async Task UninstallProgramAsync(object parameter)
+        {
+            if (!(parameter is InstalledProgram program))
+            {
+                return;
+            }
+
+            var confirm = MessageBox.Show(
+                $"将启动「{program.DisplayName}」的卸载程序。\n\n卸载向导打开后，请按软件自身提示继续。是否现在启动？",
+                "确认卸载",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+            if (confirm != MessageBoxResult.Yes)
+            {
+                return;
+            }
+
+            try
+            {
+                InstalledProgramService.StartUninstall(program);
+                InstalledProgramsStatusMessage = $"已启动「{program.DisplayName}」的卸载程序。完成后请刷新列表。";
+                await Task.CompletedTask;
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "Starting uninstall failed for {ProgramName}", program.DisplayName ?? string.Empty);
+                InstalledProgramsStatusMessage = "启动卸载失败：" + ex.Message;
+                MessageBox.Show(ex.Message, "卸载失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
         private bool FilterSqlTable(object item)
         {
             if (!(item is TableItem table))
@@ -2592,21 +2752,64 @@ namespace MyTools.ViewModels
         private void ExitApplication()
         {
             App.IsExiting = true;
-            CancelPendingTableLoad();
-            _screenshotEditorWindow?.Close();
-            _screenshotEditorWindow = null;
-            _recordRegionWindow?.Close();
-            _recordRegionWindow = null;
-            if (IsVideoRecording)
+            Dispose();
+            Application.Current.Shutdown();
+        }
+
+        public void Dispose()
+        {
+            if (_isDisposed)
             {
-                _recordingService.StopVideoRecordingAsync().GetAwaiter().GetResult();
+                return;
             }
 
-            if (IsAudioRecording)
+            _isDisposed = true;
+            CancelPendingTableLoad();
+            _audioRecordingTimer.Stop();
+            _audioRecordingTimer.Tick -= AudioRecordingTimer_OnTick;
+
+            CloseOwnedWindowsForShutdown();
+            StopActiveRecordingsForShutdown();
+        }
+
+        private void CloseOwnedWindowsForShutdown()
+        {
+            _screenshotEditorWindow?.Close();
+            _screenshotEditorWindow = null;
+
+            var recordWindow = _recordRegionWindow;
+            if (recordWindow == null)
             {
-                _recordingService.StopAudioOnlyAsync().GetAwaiter().GetResult();
+                return;
             }
-            Application.Current.Shutdown();
+
+            _recordRegionWindow = null;
+            recordWindow.ToggleRecordingRequested -= RecordRegionWindow_OnToggleRecordingRequested;
+            recordWindow.Closed -= RecordRegionWindow_OnClosed;
+            recordWindow.Close();
+        }
+
+        private void StopActiveRecordingsForShutdown()
+        {
+            try
+            {
+                if (IsVideoRecording)
+                {
+                    _recordingService.StopVideoRecordingAsync().GetAwaiter().GetResult();
+                    IsVideoRecording = false;
+                }
+
+                if (IsAudioRecording)
+                {
+                    _recordingService.StopAudioOnlyAsync().GetAwaiter().GetResult();
+                    IsAudioRecording = false;
+                    AudioRecordingIndicator = string.Empty;
+                }
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "Stopping active recording during shutdown failed.");
+            }
         }
 
         private void RefreshSystemStatus()
@@ -3508,6 +3711,8 @@ namespace MyTools.ViewModels
             _selectWeChatRestoreTargetRootCommand?.RaiseCanExecuteChanged();
             _openRecordRegionCommand?.RaiseCanExecuteChanged();
             _toggleAudioRecordingCommand?.RaiseCanExecuteChanged();
+            _refreshInstalledProgramsCommand?.RaiseCanExecuteChanged();
+            _uninstallProgramCommand?.RaiseCanExecuteChanged();
             _importCodexProfileCommand?.RaiseCanExecuteChanged();
             _exportCodexProfileCommand?.RaiseCanExecuteChanged();
         }
