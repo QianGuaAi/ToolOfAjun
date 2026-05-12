@@ -26,6 +26,8 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Stub.System.Data.SQLite.Core.NetFramework" Version="1.0.118" GeneratePathProperty="true" />
+    <PackageReference Include="Microsoft.Windows.SDK.Contracts" Version="10.0.19041.1001" />
+    <PackageReference Include="LibreHardwareMonitorLib" Version="0.9.4" />
   </ItemGroup>
 
   <ItemGroup>
@@ -45,6 +47,7 @@
     <Reference Include="Microsoft.VisualBasic" />
     <Reference Include="System.IO.Compression" />
     <Reference Include="System.IO.Compression.FileSystem" />
+    <Reference Include="System.Management" />
     <Reference Include="System.Security" />
   </ItemGroup>
 

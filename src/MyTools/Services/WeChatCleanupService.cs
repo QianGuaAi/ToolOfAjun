@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.VisualBasic.FileIO;
 
 namespace MyTools.Services
 {
@@ -178,11 +179,12 @@ namespace MyTools.Services
                             continue;
                         }
 
-                        AppLogService.Information("WeChat cleanup plan: delete file {Path}", fullPath);
+                        AppLogService.Information("WeChat cleanup plan: recycle file {Path}", fullPath);
                         var bytes = new FileInfo(fullPath).Length;
                         File.SetAttributes(fullPath, FileAttributes.Normal);
-                        File.Delete(fullPath);
-                        AppLogService.Information("WeChat cleanup done: deleted file {Path}, freed {Bytes}B", fullPath, bytes);
+                        // 发送到回收站而非永久删除，给用户最后一道保险
+                        FileSystem.DeleteFile(fullPath, UIOption.OnlyErrorDialogs, RecycleOption.SendToRecycleBin, UICancelOption.ThrowException);
+                        AppLogService.Information("WeChat cleanup done: recycled file {Path}, freed {Bytes}B", fullPath, bytes);
                         step.BytesFreed += bytes;
                         deletedCount++;
                     }

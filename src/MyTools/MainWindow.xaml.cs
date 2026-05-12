@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
@@ -179,6 +180,10 @@ namespace MyTools
             e.Handled = true;
         }
 
+        /// <summary>
+        /// 同时支持文件夹拖入与文件（config.toml / auth.json）拖入。
+        /// 文件会被映射为其父目录，再由 ViewModel 校验该目录是否同时包含两个必需文件。
+        /// </summary>
         private static bool TryGetDroppedFolders(DragEventArgs e, out string[] folderPaths)
         {
             folderPaths = new string[0];
@@ -193,9 +198,30 @@ namespace MyTools
                 return false;
             }
 
-            folderPaths = droppedPaths
-                .Where(path => !string.IsNullOrWhiteSpace(path) && Directory.Exists(path))
-                .ToArray();
+            var collected = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var path in droppedPaths)
+            {
+                if (string.IsNullOrWhiteSpace(path)) continue;
+                if (Directory.Exists(path))
+                {
+                    collected.Add(path);
+                }
+                else if (File.Exists(path))
+                {
+                    var name = Path.GetFileName(path);
+                    if (string.Equals(name, "config.toml", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(name, "auth.json", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var parent = Path.GetDirectoryName(path);
+                        if (!string.IsNullOrWhiteSpace(parent) && Directory.Exists(parent))
+                        {
+                            collected.Add(parent);
+                        }
+                    }
+                }
+            }
+
+            folderPaths = collected.ToArray();
             return folderPaths.Length > 0;
         }
 
@@ -212,6 +238,19 @@ namespace MyTools
             }
 
             base.OnClosed(e);
+        }
+
+        private void FileHashResult_OnClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            if (DataContext is MainViewModel vm && !string.IsNullOrWhiteSpace(vm.FileHashResult))
+            {
+                try
+                {
+                    Clipboard.SetText(vm.FileHashResult);
+                    vm.FileHashStatusMessage = "已复制到剪贴板。";
+                }
+                catch { }
+            }
         }
 
         protected override void OnClosing(CancelEventArgs e)

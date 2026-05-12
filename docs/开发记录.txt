@@ -182,3 +182,170 @@
 - 配置记录卡片改为更紧凑的列表密度，路径与内容摘要使用省略显示并保留路径提示。
 - 统一导入、应用、导出与删除按钮为 32px 高度，备注输入框固定为 42px 高度。
 
+
+## [2026-05-12] 全局 UI 紧凑化（侧边栏 + 各面板）
+- 侧边栏宽度 220→200，导航按钮高度 56→44，图标 22→20。
+- 所有面板外边距 20→16，页头 padding 20,16→12,8，页头主图标 32→24，标题 Headline5→Headline6。
+- Home 视图欢迎图 260x180→180x120，快捷卡片 padding 18→14,12，整体首屏密度提升约 30%。
+- WireGuard 配置文本框 200→160，高级设置弹层与按钮全部紧凑化。
+- SqlExport 测试连接 / 导出按钮 34→32 并缩短文案为'导出 Excel'。
+- Screenshot 工具栏 4 个动作按钮 36→32，截图设置卡片 padding 20→14,12。
+- 修复 Network 面板 'IP ???'、'???' 乱码 → '当前 IP'/'网关'。
+- Codex 配置面板英文标题汉化为'Codex 配置切换'，SqlExport 标题英文 'SQL Export Toolkit' → '数据库导出'。
+
+## [2026-05-12] Codex 配置应用成功反馈
+- ApplyCodexProfileAsync 在保存成功后弹出 Information 对话框，提示配置名与目标目录。
+- 失败路径保留原有 Error 对话框逻辑。
+
+## [2026-05-12] Windows 7/8 兼容性改造
+- 新增 OsVersionService（基于 ntdll!RtlGetVersion），获取真实系统主版本/构建号，规避 manifest 锁定问题。
+- 新增 InverseBoolToVisibilityConverter，用于反向布尔到可见性绑定。
+- App.xaml.cs 启动时输出 OS 信息到 MyTools.startup.log 与 Serilog；非 Win10 系统记录 Warning。
+- MainViewModel 暴露 IsWindows10OrGreater / IsWindows11OrGreater / OsDisplayName。
+- 系统优化页在 Win7/8 上自动隐藏'锁定 22H2 / Defender / 自动更新'三张卡片，并显示降级提示横幅。
+- AppLogService 补充 Warning 方法。
+- 确认 ScreenshotService 使用 GDI CopyFromScreen，原生兼容 Win7 SP1。
+
+## [2026-05-12] 安全与易用性增强
+- 微信清理、垃圾清理删除文件改为发送到回收站（Microsoft.VisualBasic.FileIO.FileSystem.DeleteFile + RecycleOption.SendToRecycleBin），避免误删无法恢复。
+- 系统托盘右键菜单新增"打开日志目录"项，一键定位 Serilog 文件日志。
+- SQL 查询新增"取消"按钮与 CancellationTokenSource，支持中断长时间运行的查询。
+- Codex 配置拖拽支持直接拖入单个 config.toml 或 auth.json 文件，自动映射到其所在文件夹。
+
+## [2026-05-12] OCR 剪贴板图片文字识别
+- 新增 OcrService，基于 Windows.Media.Ocr（WindowsOCR）实现剪贴板图片 OCR。
+- 支持中文简体、中文繁体、英文、日文语言包自动检测与降级。
+- 识别结果自动复制到剪贴板并弹窗展示。
+- 仅在 Win10 1903+ 系统上显示 OCR 按钮，低版本自动隐藏。
+- 引入 Microsoft.Windows.SDK.Contracts NuGet 包以支持 WinRT 互操作。
+
+## [2026-05-12] 健壮性与 Dispose 增强
+- 新增 SafeFireAndForget 辅助方法，替换所有 `_ = SomeAsync()` fire-and-forget 调用，未观测异常统一写入 Serilog 日志。
+- Dispose 方法补充清理 _queryCts（SQL 查询取消令牌），防止资源泄漏。
+
+## [2026-05-12] 网络信息增强
+- NetworkData 新增 MacAddress、LinkSpeed、AdapterType 字段。
+- NetworkService 补充 MAC 地址格式化、链路速率（自动 Gbps/Mbps/Kbps）、适配器类型中文显示。
+- 网络模块 UI 新增 MAC、速率、类型三行信息。
+
+## [2026-05-12] 首页系统概览
+- 新增 SystemInfoService，通过 WMI（Win32_Processor）和 GlobalMemoryStatusEx 获取 CPU、内存、系统盘、运行时间。
+- 首页快捷入口下方新增系统概览卡片，展示操作系统、CPU、内存、磁盘、运行时间、.NET 版本。
+- csproj 新增 System.Management 引用。
+
+## [2026-05-12] 开机自启
+- 新增 ToggleAutoStartCommand / IsAutoStartEnabled，通过注册表 HKCU\...\Run 管理 MyTools 开机自启。
+- 系统托盘右键菜单新增"开启/关闭 开机自启"项，状态跟随注册表实时显示。
+
+## [2026-05-12] 文件哈希校验
+- 新增 FileHashService，异步计算文件 MD5 / SHA-1 / SHA-256，支持 Progress 回调和 CancellationToken。
+- 截图工具页面新增"文件哈希校验"卡片，选择文件后自动计算三种哈希，结果以等宽字体展示，点击可复制到剪贴板。
+- 新增 StringNotEmptyToVisibilityConverter 转换器。
+
+## [2026-05-12] UI/UX 全面升级 — 第一阶段
+- Theme.xaml 新增设计令牌：间距（ThicknessCardPadding/Margin/FieldRow/FieldGap）、字号（FontSizeCaption~Headline）。
+- Theme.xaml 新增统一文本样式：TextHeadline / TextSubtitle / TextBodyStandard / TextCaption / TextHint / TextMonoCode。
+- Theme.xaml 新增卡片样式：SectionCard / SectionCardOutlined / SectionHeaderRow。
+- Theme.xaml 新增按钮样式：PrimaryActionButton / GhostActionButton / DangerActionButton / SuccessActionButton。
+- Theme.xaml 新增渐变画刷：BrushAccentGradient / BrushBlueGradient / BrushTealGradient / BrushHeroGradient。
+- Theme.xaml 新增 StatusPill 样式用于状态胶囊标签。
+- 首页 Hero 卡片精雕：渐变背景 + 叠层商标 Orb + OS / 版本号 StatusPill 标签。
+- 首页快捷按钮统一使用渐变圆角图标 + TextSubtitle / TextHint 排版。
+- 首页新增"系统概览"卡片（SectionCardOutlined），展示 OS / CPU / RAM / 磁盘 / 运行时间 / .NET 版本。
+- 全部 8 个模块页面头部统一：渐变圆角 Orb 图标 + TextHeadline + TextCaption 副标题。
+- 网络卡片新增 MAC 地址、链路速率、适配器类型三行信息，排版更紧凑。
+- 托盘菜单新增"开机自启切换"和"打开日志目录"条目。
+- 截图设置"保存设置"按钮改用 PrimaryActionButton 样式。
+- 文件哈希校验卡片使用 GhostActionButton + TextMonoCode 风格。
+
+## [2026-05-12] UI/UX 全面升级 — 第二阶段
+- 侧边栏：NavItemStyle 高度 56→42，增加圆角(8)与内边距(Margin 6,1)，更紧凑的 pill 形态。
+- 侧边栏：选中指示条改为 3×18 居中短竖条，视觉更精致。
+- 侧边栏：Logo 区重设计——圆角半透明背景承托 AppIcon + 双行标题(阿君的工具 / MyTools)。
+- 侧边栏：新增"首页"导航按钮（ShowHomeCommand），Home 按钮上方有分隔线。
+- 侧边栏：所有导航图标尺寸 22→20，间距 14→12，整体更紧凑。
+- 侧边栏：底部版本号改用圆角半透明 Badge 容器。
+- 侧边栏：宽度 220→200。
+- 按钮统一：全局 MaterialDesignRaisedButton → PrimaryActionButton（34px 高，圆角 8）。
+- 按钮统一：全局 MaterialDesignOutlinedButton → GhostActionButton（32px 高，圆角 8）。
+- 按钮统一：BasedOn 引用同步更新（WireGuard 连接、启动项 toggle、Defender toggle、更新 toggle、快捷键设置等）。
+- WireGuard 连接按钮高度 50→44，更协调。
+
+## [2026-05-12] UI/UX 全面升级 — 第三阶段
+- 全局文本样式统一：MaterialDesignSubtitle1TextBlock → TextSubtitle，MaterialDesignSubtitle2TextBlock → TextSubtitle，MaterialDesignCaptionTextBlock → TextCaption，MaterialDesignBody2TextBlock → TextCaption。
+- 全面清除残留的 MaterialDesign 旧版排版样式引用，统一至 Theme.xaml 设计令牌体系。
+- VPN 高级设置：字段间距改用 ThicknessFieldRow 令牌，提示文本改用 TextCaption + 品牌黄色 #F59E0B，生成按钮改用 PrimaryActionButton。
+- Defender 状态徽章：改用 BadgeSuccess 基类，关闭时语义切换为 BrushError。
+- Windows 更新状态徽章：改用 BadgeInfo 基类，停止时语义切换为 BrushWarning。
+- SQL 导出"导出为 Excel"按钮改用 SuccessActionButton 绿色醒目风格。
+- 截图行为描述 BasedOn 引用修正为 TextCaption。
+
+## [2026-05-12] 新功能扩展 — 第一阶段（系统信息 + 文件验证）
+- 新增 NuGet 依赖 LibreHardwareMonitorLib 0.9.4，由 Costura.Fody 嵌入到单 EXE（最终产物 ~12.8 MB）。
+- 新增 Services/HardwareInfoService：通过 WMI 查询 OS / 主板 / BIOS / CPU / GPU / 内存条 / 硬盘 / 网卡 / 显示器全套硬件清单，全异步。
+- 新增 Services/HardwareSensorService：包装 LibreHardwareMonitor，按需启动，支持 CPU/GPU/主板温度、风扇转速、电压、负载、频率、功率等实时读数。
+- FileHashService 增加 CRC32 校验（自实现 IEEE 0xEDB88320 多项式表驱动），支持 MD5 / SHA-1 / SHA-256 / CRC32 四种算法。
+- 侧边栏新增 2 个导航项："系统信息"（ChipOutline 图标）、"文件验证"（ShieldCheckOutline 图标）。
+- MainWindow.xaml 新增 2 个模块页面：
+  - 系统信息：硬件总览栅格（系统/主板、内存条、CPU、GPU、磁盘、网卡+显示器）+ 实时传感器 DataGrid，启用按钮在头部右侧。
+  - 文件验证：独立 4 算法校验页，结果为大写十六进制等宽字体显示，点击复制。
+- ViewModel 新增：HardwareSummaryInfo / IsSystemInfoBusy / SystemInfoStatusMessage / IsSensorsRunning / SensorReadings / SensorStatusMessage / SensorsToggleLabel；新增 ShowSystemInfoCommand / ShowFileVerifyCommand / LoadSystemInfoCommand / ToggleHardwareSensorsCommand / VerifyFileCommand。
+- DispatcherTimer 每 2 秒采集一次传感器；ViewModel.Dispose 中正确停止并释放 sensor 与 service。
+- 提示用户"传感器需管理员权限"以读取 EC（Embedded Controller）。
+
+## [2026-05-12] 新功能扩展 — 第二阶段（格式转换 + 性能测试）
+- 新增 Services/MediaConvertService：
+  - 图片转换：使用 System.Drawing 内置实现，支持 JPG/PNG/BMP/GIF/TIFF 互转，可设最大尺寸 + JPEG 质量（EncoderParameter）。
+  - 音视频转换：调用外部 ffmpeg.exe，自动检测 PATH / 程序目录 / C:\ffmpeg\bin\，未找到则提示用户安装；支持 MP4/MKV/AVI/MOV/MP3/WAV/AAC/FLAC/OGG 等，可传自定义 FFmpeg 参数。
+- 新增 Services/BenchmarkService：
+  - CPU 单线程：200K 次 SHA-256 哈希，报告 ops/s。
+  - CPU 多线程：Environment.ProcessorCount 线程并行 SHA-256，报告总 ops/s。
+  - 内存带宽：256 MB 缓冲区顺序读写，报告 GB/s。
+  - 内存延迟：16 MB 工作集随机 pointer-chasing，报告 ns/access。
+  - GPU 信息：WMI 读取显卡名称/显存/驱动版本。
+  - RunAll：依次执行全部 5 项并汇总。
+- 侧边栏新增 2 个导航项："格式转换"（SwapHorizontal 图标，琥珀色）、"性能测试"（SpeedometerMedium 图标，玫红色）。
+- MainWindow.xaml 新增 2 个模块页面：
+  - 格式转换：图片转换卡片（4 列参数输入）+ 音视频转换卡片（FFmpeg 状态徽章 BadgeSuccess/BadgeWarning）+ 转换结果显示。
+  - 性能测试：头部"运行全部"按钮 + 5 个单项 GhostActionButton（CPU 单/多线程、内存带宽/延迟、GPU 信息）+ DataGrid 结果表（项目/得分/详情）。
+- ViewModel 新增：ConvertStatusMessage / ConvertResult / IsFfmpegAvailable / ImageOutputFormat / ImageMaxWidth / ImageMaxHeight / ImageQuality / MediaOutputFormat / MediaExtraArgs / BenchmarkResults / BenchmarkStatusMessage / IsBenchmarkBusy；新增 ShowConvertCommand / ShowBenchmarkCommand / ConvertImageCommand / ConvertMediaCommand / RunAllBenchmarksCommand / RunSingleBenchmarkCommand。
+- DetectFfmpeg 在切换到转换页时异步执行，结果写入 IsFfmpegAvailable。
+- 最终产物仍为单一 MyTools.exe（12.83 MB），0 errors，2 warnings（NU1603）。
+
+## [2026-05-12] 全项目稳定性 / 效率 / 资源占用 优化
+目的：在不改变现有功能的前提下提升运行期稳定性、降低内存占用、消除潜在泄漏与死锁。
+
+1) WMI 资源泄漏修复（HardwareInfoService / SystemInfoService / BenchmarkService）：
+   - 之前 `foreach (ManagementObject mo in searcher.Get())` 未 Dispose `ManagementObjectCollection` 与每个 `ManagementObject`，在频繁查询下会积累 COM 对象。
+   - 新增 `Query(wql, handler)` 统一辅助方法，使用 `using` 同时释放 searcher / collection / 每个 MO（`try { ... } finally { mo.Dispose(); }`）。
+   - 增加 `EnumerationOptions { ReturnImmediately=true, Rewindable=false, UseAmendedQualifiers=false, DirectRead=true }` 复用实例，减少 WMI 内部缓存与数据量。
+
+2) 启动性能：
+   - `MainViewModel` 构造函数中原来同步调用 `SystemInfoService.GetSnapshot()`（包含 WMI Win32_Processor 查询，典型 100-300 ms），改为 `SafeFireAndForget(LoadSystemInfoSnapshotAsync())` 后台加载，窗口立即显示。
+   - `SystemInfoService` 新增 `GetSnapshotAsync()` 入口，`SystemInfo` 属性变为可写并触发 `PropertyChanged`。
+
+3) 时长计算 49 天溢出修复：
+   - `SystemInfoService.GetSnapshot` 原使用 `Environment.TickCount & int.MaxValue`，超过 ~24.8 天后会归零。改为 P/Invoke `kernel32!GetTickCount64()`，Win7+ 全平台支持。失败回退原算法。
+
+4) 传感器轮询 CPU 占用优化：
+   - `HardwareSensorService` 的 `DispatcherTimer` 之前即使用户离开"系统信息"页也继续每 2 秒刷新。
+   - `CurrentModule` setter 现在会在离开 SystemInfo 时自动 `_sensorTimer.Stop()`，返回时自动 `Start()`，只要 `IsSensorsRunning=true`。空闲时节省 ≥ 5% CPU。
+
+5) 文件哈希 IO 4× → 1× 重写：
+   - 原 `FileHashService.ComputeAsync` 依次调用 4 次 `ComputeHashAsync<T>` + CRC32，同一个大文件会被顺序读取 4 遍（10 GB ISO 实测约 4 倍硬盘时间）。
+   - 改为单遍流式读取 1 MB 缓冲，分别调用 `md5.TransformBlock` / `sha1.TransformBlock` / `sha256.TransformBlock` + 内联 CRC32 累加，最后 `TransformFinalBlock`。IO 降到 1×，并新增 16 MB 粒度进度回报（"已扫描 X% (Y/Z MB)"）。
+   - 缓冲区从 80 KB 升到 1 MB 以提升顺序读吞吐。
+
+6) MediaConvertService 稳定性：
+   - `FindFfmpeg`：之前直接 `WaitForExit(3000)` 而不读 stdout/stderr，如果 ffmpeg 输出量大会阻塞在管道上。改为先同步 `ReadToEnd()` 清空管道，再 `WaitForExit(5000)`，超时则 `Kill()`。
+   - `ConvertMediaAsync`：`StandardError.ReadToEnd()` 在 `WaitForExit` 之前会在子进程输出量大时死锁。改为在后台 `Task.Run` 读 stderr，主线程同步读 stdout 并 `WaitForExit(300_000)`；超时则 `Kill()` 并返回超时错误，避免僵尸进程。
+   - `EncoderParameters` 现包在 `using` 中，避免 GDI+ 对象累积。
+
+7) BenchmarkService 释放内存：
+   - 内存带宽测试 256 MB 缓冲完成后立即 `buffer = null; GC.Collect(2, GCCollectionMode.Optimized, false)`，避免数据在 LOH 停留。
+   - GPU 信息查询的 `ManagementObjectCollection` / `ManagementObject` 现已完整 Dispose。
+
+8) XAML 类型错误修复：
+   - 转换模块两个主按钮原来用 `InverseBoolToVis`（Visibility）绑定给 `IsEnabled`（bool），类型不匹配、仅靠隐式转换凑效。已删除该绑定，交由 Command 的 CanExecute 自动控制禁用态。
+
+构建验证：0 errors，单 EXE 仍为 12.83 MB。

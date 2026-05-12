@@ -26,11 +26,13 @@
 
     <Window.Resources>
         <viewModels:StatusToColorConverter x:Key="StatusToColorConverter" />
+        <viewModels:InverseBoolToVisibilityConverter x:Key="InverseBoolToVis" />
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
+        <viewModels:StringNotEmptyToVisibilityConverter x:Key="StringNotEmptyToVisibility" />
 
         <Style x:Key="NavItemStyle" TargetType="Button">
             <Setter Property="HorizontalContentAlignment" Value="Left" />
-            <Setter Property="Height" Value="56" />
+            <Setter Property="Height" Value="42" />
             <Setter Property="Padding" Value="0" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Cursor" Value="Hand" />
@@ -40,16 +42,19 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="Root" Background="{TemplateBinding Background}" SnapsToDevicePixels="True">
+                        <Border x:Name="Root" Background="{TemplateBinding Background}" SnapsToDevicePixels="True"
+                                Margin="6,1,6,1" CornerRadius="8">
                             <Grid>
                                 <Rectangle x:Name="ActiveBar"
-                                           Width="4"
-                                           RadiusX="2"
-                                           RadiusY="2"
+                                           Width="3"
+                                           Height="18"
+                                           RadiusX="1.5"
+                                           RadiusY="1.5"
                                            HorizontalAlignment="Left"
+                                           VerticalAlignment="Center"
                                            Fill="{DynamicResource BrushAccentBlue}"
                                            Visibility="Collapsed" />
-                                <ContentPresenter Margin="22,0,12,0"
+                                <ContentPresenter Margin="18,0,12,0"
                                                   HorizontalAlignment="Left"
                                                   VerticalAlignment="Center" />
                             </Grid>
@@ -156,6 +161,26 @@
                     <materialDesign:PackIcon Kind="WindowMaximize" />
                 </MenuItem.Icon>
             </MenuItem>
+            <MenuItem Command="{Binding ToggleAutoStartCommand}">
+                <MenuItem.Icon>
+                    <materialDesign:PackIcon Kind="AutoStart" />
+                </MenuItem.Icon>
+                <MenuItem.Style>
+                    <Style TargetType="MenuItem" BasedOn="{StaticResource MaterialDesignMenuItem}">
+                        <Setter Property="Header" Value="开启 开机自启" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsAutoStartEnabled}" Value="True">
+                                <Setter Property="Header" Value="关闭 开机自启" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </MenuItem.Style>
+            </MenuItem>
+            <MenuItem Header="打开日志目录" Command="{Binding OpenLogFolderCommand}">
+                <MenuItem.Icon>
+                    <materialDesign:PackIcon Kind="FolderOpenOutline" />
+                </MenuItem.Icon>
+            </MenuItem>
             <Separator />
             <MenuItem Header="退出程序" Command="{Binding ExitCommand}">
                 <MenuItem.Icon>
@@ -166,82 +191,146 @@
 
         <ContentControl x:Key="HomeView">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
-                <StackPanel Margin="36,24,36,24">
-                    <Border Padding="30,24"
-                            CornerRadius="{StaticResource CornerRadiusCard}"
-                            Margin="0,0,0,18">
-                        <Border.Background>
-                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                                <GradientStop Color="{DynamicResource BrushHeaderGradientStartColor}" Offset="0" />
-                                <GradientStop Color="{DynamicResource BrushHeaderGradientEndColor}" Offset="1" />
-                            </LinearGradientBrush>
-                        </Border.Background>
-                        <StackPanel HorizontalAlignment="Center">
-                            <Image Source="{StaticResource HomeHero}" Width="260" Height="180" />
-                            <TextBlock Text="欢迎使用阿君的工具"
-                                       Style="{StaticResource MaterialDesignHeadline5TextBlock}"
-                                       HorizontalAlignment="Center"
-                                       Margin="0,10,0,4" />
-                            <TextBlock Text="常用桌面工具集中管理，开箱即用。"
-                                       Opacity="0.58"
-                                       HorizontalAlignment="Center" />
-                        </StackPanel>
+                <StackPanel Margin="24,18,24,18">
+                    <!-- Hero -->
+                    <Border CornerRadius="{StaticResource CornerRadiusCard}"
+                            Margin="0,0,0,14" Padding="28,22"
+                            Background="{StaticResource BrushHeroGradient}" ClipToBounds="True">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="18" ShadowDepth="2" Opacity="0.12" Color="#475569" />
+                        </Border.Effect>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid Width="92" Height="92" VerticalAlignment="Center" Margin="0,0,20,0">
+                                <Ellipse Fill="{StaticResource BrushAccentGradient}" Opacity="0.18" />
+                                <Ellipse Width="74" Height="74" Fill="White" Opacity="0.6" />
+                                <Image Source="{StaticResource HomeHero}" Width="64" Height="64" />
+                            </Grid>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock Text="阿君的工具" Style="{StaticResource TextHeadline}" FontSize="22" />
+                                <TextBlock Text="常用桌面工具集中管理 · 开箱即用 · 单 EXE 分发"
+                                           Style="{StaticResource TextCaption}" Margin="0,3,0,8" />
+                                <StackPanel Orientation="Horizontal">
+                                    <Border Style="{StaticResource StatusPill}" Margin="0,0,8,0">
+                                        <StackPanel Orientation="Horizontal">
+                                            <Ellipse Width="6" Height="6" Fill="{DynamicResource BrushSuccess}" Margin="0,0,5,0" VerticalAlignment="Center" />
+                                            <TextBlock Text="{Binding OsDisplayName}" />
+                                        </StackPanel>
+                                    </Border>
+                                    <Border Style="{StaticResource StatusPill}">
+                                        <TextBlock Text="{Binding AppVersionText}" />
+                                    </Border>
+                                </StackPanel>
+                            </StackPanel>
+                        </Grid>
                     </Border>
 
+                    <!-- Shortcut buttons -->
                     <UniformGrid Rows="1" Columns="4" Margin="0,0,0,10">
-                        <Button Command="{Binding ShowNetworkCommand}" Margin="0,0,14,0" Style="{StaticResource HomeShortcutButtonStyle}">
-                            <materialDesign:Card Padding="18" Margin="0">
+                        <Button Command="{Binding ShowNetworkCommand}" Margin="0,0,10,0" Style="{StaticResource HomeShortcutButtonStyle}">
+                            <materialDesign:Card Padding="14,14" Margin="0">
                                 <StackPanel>
-                                    <Border Width="34" Height="34" Background="{DynamicResource BrushAccentBlue}" CornerRadius="17">
+                                    <Border Width="34" Height="34" Background="{StaticResource BrushBlueGradient}" CornerRadius="10">
                                         <materialDesign:PackIcon Kind="LanConnect" Width="18" Height="18" Foreground="White" VerticalAlignment="Center" HorizontalAlignment="Center" />
                                     </Border>
-                                    <TextBlock Text="当前网络" FontWeight="SemiBold" Margin="0,12,0,4" />
-                                    <TextBlock Text="快速查看网卡、网关与 DNS 状态。" Opacity="0.62" TextWrapping="Wrap" />
+                                    <TextBlock Text="当前网络" Style="{StaticResource TextSubtitle}" Margin="0,10,0,2" />
+                                    <TextBlock Text="网卡 · 网关 · DNS 状态" Style="{StaticResource TextHint}" TextWrapping="Wrap" />
                                 </StackPanel>
                             </materialDesign:Card>
                         </Button>
 
-                        <Button Command="{Binding ShowSystemCommand}" Margin="0,0,14,0" Style="{StaticResource HomeShortcutButtonStyle}">
-                            <materialDesign:Card Padding="18" Margin="0">
+                        <Button Command="{Binding ShowSystemCommand}" Margin="0,0,10,0" Style="{StaticResource HomeShortcutButtonStyle}">
+                            <materialDesign:Card Padding="14,14" Margin="0">
                                 <StackPanel>
-                                    <Border Width="34" Height="34" Background="{DynamicResource BrushAccentRose}" CornerRadius="17">
+                                    <Border Width="34" Height="34" CornerRadius="10">
+                                        <Border.Background>
+                                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                                <GradientStop Color="#F43F5E" Offset="0" />
+                                                <GradientStop Color="#F59E0B" Offset="1" />
+                                            </LinearGradientBrush>
+                                        </Border.Background>
                                         <materialDesign:PackIcon Kind="Tools" Width="18" Height="18" Foreground="White" VerticalAlignment="Center" HorizontalAlignment="Center" />
                                     </Border>
-                                    <TextBlock Text="系统优化" FontWeight="SemiBold" Margin="0,12,0,4" />
-                                    <TextBlock Text="清理、加固与自动化操作入口。" Opacity="0.62" TextWrapping="Wrap" />
+                                    <TextBlock Text="系统优化" Style="{StaticResource TextSubtitle}" Margin="0,10,0,2" />
+                                    <TextBlock Text="清理 · 加固 · 自动化" Style="{StaticResource TextHint}" TextWrapping="Wrap" />
                                 </StackPanel>
                             </materialDesign:Card>
                         </Button>
 
-                        <Button Command="{Binding ShowSqlExportCommand}" Margin="0,0,14,0" Style="{StaticResource HomeShortcutButtonStyle}">
-                            <materialDesign:Card Padding="18" Margin="0">
+                        <Button Command="{Binding ShowSqlExportCommand}" Margin="0,0,10,0" Style="{StaticResource HomeShortcutButtonStyle}">
+                            <materialDesign:Card Padding="14,14" Margin="0">
                                 <StackPanel>
-                                    <Border Width="34" Height="34" Background="{DynamicResource BrushAccentBlue}" CornerRadius="17">
+                                    <Border Width="34" Height="34" Background="{StaticResource BrushTealGradient}" CornerRadius="10">
                                         <materialDesign:PackIcon Kind="DatabaseArrowDown" Width="18" Height="18" Foreground="White" VerticalAlignment="Center" HorizontalAlignment="Center" />
                                     </Border>
-                                    <TextBlock Text="SQL 导出" FontWeight="SemiBold" Margin="0,12,0,4" />
-                                    <TextBlock Text="连接数据库、执行查询并导出 Excel。" Opacity="0.62" TextWrapping="Wrap" />
+                                    <TextBlock Text="SQL 导出" Style="{StaticResource TextSubtitle}" Margin="0,10,0,2" />
+                                    <TextBlock Text="连接 · 查询 · 导出 Excel" Style="{StaticResource TextHint}" TextWrapping="Wrap" />
                                 </StackPanel>
                             </materialDesign:Card>
                         </Button>
 
                         <Button Command="{Binding ShowScreenshotCommand}" Margin="0" Style="{StaticResource HomeShortcutButtonStyle}">
-                            <materialDesign:Card Padding="18" Margin="0">
+                            <materialDesign:Card Padding="14,14" Margin="0">
                                 <StackPanel>
-                                    <Border Width="34" Height="34" Background="{DynamicResource BrushAccentPurple}" CornerRadius="17">
+                                    <Border Width="34" Height="34" Background="{StaticResource BrushAccentGradient}" CornerRadius="10">
                                         <materialDesign:PackIcon Kind="CameraIris" Width="18" Height="18" Foreground="White" VerticalAlignment="Center" HorizontalAlignment="Center" />
                                     </Border>
-                                    <TextBlock Text="截图工具" FontWeight="SemiBold" Margin="0,12,0,4" />
-                                    <TextBlock Text="支持截图、区域录像与独立录音。" Opacity="0.62" TextWrapping="Wrap" />
+                                    <TextBlock Text="截图工具" Style="{StaticResource TextSubtitle}" Margin="0,10,0,2" />
+                                    <TextBlock Text="截图 · 录像 · 录音" Style="{StaticResource TextHint}" TextWrapping="Wrap" />
                                 </StackPanel>
                             </materialDesign:Card>
                         </Button>
                     </UniformGrid>
 
+                    <!-- System info card -->
+                    <materialDesign:Card Style="{StaticResource SectionCardOutlined}">
+                        <StackPanel>
+                            <StackPanel Style="{StaticResource SectionHeaderRow}">
+                                <Border Width="28" Height="28" CornerRadius="8" Background="{StaticResource BrushTealGradient}" Margin="0,0,10,0">
+                                    <materialDesign:PackIcon Kind="MonitorDashboard" Width="16" Height="16" Foreground="White" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                </Border>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="系统概览" Style="{StaticResource TextSubtitle}" />
+                                    <TextBlock Text="设备硬件与运行状态" Style="{StaticResource TextHint}" Margin="0,1,0,0" />
+                                </StackPanel>
+                            </StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <TextBlock Text="操作系统" Grid.Row="0" Grid.Column="0" Style="{StaticResource TextHint}" Margin="0,0,12,6" />
+                                <TextBlock Text="{Binding SystemInfo.OsName}" Grid.Row="0" Grid.Column="1" Style="{StaticResource TextBodyStandard}" TextTrimming="CharacterEllipsis" Margin="0,0,20,6" />
+                                <TextBlock Text="处理器" Grid.Row="0" Grid.Column="2" Style="{StaticResource TextHint}" Margin="0,0,12,6" />
+                                <TextBlock Text="{Binding SystemInfo.CpuName}" Grid.Row="0" Grid.Column="3" Style="{StaticResource TextBodyStandard}" TextTrimming="CharacterEllipsis" Margin="0,0,0,6" />
+                                <TextBlock Text="内存" Grid.Row="1" Grid.Column="0" Style="{StaticResource TextHint}" Margin="0,0,12,6" />
+                                <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource TextBodyStandard}" Margin="0,0,20,6">
+                                    <Run Text="{Binding SystemInfo.AvailableRam, Mode=OneTime}" /><Run Text=" / " /><Run Text="{Binding SystemInfo.TotalRam, Mode=OneTime}" />
+                                </TextBlock>
+                                <TextBlock Text="系统盘" Grid.Row="1" Grid.Column="2" Style="{StaticResource TextHint}" Margin="0,0,12,6" />
+                                <TextBlock Text="{Binding SystemInfo.SystemDisk}" Grid.Row="1" Grid.Column="3" Style="{StaticResource TextBodyStandard}" TextTrimming="CharacterEllipsis" Margin="0,0,0,6" />
+                                <TextBlock Text="运行时间" Grid.Row="2" Grid.Column="0" Style="{StaticResource TextHint}" Margin="0,0,12,0" />
+                                <TextBlock Text="{Binding SystemInfo.Uptime}" Grid.Row="2" Grid.Column="1" Style="{StaticResource TextBodyStandard}" Margin="0,0,20,0" />
+                                <TextBlock Text=".NET" Grid.Row="2" Grid.Column="2" Style="{StaticResource TextHint}" Margin="0,0,12,0" />
+                                <TextBlock Text="{Binding SystemInfo.DotNetVersion}" Grid.Row="2" Grid.Column="3" Style="{StaticResource TextBodyStandard}" />
+                            </Grid>
+                        </StackPanel>
+                    </materialDesign:Card>
+
                     <TextBlock Text="提示：可通过左侧导航快速切换功能模块。"
                                HorizontalAlignment="Center"
-                               Opacity="0.45"
-                               Margin="0,4,0,0" />
+                               Style="{StaticResource TextHint}"
+                               Margin="0,2,0,0" />
                 </StackPanel>
             </ScrollViewer>
         </ContentControl>
@@ -249,7 +338,7 @@
 
     <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="220" />
+            <ColumnDefinition Width="200" />
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
@@ -268,7 +357,7 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <Border Grid.Row="0" Padding="20,22,20,18"
+                <Border Grid.Row="0" Padding="16,16,16,12"
                         BorderBrush="{DynamicResource BrushSidebarDivider}" BorderThickness="0,0,0,1">
                     <Border.Background>
                         <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
@@ -276,19 +365,37 @@
                             <GradientStop Color="{DynamicResource BrushSidebarColor}" Offset="1" />
                         </LinearGradientBrush>
                     </Border.Background>
-                    <StackPanel>
-                        <StackPanel Orientation="Horizontal">
-                            <Image Source="/Resources/AppIcon.png" Width="26" Height="26"
-                                   RenderOptions.BitmapScalingMode="HighQuality"
-                                   VerticalAlignment="Center" />
-                            <TextBlock Text="阿君的工具" FontWeight="Bold" FontSize="17"
-                                       Foreground="White" VerticalAlignment="Center"
-                                       Margin="10,0,0,0" />
+                    <StackPanel Orientation="Horizontal">
+                        <Border Width="32" Height="32" CornerRadius="8" Background="#22FFFFFF" VerticalAlignment="Center">
+                            <Image Source="/Resources/AppIcon.png" Width="22" Height="22"
+                                   RenderOptions.BitmapScalingMode="HighQuality" />
+                        </Border>
+                        <StackPanel Margin="10,0,0,0" VerticalAlignment="Center">
+                            <TextBlock Text="阿君的工具" FontWeight="Bold" FontSize="15" Foreground="White" />
+                            <TextBlock Text="MyTools" FontSize="10" Foreground="White" Opacity="0.45" Margin="0,-1,0,0" />
                         </StackPanel>
                     </StackPanel>
                 </Border>
 
-                <StackPanel Grid.Row="1" Margin="0,8,0,0">
+                <StackPanel Grid.Row="1" Margin="0,6,0,0">
+
+                    <Button Command="{Binding ShowHomeCommand}">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource NavItemStyle}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding CurrentModule}" Value="Home">
+                                        <Setter Property="Tag" Value="ActiveNetwork" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                        <StackPanel Orientation="Horizontal">
+                            <materialDesign:PackIcon Kind="HomeOutline" Width="20" Height="20" Margin="0,0,12,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentBlue}" />
+                            <TextBlock Text="首页" VerticalAlignment="Center" FontSize="13" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                        </StackPanel>
+                    </Button>
+
+                    <Border Height="1" Background="{DynamicResource BrushSidebarDivider}" Margin="14,4,14,4" Opacity="0.5" />
 
                     <Button Command="{Binding ShowNetworkCommand}">
                         <Button.Style>
@@ -301,7 +408,7 @@
                             </Style>
                         </Button.Style>
                         <StackPanel Orientation="Horizontal">
-                            <materialDesign:PackIcon Kind="LanConnect" Width="22" Height="22" Margin="0,0,14,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentBlue}" />
+                            <materialDesign:PackIcon Kind="LanConnect" Width="20" Height="20" Margin="0,0,12,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentBlue}" />
                             <TextBlock Text="当前网络" VerticalAlignment="Center" FontSize="13" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                         </StackPanel>
                     </Button>
@@ -317,7 +424,7 @@
                             </Style>
                         </Button.Style>
                         <StackPanel Orientation="Horizontal">
-                            <materialDesign:PackIcon Kind="RocketLaunchOutline" Width="22" Height="22" Margin="0,0,14,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentAmber}" />
+                            <materialDesign:PackIcon Kind="RocketLaunchOutline" Width="20" Height="20" Margin="0,0,12,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentAmber}" />
                             <TextBlock Text="启动管理" VerticalAlignment="Center" FontSize="13" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                         </StackPanel>
                     </Button>
@@ -333,7 +440,7 @@
                             </Style>
                         </Button.Style>
                         <StackPanel Orientation="Horizontal">
-                            <materialDesign:PackIcon Kind="Tools" Width="22" Height="22" Margin="0,0,14,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentRose}" />
+                            <materialDesign:PackIcon Kind="Tools" Width="20" Height="20" Margin="0,0,12,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentRose}" />
                             <TextBlock Text="系统优化" VerticalAlignment="Center" FontSize="13" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                         </StackPanel>
                     </Button>
@@ -349,7 +456,7 @@
                             </Style>
                         </Button.Style>
                         <StackPanel Orientation="Horizontal">
-                            <materialDesign:PackIcon Kind="PackageVariantRemove" Width="22" Height="22" Margin="0,0,14,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentLime}" />
+                            <materialDesign:PackIcon Kind="PackageVariantRemove" Width="20" Height="20" Margin="0,0,12,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentLime}" />
                             <TextBlock Text="程序卸载" VerticalAlignment="Center" FontSize="13" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                         </StackPanel>
                     </Button>
@@ -365,7 +472,7 @@
                             </Style>
                         </Button.Style>
                         <StackPanel Orientation="Horizontal">
-                            <materialDesign:PackIcon Kind="DatabaseArrowDown" Width="22" Height="22" Margin="0,0,14,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentBlue}" />
+                            <materialDesign:PackIcon Kind="DatabaseArrowDown" Width="20" Height="20" Margin="0,0,12,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentBlue}" />
                             <TextBlock Text="SQL 导出" VerticalAlignment="Center" FontSize="13" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                         </StackPanel>
                     </Button>
@@ -381,7 +488,7 @@
                             </Style>
                         </Button.Style>
                         <StackPanel Orientation="Horizontal">
-                            <materialDesign:PackIcon Kind="CameraIris" Width="22" Height="22" Margin="0,0,14,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentPurple}" />
+                            <materialDesign:PackIcon Kind="CameraIris" Width="20" Height="20" Margin="0,0,12,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentPurple}" />
                             <TextBlock Text="截图工具" VerticalAlignment="Center" FontSize="13" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                         </StackPanel>
                     </Button>
@@ -397,19 +504,85 @@
                             </Style>
                         </Button.Style>
                         <StackPanel Orientation="Horizontal">
-                            <materialDesign:PackIcon Kind="FolderCogOutline" Width="22" Height="22" Margin="0,0,14,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentTeal}" />
+                            <materialDesign:PackIcon Kind="FolderCogOutline" Width="20" Height="20" Margin="0,0,12,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentTeal}" />
                             <TextBlock Text="Codex 配置" VerticalAlignment="Center" FontSize="13" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                         </StackPanel>
                     </Button>
 
+                    <Button Command="{Binding ShowSystemInfoCommand}">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource NavItemStyle}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding CurrentModule}" Value="SystemInfo">
+                                        <Setter Property="Tag" Value="ActiveNetwork" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                        <StackPanel Orientation="Horizontal">
+                            <materialDesign:PackIcon Kind="Chip" Width="20" Height="20" Margin="0,0,12,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentBlue}" />
+                            <TextBlock Text="系统信息" VerticalAlignment="Center" FontSize="13" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                        </StackPanel>
+                    </Button>
+
+                    <Button Command="{Binding ShowFileVerifyCommand}">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource NavItemStyle}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding CurrentModule}" Value="FileVerify">
+                                        <Setter Property="Tag" Value="ActiveCodexProfiles" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                        <StackPanel Orientation="Horizontal">
+                            <materialDesign:PackIcon Kind="ShieldCheckOutline" Width="20" Height="20" Margin="0,0,12,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentTeal}" />
+                            <TextBlock Text="文件验证" VerticalAlignment="Center" FontSize="13" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                        </StackPanel>
+                    </Button>
+
+                    <Button Command="{Binding ShowConvertCommand}">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource NavItemStyle}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding CurrentModule}" Value="Convert">
+                                        <Setter Property="Tag" Value="ActiveNetwork" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                        <StackPanel Orientation="Horizontal">
+                            <materialDesign:PackIcon Kind="SwapHorizontal" Width="20" Height="20" Margin="0,0,12,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentAmber}" />
+                            <TextBlock Text="格式转换" VerticalAlignment="Center" FontSize="13" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                        </StackPanel>
+                    </Button>
+
+                    <Button Command="{Binding ShowBenchmarkCommand}">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource NavItemStyle}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding CurrentModule}" Value="Benchmark">
+                                        <Setter Property="Tag" Value="ActiveNetwork" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                        <StackPanel Orientation="Horizontal">
+                            <materialDesign:PackIcon Kind="SpeedometerMedium" Width="20" Height="20" Margin="0,0,12,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentRose}" />
+                            <TextBlock Text="性能测试" VerticalAlignment="Center" FontSize="13" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                        </StackPanel>
+                    </Button>
+
                 </StackPanel>
-                <TextBlock Grid.Row="2"
-                           Text="{Binding AppVersionText}"
-                           FontSize="11"
-                           Opacity="0.45"
-                           Foreground="{DynamicResource BrushSidebarText}"
-                           HorizontalAlignment="Center"
-                           Margin="0,0,0,12" />
+                <Border Grid.Row="2" Margin="14,0,14,10"
+                        Background="#0AFFFFFF" CornerRadius="6"
+                        Padding="0,5" HorizontalAlignment="Center">
+                    <TextBlock Text="{Binding AppVersionText}"
+                               FontSize="10" Opacity="0.5"
+                               Foreground="{DynamicResource BrushSidebarText}"
+                               HorizontalAlignment="Center"
+                               Margin="12,0" />
+                </Border>
             </Grid>
         </Border>
 
@@ -461,10 +634,12 @@
                             <materialDesign:PackIcon Kind="Refresh" Width="22" Height="22" />
                         </Button>
                         <StackPanel Orientation="Horizontal">
-                            <materialDesign:PackIcon Kind="LanConnect" Width="32" Height="32" Margin="0,0,14,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentBlue}" />
-                            <StackPanel>
-                                <TextBlock Text="当前网络" Style="{StaticResource MaterialDesignHeadline5TextBlock}" />
-                                <TextBlock Text="实时查看网卡、IP、网关与 DNS 信息。" Opacity="0.55" Margin="0,2,0,0" />
+                            <Border Width="36" Height="36" CornerRadius="10" Background="{StaticResource BrushBlueGradient}" Margin="0,0,12,0" VerticalAlignment="Center">
+                                <materialDesign:PackIcon Kind="LanConnect" Width="18" Height="18" Foreground="White" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                            </Border>
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="当前网络" Style="{StaticResource TextHeadline}" />
+                                <TextBlock Text="实时查看网卡、IP、网关与 DNS 信息。" Style="{StaticResource TextCaption}" Margin="0,1,0,0" />
                             </StackPanel>
                         </StackPanel>
                     </DockPanel>
@@ -475,7 +650,7 @@
                         <ItemsControl x:Name="NetworkListControl" ItemsSource="{Binding NetworkList}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <materialDesign:Card Margin="0,0,0,15" Padding="15" materialDesign:ElevationAssist.Elevation="Dp2">
+                                    <materialDesign:Card Margin="0,0,0,10" Padding="12,10" materialDesign:ElevationAssist.Elevation="Dp1">
                                         <Grid>
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="Auto" />
@@ -483,15 +658,15 @@
                                             </Grid.ColumnDefinitions>
 
                                             <materialDesign:PackIcon Kind="Lan"
-                                                                     Width="32"
-                                                                     Height="32"
+                                                                     Width="24" Height="24"
                                                                      VerticalAlignment="Top"
                                                                      HorizontalAlignment="Center"
+                                                                     Margin="0,2,0,0"
                                                                      Foreground="{Binding Status, Converter={StaticResource StatusToColorConverter}}" />
 
-                                            <StackPanel Grid.Column="1" Margin="15,0,0,0">
-                                                <TextBlock Text="{Binding Name}" Style="{StaticResource MaterialDesignSubtitle1TextBlock}" FontWeight="Bold" />
-                                                <TextBlock Text="{Binding Description}" Style="{StaticResource MaterialDesignCaptionTextBlock}" Opacity="0.6" Margin="0,2,0,10" />
+                                            <StackPanel Grid.Column="1" Margin="12,0,0,0">
+                                                <TextBlock Text="{Binding Name}" Style="{StaticResource TextSubtitle}" FontWeight="Bold" />
+                                                <TextBlock Text="{Binding Description}" Style="{StaticResource TextCaption}" Margin="0,1,0,6" TextTrimming="CharacterEllipsis" />
 
                                                 <Grid>
                                                     <Grid.ColumnDefinitions>
@@ -502,16 +677,28 @@
                                                         <RowDefinition Height="Auto" />
                                                         <RowDefinition Height="Auto" />
                                                         <RowDefinition Height="Auto" />
+                                                        <RowDefinition Height="Auto" />
+                                                        <RowDefinition Height="Auto" />
+                                                        <RowDefinition Height="Auto" />
                                                     </Grid.RowDefinitions>
 
-                                                    <TextBlock Text="IP ???:" Grid.Row="0" Style="{StaticResource MaterialDesignCaptionTextBlock}" Margin="0,0,10,0" />
-                                                    <TextBlock Text="{Binding IpAddress}" Grid.Row="0" Grid.Column="1" TextWrapping="Wrap" Margin="0,0,0,5" />
+                                                    <TextBlock Text="IP 地址：" Grid.Row="0" Style="{StaticResource TextHint}" Margin="0,0,10,3" />
+                                                    <TextBlock Text="{Binding IpAddress}" Grid.Row="0" Grid.Column="1" Style="{StaticResource TextBodyStandard}" TextWrapping="Wrap" Margin="0,0,0,3" />
 
-                                                    <TextBlock Text="???:" Grid.Row="1" Style="{StaticResource MaterialDesignCaptionTextBlock}" Margin="0,0,10,0" />
-                                                    <TextBlock Text="{Binding Gateway}" Grid.Row="1" Grid.Column="1" TextWrapping="Wrap" Margin="0,0,0,5" />
+                                                    <TextBlock Text="网关：" Grid.Row="1" Style="{StaticResource TextHint}" Margin="0,0,10,3" />
+                                                    <TextBlock Text="{Binding Gateway}" Grid.Row="1" Grid.Column="1" Style="{StaticResource TextBodyStandard}" TextWrapping="Wrap" Margin="0,0,0,3" />
 
-                                                    <TextBlock Text="DNS:" Grid.Row="2" Style="{StaticResource MaterialDesignCaptionTextBlock}" Margin="0,0,10,0" />
-                                                    <TextBlock Text="{Binding Dns}" Grid.Row="2" Grid.Column="1" TextWrapping="Wrap" />
+                                                    <TextBlock Text="DNS：" Grid.Row="2" Style="{StaticResource TextHint}" Margin="0,0,10,3" />
+                                                    <TextBlock Text="{Binding Dns}" Grid.Row="2" Grid.Column="1" Style="{StaticResource TextBodyStandard}" TextWrapping="Wrap" Margin="0,0,0,3" />
+
+                                                    <TextBlock Text="MAC：" Grid.Row="3" Style="{StaticResource TextHint}" Margin="0,0,10,3" />
+                                                    <TextBlock Text="{Binding MacAddress}" Grid.Row="3" Grid.Column="1" Style="{StaticResource TextBodyStandard}" Margin="0,0,0,3" />
+
+                                                    <TextBlock Text="速率：" Grid.Row="4" Style="{StaticResource TextHint}" Margin="0,0,10,3" />
+                                                    <TextBlock Text="{Binding LinkSpeed}" Grid.Row="4" Grid.Column="1" Style="{StaticResource TextBodyStandard}" Margin="0,0,0,3" />
+
+                                                    <TextBlock Text="类型：" Grid.Row="5" Style="{StaticResource TextHint}" Margin="0,0,10,0" />
+                                                    <TextBlock Text="{Binding AdapterType}" Grid.Row="5" Grid.Column="1" Style="{StaticResource TextBodyStandard}" />
                                                 </Grid>
                                             </StackPanel>
                                         </Grid>
@@ -534,12 +721,12 @@
                         </StackPanel.Style>
                         <Image Source="{StaticResource NetworkEmpty}" Width="160" Height="120" HorizontalAlignment="Center" />
                         <TextBlock Text="No network entries available right now."
-                                   Style="{StaticResource MaterialDesignSubtitle1TextBlock}"
+                                   Style="{StaticResource TextSubtitle}"
                                    HorizontalAlignment="Center"
                                    Opacity="0.4"
                                    Margin="0,12,0,0" />
-                        <Button Content="刷新"
-                                Style="{StaticResource MaterialDesignOutlinedButton}"
+                        <Button Content="刷新" HorizontalAlignment="Center"
+                                Style="{StaticResource GhostActionButton}"
                                 Command="{Binding RefreshCommand}"
                                 Margin="0,12,0,0" />
                     </StackPanel>
@@ -596,15 +783,12 @@
                             </Button>
                         </StackPanel>
                         <StackPanel Orientation="Horizontal">
-                            <materialDesign:PackIcon Kind="PackageVariantRemove"
-                                                     Width="32"
-                                                     Height="32"
-                                                     Margin="0,0,14,0"
-                                                     VerticalAlignment="Center"
-                                                     Foreground="{DynamicResource BrushAccentLime}" />
-                            <StackPanel>
-                                <TextBlock Text="程序卸载" Style="{StaticResource MaterialDesignHeadline5TextBlock}" />
-                                <TextBlock Text="{Binding InstalledProgramsStatusMessage}" Opacity="0.55" Margin="0,2,0,0" />
+                            <Border Width="36" Height="36" CornerRadius="10" Background="{StaticResource BrushTealGradient}" Margin="0,0,12,0" VerticalAlignment="Center">
+                                <materialDesign:PackIcon Kind="PackageVariantRemove" Width="18" Height="18" Foreground="White" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                            </Border>
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="程序卸载" Style="{StaticResource TextHeadline}" />
+                                <TextBlock Text="{Binding InstalledProgramsStatusMessage}" Style="{StaticResource TextCaption}" Margin="0,1,0,0" />
                             </StackPanel>
                         </StackPanel>
                     </DockPanel>
@@ -671,12 +855,12 @@
                                                  Opacity="0.28"
                                                  HorizontalAlignment="Center" />
                         <TextBlock Text="未加载可卸载程序"
-                                   Style="{StaticResource MaterialDesignSubtitle1TextBlock}"
+                                   Style="{StaticResource TextSubtitle}"
                                    HorizontalAlignment="Center"
                                    Opacity="0.5"
                                    Margin="0,12,0,0" />
                         <Button Content="刷新列表"
-                                Style="{StaticResource MaterialDesignOutlinedButton}"
+                                Style="{StaticResource GhostActionButton}"
                                 Command="{Binding RefreshInstalledProgramsCommand}"
                                 Margin="0,12,0,0" />
                     </StackPanel>
@@ -717,10 +901,18 @@
                             <materialDesign:PackIcon Kind="Refresh" Width="22" Height="22" />
                         </Button>
                         <StackPanel Orientation="Horizontal">
-                            <materialDesign:PackIcon Kind="RocketLaunchOutline" Width="32" Height="32" Margin="0,0,14,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentAmber}" />
-                            <StackPanel>
-                                <TextBlock Text="Startup Manager" Style="{StaticResource MaterialDesignHeadline5TextBlock}" />
-                                <TextBlock Text="Manage Windows startup items and speed up boot." Opacity="0.55" Margin="0,2,0,0" />
+                            <Border Width="36" Height="36" CornerRadius="10" Margin="0,0,12,0" VerticalAlignment="Center">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                        <GradientStop Color="#F59E0B" Offset="0" />
+                                        <GradientStop Color="#EF4444" Offset="1" />
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                                <materialDesign:PackIcon Kind="RocketLaunchOutline" Width="18" Height="18" Foreground="White" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                            </Border>
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="启动项管理" Style="{StaticResource TextHeadline}" />
+                                <TextBlock Text="管理 Windows 开机启动项" Style="{StaticResource TextCaption}" Margin="0,1,0,0" />
                             </StackPanel>
                         </StackPanel>
                     </DockPanel>
@@ -754,12 +946,12 @@
                                             </Border>
 
                                             <StackPanel Grid.Column="1" Margin="12,12,8,12">
-                                                <TextBlock Text="{Binding Name}" Style="{StaticResource MaterialDesignSubtitle1TextBlock}" FontWeight="Bold" />
-                                                <TextBlock Text="{Binding Command}" Style="{StaticResource MaterialDesignCaptionTextBlock}" Opacity="0.6" Margin="0,4,0,4"
+                                                <TextBlock Text="{Binding Name}" Style="{StaticResource TextSubtitle}" FontWeight="Bold" />
+                                                <TextBlock Text="{Binding Command}" Style="{StaticResource TextCaption}" Opacity="0.6" Margin="0,4,0,4"
                                                            TextTrimming="CharacterEllipsis" ToolTip="{Binding Command}" />
                                                 <StackPanel Orientation="Horizontal">
                                                     <materialDesign:PackIcon Kind="AccountCircle" Width="12" Height="12" VerticalAlignment="Center" Opacity="0.5" />
-                                                    <TextBlock Text="{Binding Location}" Style="{StaticResource MaterialDesignCaptionTextBlock}" Foreground="{DynamicResource PrimaryHueMidBrush}" Margin="4,0,0,0" />
+                                                    <TextBlock Text="{Binding Location}" Style="{StaticResource TextCaption}" Foreground="{DynamicResource PrimaryHueMidBrush}" Margin="4,0,0,0" />
                                                 </StackPanel>
                                             </StackPanel>
 
@@ -769,7 +961,7 @@
                                                         Width="80"
                                                         Margin="0,0,8,0">
                                                     <Button.Style>
-                                                        <Style TargetType="Button" BasedOn="{StaticResource MaterialDesignOutlinedButton}">
+                                                        <Style TargetType="Button" BasedOn="{StaticResource GhostActionButton}">
                                                             <Setter Property="Content" Value="禁用" />
                                                             <Setter Property="Foreground" Value="#C62828" />
                                                             <Setter Property="BorderBrush" Value="#C62828" />
@@ -801,12 +993,12 @@
                     <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center"
                                 Visibility="{Binding HasNoStartupItems, Converter={StaticResource BoolToVis}}">
                         <Image Source="{StaticResource StartupEmpty}" Width="160" Height="120" HorizontalAlignment="Center" />
-                        <TextBlock Text="未发现开机启动项" Style="{StaticResource MaterialDesignSubtitle1TextBlock}"
+                        <TextBlock Text="未发现开机启动项" Style="{StaticResource TextSubtitle}"
                                    HorizontalAlignment="Center" Opacity="0.4" Margin="0,12,0,0" />
-                        <TextBlock Text="点击刷新按钮重新扫描" Style="{StaticResource MaterialDesignCaptionTextBlock}"
+                        <TextBlock Text="点击刷新按钮重新扫描" Style="{StaticResource TextCaption}"
                                    HorizontalAlignment="Center" Opacity="0.3" Margin="0,4,0,0" />
                         <Button Content="Refresh"
-                                Style="{StaticResource MaterialDesignOutlinedButton}"
+                                Style="{StaticResource GhostActionButton}"
                                 Command="{Binding RefreshCommand}"
                                 Margin="0,12,0,0" />
                     </StackPanel>
@@ -833,10 +1025,12 @@
                         </LinearGradientBrush>
                     </Border.Background>
                     <StackPanel Orientation="Horizontal">
-                    <materialDesign:PackIcon Kind="ShieldLock" Width="32" Height="32" Margin="0,0,14,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentTeal}" />
-                    <StackPanel>
-                        <TextBlock Text="VPN Connection" Style="{StaticResource MaterialDesignHeadline5TextBlock}" VerticalAlignment="Center" />
-                        <TextBlock Text="Quickly connect and switch WireGuard tunnels" Opacity="0.55" Margin="0,2,0,0" />
+                    <Border Width="36" Height="36" CornerRadius="10" Background="{StaticResource BrushTealGradient}" Margin="0,0,12,0" VerticalAlignment="Center">
+                        <materialDesign:PackIcon Kind="ShieldLock" Width="18" Height="18" Foreground="White" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                    </Border>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="VPN 连接" Style="{StaticResource TextHeadline}" />
+                        <TextBlock Text="快速连接与切换 WireGuard 隧道" Style="{StaticResource TextCaption}" Margin="0,1,0,0" />
                     </StackPanel>
                     <Border Padding="10,3" Margin="20,0,0,0" VerticalAlignment="Center">
                         <Border.Style>
@@ -892,7 +1086,7 @@
                                      Text="{Binding WgInterfaceName}"
                                      Style="{StaticResource MaterialDesignFloatingHintTextBox}"
                                      Margin="0,0,0,10" />
-                            <TextBlock Text="配置内容 (.conf):" Style="{StaticResource MaterialDesignCaptionTextBlock}" Margin="0,10,0,5" />
+                            <TextBlock Text="配置内容 (.conf):" Style="{StaticResource TextCaption}" Margin="0,10,0,5" />
                             <TextBox Text="{Binding WgConfig, UpdateSourceTrigger=PropertyChanged}"
                                      AcceptsReturn="True"
                                      TextWrapping="Wrap"
@@ -904,9 +1098,9 @@
                         </StackPanel>
                     </materialDesign:Card>
 
-                    <Button Grid.Row="3" Command="{Binding ToggleWireGuardCommand}" Height="50">
+                    <Button Grid.Row="3" Command="{Binding ToggleWireGuardCommand}" Height="44">
                         <Button.Style>
-                            <Style TargetType="Button" BasedOn="{StaticResource MaterialDesignRaisedButton}">
+                            <Style TargetType="Button" BasedOn="{StaticResource PrimaryActionButton}">
                                 <Setter Property="Content" Value="启动连接" />
                                 <Setter Property="Background" Value="{DynamicResource PrimaryHueMidBrush}" />
                                 <Style.Triggers>
@@ -936,34 +1130,34 @@
                                 <Button Style="{StaticResource MaterialDesignIconButton}" Command="{Binding ToggleWgSettingsCommand}">
                                     <materialDesign:PackIcon Kind="ArrowLeft" />
                                 </Button>
-                                <TextBlock Text="VPN 高级设置" Style="{StaticResource MaterialDesignHeadline6TextBlock}" VerticalAlignment="Center" Margin="10,0,0,0" />
+                                <TextBlock Text="VPN 高级设置" Style="{StaticResource TextHeadline}" VerticalAlignment="Center" Margin="10,0,0,0" />
                             </StackPanel>
 
                             <StackPanel Grid.Row="1">
                                 <TextBox materialDesign:HintAssist.Hint="服务器 Endpoint (IP:Port)"
                                          Text="{Binding WgEndpoint}"
                                          Style="{StaticResource MaterialDesignFloatingHintTextBox}"
-                                         Margin="0,0,0,20" />
+                                         Margin="{StaticResource ThicknessFieldRow}" />
                                 <TextBox materialDesign:HintAssist.Hint="本地 Address (例如 10.0.0.2/32)"
                                          Text="{Binding WgAddress}"
                                          Style="{StaticResource MaterialDesignFloatingHintTextBox}"
-                                         Margin="0,0,0,20" />
+                                         Margin="{StaticResource ThicknessFieldRow}" />
                                 <TextBox materialDesign:HintAssist.Hint="服务器 Public Key"
                                          Text="{Binding WgServerPublicKey}"
                                          Style="{StaticResource MaterialDesignFloatingHintTextBox}"
-                                         Margin="0,0,0,20" />
+                                         Margin="{StaticResource ThicknessFieldRow}" />
 
                                 <TextBlock Text="点击生成后会自动回填主配置框，PrivateKey 仍需手动补充。"
-                                           Style="{StaticResource MaterialDesignCaptionTextBlock}"
-                                           Foreground="Orange"
+                                           Style="{StaticResource TextCaption}"
+                                           Foreground="#F59E0B"
                                            TextWrapping="Wrap" />
                             </StackPanel>
 
                             <Button Grid.Row="2"
                                     Content="生成并应用配置"
                                     Command="{Binding GenerateConfigCommand}"
-                                    Style="{StaticResource MaterialDesignRaisedAccentButton}"
-                                    Height="45" />
+                                    Style="{StaticResource PrimaryActionButton}"
+                                    Height="38" />
                         </Grid>
                     </materialDesign:Card>
                 </Grid>
@@ -997,10 +1191,18 @@
                         </LinearGradientBrush>
                     </Border.Background>
                     <StackPanel Orientation="Horizontal">
-                        <materialDesign:PackIcon Kind="Tools" Width="24" Height="24" Margin="0,0,10,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentRose}" />
-                        <StackPanel>
-                            <TextBlock Text="系统优化" Style="{StaticResource MaterialDesignHeadline6TextBlock}" />
-                            <TextBlock Text="执行白名单维护与优化任务。" FontSize="12" Opacity="0.55" Margin="0,1,0,0" />
+                        <Border Width="32" Height="32" CornerRadius="8" Margin="0,0,10,0" VerticalAlignment="Center">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                    <GradientStop Color="#F43F5E" Offset="0" />
+                                    <GradientStop Color="#F59E0B" Offset="1" />
+                                </LinearGradientBrush>
+                            </Border.Background>
+                            <materialDesign:PackIcon Kind="Tools" Width="16" Height="16" Foreground="White" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                        </Border>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="系统优化" Style="{StaticResource TextHeadline}" />
+                            <TextBlock Text="执行白名单维护与优化任务" Style="{StaticResource TextCaption}" Margin="0,1,0,0" />
                         </StackPanel>
                     </StackPanel>
                 </Border>
@@ -1014,9 +1216,9 @@
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel>
-                                    <TextBlock Text="锁定 Windows 10 版本 (22H2)" Style="{StaticResource MaterialDesignSubtitle2TextBlock}" FontWeight="Bold" />
+                                    <TextBlock Text="锁定 Windows 10 版本 (22H2)" Style="{StaticResource TextSubtitle}" FontWeight="Bold" />
                                     <TextBlock Text="防止系统自动升级到 Windows 11 或更高版本，适用于希望继续停留在 Win10 22H2 的用户。"
-                                               Style="{StaticResource MaterialDesignBody2TextBlock}"
+                                               Style="{StaticResource TextCaption}"
                                                FontSize="12"
                                                Opacity="0.6"
                                                TextWrapping="Wrap"
@@ -1027,7 +1229,7 @@
                                         Height="32"
                                         Content="执行锁定"
                                         Command="{Binding LockWin10Command}"
-                                        Style="{StaticResource MaterialDesignRaisedButton}" />
+                                        Style="{StaticResource PrimaryActionButton}" />
                             </Grid>
                         </materialDesign:Card>
 
@@ -1040,16 +1242,15 @@
                                 <StackPanel>
                                     <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
                                         <TextBlock Text="Windows Defender 实时防护"
-                                                   Style="{StaticResource MaterialDesignSubtitle2TextBlock}"
+                                                   Style="{StaticResource TextSubtitle}"
                                                    FontWeight="Bold"
                                                    VerticalAlignment="Center" />
-                                        <Border CornerRadius="4" Padding="6,1" Margin="8,0,0,0" VerticalAlignment="Center">
+                                        <Border Margin="8,0,0,0" VerticalAlignment="Center">
                                             <Border.Style>
-                                                <Style TargetType="Border">
-                                                    <Setter Property="Background" Value="#2E7D32" />
+                                                <Style TargetType="Border" BasedOn="{StaticResource BadgeSuccess}">
                                                     <Style.Triggers>
                                                         <DataTrigger Binding="{Binding IsDefenderEnabled}" Value="False">
-                                                            <Setter Property="Background" Value="#757575" />
+                                                            <Setter Property="Background" Value="{DynamicResource BrushError}" />
                                                         </DataTrigger>
                                                     </Style.Triggers>
                                                 </Style>
@@ -1069,7 +1270,7 @@
                                         </Border>
                                     </StackPanel>
                                     <TextBlock Text="关闭或恢复 Windows 安全中心的实时防护。Win11 需先在安全中心手动关闭「篡改保护」，否则命令将被拒绝。"
-                                               Style="{StaticResource MaterialDesignBody2TextBlock}"
+                                               Style="{StaticResource TextCaption}"
                                                FontSize="12"
                                                Opacity="0.6"
                                                TextWrapping="Wrap"
@@ -1078,7 +1279,7 @@
                                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                                     <Button Width="86" Height="32" Margin="0,0,6,0" Command="{Binding ToggleDefenderCommand}">
                                         <Button.Style>
-                                            <Style TargetType="Button" BasedOn="{StaticResource MaterialDesignOutlinedButton}">
+                                            <Style TargetType="Button" BasedOn="{StaticResource GhostActionButton}">
                                                 <Setter Property="Content" Value="关闭防护" />
                                                 <Setter Property="Foreground" Value="#C62828" />
                                                 <Setter Property="BorderBrush" Value="#C62828" />
@@ -1112,16 +1313,15 @@
                                 <StackPanel>
                                     <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
                                         <TextBlock Text="Windows 自动更新"
-                                                   Style="{StaticResource MaterialDesignSubtitle2TextBlock}"
+                                                   Style="{StaticResource TextSubtitle}"
                                                    FontWeight="Bold"
                                                    VerticalAlignment="Center" />
-                                        <Border CornerRadius="4" Padding="6,1" Margin="8,0,0,0" VerticalAlignment="Center">
+                                        <Border Margin="8,0,0,0" VerticalAlignment="Center">
                                             <Border.Style>
-                                                <Style TargetType="Border">
-                                                    <Setter Property="Background" Value="#1565C0" />
+                                                <Style TargetType="Border" BasedOn="{StaticResource BadgeInfo}">
                                                     <Style.Triggers>
                                                         <DataTrigger Binding="{Binding IsAutoUpdateEnabled}" Value="False">
-                                                            <Setter Property="Background" Value="#757575" />
+                                                            <Setter Property="Background" Value="{DynamicResource BrushWarning}" />
                                                         </DataTrigger>
                                                     </Style.Triggers>
                                                 </Style>
@@ -1141,7 +1341,7 @@
                                         </Border>
                                     </StackPanel>
                                     <TextBlock Text="停止 Windows 后台自动更新，或手动触发立即检查并安装所有可用更新（以前台最高优先级下载安装，速度最快）。"
-                                               Style="{StaticResource MaterialDesignBody2TextBlock}"
+                                               Style="{StaticResource TextCaption}"
                                                FontSize="12"
                                                Opacity="0.6"
                                                TextWrapping="Wrap"
@@ -1150,7 +1350,7 @@
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,0,0">
                                     <Button Width="86" Height="32" Margin="0,0,0,6" Command="{Binding ToggleAutoUpdateCommand}">
                                         <Button.Style>
-                                            <Style TargetType="Button" BasedOn="{StaticResource MaterialDesignOutlinedButton}">
+                                            <Style TargetType="Button" BasedOn="{StaticResource GhostActionButton}">
                                                 <Setter Property="Content" Value="停止更新" />
                                                 <Setter Property="Foreground" Value="#C62828" />
                                                 <Setter Property="BorderBrush" Value="#C62828" />
@@ -1168,13 +1368,13 @@
                                             Height="32"
                                             Content="立即更新"
                                             Command="{Binding TriggerUpdateNowCommand}"
-                                            Style="{StaticResource MaterialDesignRaisedButton}" />
+                                            Style="{StaticResource PrimaryActionButton}" />
                                 </StackPanel>
                             </Grid>
                         </materialDesign:Card>
 
                         <TextBlock Text="{Binding SystemStatusMessage}"
-                                   Style="{StaticResource MaterialDesignCaptionTextBlock}"
+                                   Style="{StaticResource TextCaption}"
                                    Opacity="0.7"
                                    TextWrapping="Wrap"
                                    Margin="4,0,0,8" />
@@ -1185,10 +1385,10 @@
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="温馨提示" Style="{StaticResource MaterialDesignSubtitle2TextBlock}" Foreground="White" FontWeight="Bold" Margin="0,0,14,0" />
+                                <TextBlock Grid.Column="0" Text="温馨提示" Style="{StaticResource TextSubtitle}" Foreground="White" FontWeight="Bold" Margin="0,0,14,0" />
                                 <TextBlock Text="部分优化操作需要管理员权限，执行过程中请留意系统弹出的 UAC 授权窗口。"
                                            Grid.Column="1"
-                                           Style="{StaticResource MaterialDesignBody2TextBlock}"
+                                           Style="{StaticResource TextCaption}"
                                            FontSize="12"
                                            Foreground="White"
                                            Opacity="0.9"
@@ -1200,10 +1400,10 @@
                         <materialDesign:Card Padding="14,10" Margin="0,0,0,8">
                             <StackPanel>
                                 <TextBlock Text="自动优化与报告"
-                                           Style="{StaticResource MaterialDesignSubtitle2TextBlock}"
+                                           Style="{StaticResource TextSubtitle}"
                                            FontWeight="Bold" />
                                 <TextBlock Text="按白名单步骤自动执行系统优化，完成后自动生成可追溯报告。"
-                                           Style="{StaticResource MaterialDesignBody2TextBlock}"
+                                           Style="{StaticResource TextCaption}"
                                            FontSize="12"
                                            Opacity="0.65"
                                            Margin="0,3,0,8"
@@ -1211,7 +1411,7 @@
                                 <StackPanel Orientation="Horizontal">
                                     <Button Content="开始自动优化"
                                             Height="32"
-                                            Style="{StaticResource MaterialDesignRaisedButton}"
+                                            Style="{StaticResource PrimaryActionButton}"
                                             Command="{Binding StartAutoOptimizeCommand}" />
                                     <ProgressBar Width="22" Height="22"
                                                  Margin="10,0,0,0"
@@ -1220,7 +1420,7 @@
                                                  Style="{StaticResource MaterialDesignCircularProgressBar}" />
                                 </StackPanel>
                                 <TextBlock Text="{Binding AutoOptimizeStatusMessage}"
-                                           Style="{StaticResource MaterialDesignCaptionTextBlock}"
+                                           Style="{StaticResource TextCaption}"
                                            Margin="0,6,0,6"
                                            TextWrapping="Wrap" />
 
@@ -1273,10 +1473,10 @@
                         <materialDesign:Card Padding="14,10" Margin="0,0,0,8">
                             <StackPanel>
                                 <TextBlock Text="垃圾清理"
-                                           Style="{StaticResource MaterialDesignSubtitle2TextBlock}"
+                                           Style="{StaticResource TextSubtitle}"
                                            FontWeight="Bold" />
                                 <TextBlock Text="扫描并清理白名单目录中的临时垃圾文件，执行前会进行二次确认。"
-                                           Style="{StaticResource MaterialDesignBody2TextBlock}"
+                                           Style="{StaticResource TextCaption}"
                                            FontSize="12"
                                            Opacity="0.65"
                                            Margin="0,3,0,8"
@@ -1285,7 +1485,7 @@
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                                     <Button Content="开始扫描"
                                             Height="32"
-                                            Style="{StaticResource MaterialDesignRaisedButton}"
+                                            Style="{StaticResource PrimaryActionButton}"
                                             Command="{Binding StartJunkScanCommand}" />
                                     <Button Content="立即清理"
                                             Height="32"
@@ -1299,7 +1499,7 @@
                                 </StackPanel>
 
                                 <TextBlock Text="{Binding JunkStatusMessage}"
-                                           Style="{StaticResource MaterialDesignCaptionTextBlock}"
+                                           Style="{StaticResource TextCaption}"
                                            TextWrapping="Wrap"
                                            Margin="0,0,0,6" />
 
@@ -1330,11 +1530,11 @@
                         <materialDesign:Card Padding="14,10" Margin="0,0,0,8">
                             <StackPanel>
                                 <TextBlock Text="微信清理"
-                                           Style="{StaticResource MaterialDesignSubtitle2TextBlock}"
+                                           Style="{StaticResource TextSubtitle}"
                                            FontWeight="Bold" />
                                 <TextBlock Text="微信运行中清理可能导致部分图片/视频缩略图丢失，建议先关闭微信后再清理。"
                                            Foreground="#C62828"
-                                           Style="{StaticResource MaterialDesignBody2TextBlock}"
+                                           Style="{StaticResource TextCaption}"
                                            FontSize="12"
                                            TextWrapping="Wrap"
                                            Margin="0,3,0,8" />
@@ -1365,7 +1565,7 @@
                                 </WrapPanel>
 
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                                    <Button Content="扫描" Height="32" Command="{Binding ScanWeChatCleanupCommand}" Style="{StaticResource MaterialDesignRaisedButton}" />
+                                    <Button Content="扫描" Height="32" Command="{Binding ScanWeChatCleanupCommand}" Style="{StaticResource PrimaryActionButton}" />
                                     <Button Content="开始清理" Height="32" Margin="8,0,0,0" Command="{Binding StartWeChatCleanupCommand}" />
                                     <ProgressBar Width="22" Height="22"
                                                  Margin="10,0,0,0"
@@ -1375,7 +1575,7 @@
                                 </StackPanel>
 
                                 <TextBlock Text="{Binding WeChatCleanupStatusMessage}"
-                                           Style="{StaticResource MaterialDesignCaptionTextBlock}"
+                                           Style="{StaticResource TextCaption}"
                                            TextWrapping="Wrap"
                                            Margin="0,0,0,6" />
 
@@ -1406,10 +1606,10 @@
                         <materialDesign:Card Padding="14,10" Margin="0,0,0,8">
                             <StackPanel>
                                 <TextBlock Text="微信备份"
-                                           Style="{StaticResource MaterialDesignSubtitle2TextBlock}"
+                                           Style="{StaticResource TextSubtitle}"
                                            FontWeight="Bold" />
                                 <TextBlock Text="按日期和类别备份为单个 ZIP，包含 manifest.json 与 SHA256 校验信息。"
-                                           Style="{StaticResource MaterialDesignBody2TextBlock}"
+                                           Style="{StaticResource TextCaption}"
                                            FontSize="12"
                                            Opacity="0.65"
                                            Margin="0,3,0,8"
@@ -1444,12 +1644,12 @@
                                     <Button Content="选择保存目录"
                                             Height="32"
                                             Command="{Binding SelectWeChatBackupOutputFolderCommand}"
-                                            Style="{StaticResource MaterialDesignOutlinedButton}" />
+                                            Style="{StaticResource GhostActionButton}" />
                                     <Button Content="开始备份"
                                             Height="32"
                                             Margin="8,0,0,0"
                                             Command="{Binding StartWeChatBackupCommand}"
-                                            Style="{StaticResource MaterialDesignRaisedButton}" />
+                                            Style="{StaticResource PrimaryActionButton}" />
                                     <ProgressBar Width="22" Height="22"
                                                  Margin="10,0,0,0"
                                                  IsIndeterminate="True"
@@ -1458,11 +1658,11 @@
                                 </StackPanel>
 
                                 <TextBlock Text="{Binding WeChatBackupOutputFolder}"
-                                           Style="{StaticResource MaterialDesignCaptionTextBlock}"
+                                           Style="{StaticResource TextCaption}"
                                            Opacity="0.75"
                                            TextWrapping="Wrap" />
                                 <TextBlock Text="{Binding WeChatBackupStatusMessage}"
-                                           Style="{StaticResource MaterialDesignCaptionTextBlock}"
+                                           Style="{StaticResource TextCaption}"
                                            Margin="0,4,0,0"
                                            TextWrapping="Wrap" />
                             </StackPanel>
@@ -1471,10 +1671,10 @@
                         <materialDesign:Card Padding="14,10">
                             <StackPanel>
                                 <TextBlock Text="微信恢复"
-                                           Style="{StaticResource MaterialDesignSubtitle2TextBlock}"
+                                           Style="{StaticResource TextSubtitle}"
                                            FontWeight="Bold" />
                                 <TextBlock Text="从备份 ZIP 读取 manifest 后恢复到原路径或自定义目录；同名文件自动改名防覆盖。"
-                                           Style="{StaticResource MaterialDesignBody2TextBlock}"
+                                           Style="{StaticResource TextCaption}"
                                            FontSize="12"
                                            Opacity="0.65"
                                            Margin="0,3,0,8"
@@ -1484,18 +1684,18 @@
                                     <Button Content="选择备份文件"
                                             Height="32"
                                             Command="{Binding SelectWeChatRestoreZipCommand}"
-                                            Style="{StaticResource MaterialDesignOutlinedButton}" />
+                                            Style="{StaticResource GhostActionButton}" />
                                     <Button Content="选择恢复目录"
                                             Height="32"
                                             Margin="8,0,0,0"
                                             Command="{Binding SelectWeChatRestoreTargetRootCommand}"
                                             IsEnabled="{Binding RestoreToCustom}"
-                                            Style="{StaticResource MaterialDesignOutlinedButton}" />
+                                            Style="{StaticResource GhostActionButton}" />
                                     <Button Content="开始恢复"
                                             Height="32"
                                             Margin="8,0,0,0"
                                             Command="{Binding StartWeChatRestoreCommand}"
-                                            Style="{StaticResource MaterialDesignRaisedButton}" />
+                                            Style="{StaticResource PrimaryActionButton}" />
                                     <ProgressBar Width="22" Height="22"
                                                  Margin="10,0,0,0"
                                                  IsIndeterminate="True"
@@ -1514,20 +1714,20 @@
                                 </StackPanel>
 
                                 <TextBlock Text="{Binding WeChatRestoreZipPath}"
-                                           Style="{StaticResource MaterialDesignCaptionTextBlock}"
+                                           Style="{StaticResource TextCaption}"
                                            Opacity="0.75"
                                            TextWrapping="Wrap" />
                                 <TextBlock Text="{Binding WeChatRestoreTargetRoot}"
-                                           Style="{StaticResource MaterialDesignCaptionTextBlock}"
+                                           Style="{StaticResource TextCaption}"
                                            Opacity="0.75"
                                            Margin="0,3,0,0"
                                            TextWrapping="Wrap" />
                                 <TextBlock Text="{Binding WeChatRestoreManifestSummary}"
-                                           Style="{StaticResource MaterialDesignCaptionTextBlock}"
+                                           Style="{StaticResource TextCaption}"
                                            Margin="0,5,0,0"
                                            TextWrapping="Wrap" />
                                 <TextBlock Text="{Binding WeChatRestoreStatusMessage}"
-                                           Style="{StaticResource MaterialDesignCaptionTextBlock}"
+                                           Style="{StaticResource TextCaption}"
                                            Margin="0,5,0,0"
                                            TextWrapping="Wrap" />
                             </StackPanel>
@@ -1573,10 +1773,12 @@
                             <TextBlock Text="SQL Server / PostgreSQL / MySQL" Foreground="#1976D2" FontWeight="SemiBold" />
                         </Border>
                         <StackPanel Orientation="Horizontal">
-                            <materialDesign:PackIcon Kind="DatabaseArrowDown" Width="24" Height="24" Margin="0,0,10,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentBlue}" />
-                            <StackPanel>
-                                <TextBlock Text="SQL Export Toolkit" Style="{StaticResource MaterialDesignHeadline6TextBlock}" />
-                                <TextBlock Text="Batch export database tables to .xlsx." Opacity="0.55" FontSize="12" Margin="0,1,0,0" />
+                            <Border Width="32" Height="32" CornerRadius="8" Background="{StaticResource BrushBlueGradient}" Margin="0,0,10,0" VerticalAlignment="Center">
+                                <materialDesign:PackIcon Kind="DatabaseArrowDown" Width="16" Height="16" Foreground="White" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                            </Border>
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="SQL 导出工具" Style="{StaticResource TextHeadline}" />
+                                <TextBlock Text="批量导出数据库表到 .xlsx" Style="{StaticResource TextCaption}" Margin="0,1,0,0" />
                             </StackPanel>
                         </StackPanel>
                     </DockPanel>
@@ -1705,13 +1907,13 @@
                                         Height="34"
                                         Margin="0,0,8,0"
                                         Command="{Binding TestSqlConnectionCommand}"
-                                        Style="{StaticResource MaterialDesignRaisedButton}"
+                                        Style="{StaticResource PrimaryActionButton}"
                                         Content="测试连接" />
 
                                 <Button Width="104"
                                         Height="34"
                                         Command="{Binding ExportSqlTableCommand}"
-                                        Style="{StaticResource MaterialDesignRaisedAccentButton}"
+                                        Style="{StaticResource SuccessActionButton}"
                                         Content="导出为 Excel" />
                             </StackPanel>
 
@@ -1749,7 +1951,7 @@
                             <ScrollViewer VerticalScrollBarVisibility="Auto">
                                 <materialDesign:Card Padding="14" Margin="0,6,0,0">
                                     <StackPanel>
-                                        <TextBlock Text="使用说明" Style="{StaticResource MaterialDesignSubtitle1TextBlock}" FontWeight="Bold" />
+                                        <TextBlock Text="使用说明" Style="{StaticResource TextSubtitle}" FontWeight="Bold" />
                                         <TextBlock Margin="0,8,0,0" TextWrapping="Wrap">
                                             支持 SQL Server / PostgreSQL / MySQL 账号密码连接。流程：测试连接 → 选择数据库 → 选择表 → 导出整表。
                                         </TextBlock>
@@ -1793,7 +1995,7 @@
                                                     Margin="0,0,8,0"
                                                     Content="执行查询"
                                                     Command="{Binding ExecuteSqlQueryCommand}"
-                                                    Style="{StaticResource MaterialDesignRaisedButton}">
+                                                    Style="{StaticResource PrimaryActionButton}">
                                                 <Button.ContentTemplate>
                                                     <DataTemplate>
                                                         <StackPanel Orientation="Horizontal">
@@ -1807,7 +2009,7 @@
                                                     Margin="0,0,12,0"
                                                     Content="导出结果"
                                                     Command="{Binding ExportQueryResultCommand}"
-                                                    Style="{StaticResource MaterialDesignOutlinedButton}">
+                                                    Style="{StaticResource GhostActionButton}">
                                                 <Button.ContentTemplate>
                                                     <DataTemplate>
                                                         <StackPanel Orientation="Horizontal">
@@ -1824,7 +2026,7 @@
                                                          Margin="0,0,10,0"
                                                          Visibility="{Binding IsQueryBusy, Converter={StaticResource BoolToVis}}" />
                                             <TextBlock Text="{Binding QueryStatusMessage}"
-                                                       Style="{StaticResource MaterialDesignCaptionTextBlock}"
+                                                       Style="{StaticResource TextCaption}"
                                                        VerticalAlignment="Center"
                                                        TextTrimming="CharacterEllipsis"
                                                        Opacity="0.7" />
@@ -1890,7 +2092,7 @@
                                 <Ellipse Width="8" Height="8" Fill="#E53935" Margin="0,0,6,0" VerticalAlignment="Center" />
                                 <TextBlock Text="{Binding AudioRecordingIndicator}" Foreground="#C62828" FontWeight="SemiBold" VerticalAlignment="Center" />
                             </StackPanel>
-                            <Button Style="{StaticResource MaterialDesignRaisedButton}"
+                            <Button Style="{StaticResource PrimaryActionButton}"
                                     Command="{Binding TakeScreenshotNowCommand}"
                                     Margin="0,0,8,0"
                                     Height="36" Padding="12,0"
@@ -1900,7 +2102,7 @@
                                     <TextBlock Text="立即截图"/>
                                 </StackPanel>
                             </Button>
-                            <Button Style="{StaticResource MaterialDesignOutlinedButton}"
+                            <Button Style="{StaticResource GhostActionButton}"
                                     Command="{Binding StartVideoRecordingCommand}"
                                     Margin="0,0,8,0"
                                     Height="36" Padding="12,0"
@@ -1910,7 +2112,7 @@
                                     <TextBlock Text="开启录像"/>
                                 </StackPanel>
                             </Button>
-                            <Button Style="{StaticResource MaterialDesignOutlinedButton}"
+                            <Button Style="{StaticResource GhostActionButton}"
                                     Command="{Binding ToggleAudioRecordingCommand}"
                                     Margin="0,0,8,0"
                                     Height="36" Padding="12,0"
@@ -1944,7 +2146,7 @@
                                     </TextBlock>
                                 </StackPanel>
                             </Button>
-                            <Button Style="{StaticResource MaterialDesignOutlinedButton}"
+                            <Button Style="{StaticResource GhostActionButton}"
                                     Command="{Binding EditClipboardImageCommand}"
                                     Height="36" Padding="12,0"
                                     ToolTip="打开编辑器编辑剪贴板中的图片">
@@ -1955,10 +2157,12 @@
                             </Button>
                         </StackPanel>
                         <StackPanel Orientation="Horizontal">
-                            <materialDesign:PackIcon Kind="CameraIris" Width="32" Height="32" Margin="0,0,14,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentPurple}" />
-                            <StackPanel>
-                                <TextBlock Text="截图工具" Style="{StaticResource MaterialDesignHeadline5TextBlock}" />
-                                <TextBlock Text="支持全屏截图、区域录像与独立录音。" Opacity="0.55" Margin="0,2,0,0" />
+                            <Border Width="36" Height="36" CornerRadius="10" Background="{StaticResource BrushAccentGradient}" Margin="0,0,12,0" VerticalAlignment="Center">
+                                <materialDesign:PackIcon Kind="CameraIris" Width="18" Height="18" Foreground="White" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                            </Border>
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="截图工具" Style="{StaticResource TextHeadline}" />
+                                <TextBlock Text="全屏截图 · 区域录像 · 独立录音" Style="{StaticResource TextCaption}" Margin="0,1,0,0" />
                             </StackPanel>
                         </StackPanel>
                     </DockPanel>
@@ -1970,7 +2174,7 @@
                         <!-- Hotkey card -->
                         <materialDesign:Card Padding="20" Margin="0,0,0,16">
                             <StackPanel>
-                                <TextBlock Text="快捷键设置" Style="{StaticResource MaterialDesignSubtitle1TextBlock}" FontWeight="Bold" Margin="0,0,0,12"/>
+                                <TextBlock Text="快捷键设置" Style="{StaticResource TextSubtitle}" FontWeight="Bold" Margin="0,0,0,12"/>
 
                                 <Grid>
                                     <Grid.ColumnDefinitions>
@@ -2019,7 +2223,7 @@
                                         <Button Height="42" Padding="14,0" Margin="0,0,8,0"
                                                 Command="{Binding StartCaptureHotkeyCommand}">
                                             <Button.Style>
-                                                <Style TargetType="Button" BasedOn="{StaticResource MaterialDesignOutlinedButton}">
+                                                <Style TargetType="Button" BasedOn="{StaticResource GhostActionButton}">
                                                     <Setter Property="Content" Value="修改快捷键"/>
                                                     <Style.Triggers>
                                                         <DataTrigger Binding="{Binding IsCapturingHotkey}" Value="True">
@@ -2033,7 +2237,7 @@
                                         <Button Content="取消" Height="42" Padding="14,0"
                                                 Command="{Binding CancelCaptureHotkeyCommand}">
                                             <Button.Style>
-                                                <Style TargetType="Button" BasedOn="{StaticResource MaterialDesignOutlinedButton}">
+                                                <Style TargetType="Button" BasedOn="{StaticResource GhostActionButton}">
                                                     <Setter Property="Visibility" Value="Collapsed"/>
                                                     <Style.Triggers>
                                                         <DataTrigger Binding="{Binding IsCapturingHotkey}" Value="True">
@@ -2047,7 +2251,7 @@
                                 </Grid>
 
                                 <TextBlock Text="注意：快捷键需包含 Ctrl 或 Alt 之一，避免与系统快捷键冲突。快捷键在全局生效，包括窗口隐藏期间。"
-                                           Style="{StaticResource MaterialDesignCaptionTextBlock}"
+                                           Style="{StaticResource TextCaption}"
                                            Opacity="0.55" TextWrapping="Wrap" Margin="0,10,0,0"/>
                             </StackPanel>
                         </materialDesign:Card>
@@ -2055,7 +2259,7 @@
                         <!-- Behavior card -->
                         <materialDesign:Card Padding="20" Margin="0,0,0,16">
                             <StackPanel>
-                                <TextBlock Text="截图行为" Style="{StaticResource MaterialDesignSubtitle1TextBlock}" FontWeight="Bold" Margin="0,0,0,12"/>
+                                <TextBlock Text="截图行为" Style="{StaticResource TextSubtitle}" FontWeight="Bold" Margin="0,0,0,12"/>
 
                                 <Grid>
                                     <Grid.ColumnDefinitions>
@@ -2068,11 +2272,11 @@
                                               Margin="0,2,12,0" />
                                     <StackPanel Grid.Column="1">
                                         <TextBlock Text="截图后打开编辑器"
-                                                   Style="{StaticResource MaterialDesignSubtitle2TextBlock}"
+                                                   Style="{StaticResource TextSubtitle}"
                                                    FontWeight="Medium"/>
                                         <TextBlock Margin="0,4,20,0" Opacity="0.6" TextWrapping="Wrap">
                                             <TextBlock.Style>
-                                                <Style TargetType="TextBlock" BasedOn="{StaticResource MaterialDesignBody2TextBlock}">
+                                                <Style TargetType="TextBlock" BasedOn="{StaticResource TextCaption}">
                                                     <Setter Property="Text" Value="\u622a\u56fe\u540e\u81ea\u52a8\u6253\u5f00\u7f16\u8f91\u5668\u7a97\u53e3\uff0c\u53ef\u7528\u5212\u7b14\u6807\u6ce8\u5e76\u4fdd\u5b58\u3002"/>
                                                     <Style.Triggers>
                                                         <DataTrigger Binding="{Binding ShowEditorAfterCapture}" Value="False">
@@ -2088,15 +2292,47 @@
                         </materialDesign:Card>
 
                         <!-- Save button -->
-                        <Button Style="{StaticResource MaterialDesignRaisedButton}"
+                        <Button Style="{StaticResource PrimaryActionButton}"
                                 Command="{Binding SaveScreenshotSettingsCommand}"
-                                Height="44" Width="160"
                                 HorizontalAlignment="Left">
                             <StackPanel Orientation="Horizontal">
-                                <materialDesign:PackIcon Kind="ContentSaveOutline" Width="18" Height="18" Margin="0,0,8,0"/>
+                                <materialDesign:PackIcon Kind="ContentSaveOutline" Width="15" Height="15" Margin="0,0,6,0"/>
                                 <TextBlock Text="保存设置"/>
                             </StackPanel>
                         </Button>
+
+                        <!-- File Hash Calculator -->
+                        <materialDesign:Card Padding="14,12" Margin="0,14,0,0">
+                            <StackPanel>
+                                <StackPanel Style="{StaticResource SectionHeaderRow}">
+                                    <Border Width="28" Height="28" CornerRadius="8" Background="{StaticResource BrushBlueGradient}" Margin="0,0,10,0">
+                                        <materialDesign:PackIcon Kind="ShieldKey" Width="14" Height="14" Foreground="White" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                    </Border>
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="文件哈希校验" Style="{StaticResource TextSubtitle}" />
+                                        <TextBlock Text="{Binding FileHashStatusMessage}" Style="{StaticResource TextHint}" Margin="0,1,0,0" />
+                                    </StackPanel>
+                                </StackPanel>
+
+                                <Button Style="{StaticResource GhostActionButton}"
+                                        Command="{Binding ComputeFileHashCommand}"
+                                        HorizontalAlignment="Left">
+                                    <StackPanel Orientation="Horizontal">
+                                        <materialDesign:PackIcon Kind="FileSearch" Width="14" Height="14" Margin="0,0,6,0"/>
+                                        <TextBlock Text="选择文件并计算"/>
+                                    </StackPanel>
+                                </Button>
+
+                                <Border Background="{DynamicResource MaterialDesignToolBarBackground}"
+                                        CornerRadius="6" Padding="10,8" Margin="0,8,0,0"
+                                        Visibility="{Binding FileHashResult, Converter={StaticResource StringNotEmptyToVisibility}}"
+                                        Cursor="Hand"
+                                        MouseLeftButtonUp="FileHashResult_OnClick">
+                                    <TextBlock Text="{Binding FileHashResult}" Style="{StaticResource TextMonoCode}"
+                                               ToolTip="点击复制到剪贴板" />
+                                </Border>
+                            </StackPanel>
+                        </materialDesign:Card>
 
                     </StackPanel>
                 </ScrollViewer>
@@ -2132,7 +2368,7 @@
                     </Border.Background>
                     <DockPanel>
                         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                            <Button Style="{StaticResource MaterialDesignRaisedButton}"
+                            <Button Style="{StaticResource PrimaryActionButton}"
                                     Height="32"
                                     Padding="10,0"
                                     Command="{Binding ImportCodexProfileCommand}">
@@ -2143,10 +2379,12 @@
                             </Button>
                         </StackPanel>
                         <StackPanel Orientation="Horizontal">
-                            <materialDesign:PackIcon Kind="FolderCogOutline" Width="24" Height="24" Margin="0,0,10,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentTeal}" />
-                            <StackPanel>
-                                <TextBlock Text="Codex Profiles" Style="{StaticResource MaterialDesignHeadline6TextBlock}" />
-                                <TextBlock Text="Switch between Codex profile sets in one click." FontSize="12" Opacity="0.55" Margin="0,1,0,0" />
+                            <Border Width="32" Height="32" CornerRadius="8" Background="{StaticResource BrushTealGradient}" Margin="0,0,10,0" VerticalAlignment="Center">
+                                <materialDesign:PackIcon Kind="FolderCogOutline" Width="16" Height="16" Foreground="White" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                            </Border>
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="Codex 配置管理" Style="{StaticResource TextHeadline}" />
+                                <TextBlock Text="一键切换 Codex 配置集" Style="{StaticResource TextCaption}" Margin="0,1,0,0" />
                             </StackPanel>
                         </StackPanel>
                     </DockPanel>
@@ -2244,13 +2482,13 @@
                                                         Margin="0,0,6,0"
                                                         Command="{Binding DataContext.ApplyCodexProfileCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                         CommandParameter="{Binding}"
-                                                        Style="{StaticResource MaterialDesignRaisedButton}">
+                                                        Style="{StaticResource PrimaryActionButton}">
                                                     <StackPanel Orientation="Horizontal">
                                                         <materialDesign:PackIcon Kind="Check" Width="15" Height="15" Margin="0,0,5,0"/>
                                                         <TextBlock Text="应用"/>
                                                     </StackPanel>
                                                 </Button>
-                                                <Button Style="{StaticResource MaterialDesignOutlinedButton}"
+                                                <Button Style="{StaticResource GhostActionButton}"
                                                         Height="32"
                                                         Padding="10,0"
                                                         Margin="0,0,6,0"
@@ -2276,6 +2514,726 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+
+            <!-- System Info module -->
+            <Grid Margin="16">
+                <Grid.Style>
+                    <Style TargetType="Grid">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding CurrentModule}" Value="SystemInfo">
+                                <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Grid.Style>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <!-- Header -->
+                <Border Grid.Row="0" Margin="0,0,0,12"
+                        BorderBrush="{DynamicResource MaterialDesignDivider}"
+                        BorderThickness="0,0,0,1"
+                        CornerRadius="{StaticResource CornerRadiusCard}"
+                        Padding="12,8">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                            <GradientStop Color="{DynamicResource BrushHeaderGradientStartColor}" Offset="0" />
+                            <GradientStop Color="{DynamicResource BrushHeaderGradientEndColor}" Offset="1" />
+                        </LinearGradientBrush>
+                    </Border.Background>
+                    <DockPanel>
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button Style="{StaticResource GhostActionButton}"
+                                    Content="刷新硬件"
+                                    Command="{Binding LoadSystemInfoCommand}"
+                                    Margin="0,0,8,0" />
+                            <Button Style="{StaticResource GhostActionButton}"
+                                    Content="以管理员重启"
+                                    Command="{Binding RestartAsAdminCommand}"
+                                    Margin="0,0,8,0">
+                                <Button.Visibility>
+                                    <Binding Path="IsRunningAsAdmin" Converter="{StaticResource InverseBoolToVis}" />
+                                </Button.Visibility>
+                            </Button>
+                            <Button Style="{StaticResource PrimaryActionButton}"
+                                    Content="{Binding SensorsToggleLabel}"
+                                    Command="{Binding ToggleHardwareSensorsCommand}" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <Border Width="32" Height="32" CornerRadius="8" Background="{StaticResource BrushBlueGradient}" Margin="0,0,10,0" VerticalAlignment="Center">
+                                <materialDesign:PackIcon Kind="Chip" Width="16" Height="16" Foreground="White" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                            </Border>
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="系统信息" Style="{StaticResource TextHeadline}" />
+                                <TextBlock Text="{Binding SystemInfoStatusMessage}" Style="{StaticResource TextCaption}" Margin="0,1,0,0" />
+                            </StackPanel>
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+
+                        <!-- Hardware overview cards -->
+                        <Grid Visibility="{Binding HasHardwareSummary, Converter={StaticResource BoolToVis}}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <!-- OS / Computer -->
+                            <materialDesign:Card Grid.Row="0" Grid.Column="0" Padding="14,12" Margin="0,0,6,12">
+                                <StackPanel>
+                                    <StackPanel Style="{StaticResource SectionHeaderRow}">
+                                        <Border Width="26" Height="26" CornerRadius="7" Background="{StaticResource BrushBlueGradient}" Margin="0,0,8,0">
+                                            <materialDesign:PackIcon Kind="MicrosoftWindows" Width="14" Height="14" Foreground="White" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                        </Border>
+                                        <TextBlock Text="系统与主板" Style="{StaticResource TextSubtitle}" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                    <StackPanel>
+                                        <TextBlock><Run Text="计算机名：" FontWeight="SemiBold" /><Run Text="{Binding HardwareSummaryInfo.ComputerName}" /></TextBlock>
+                                        <TextBlock><Run Text="操作系统：" FontWeight="SemiBold" /><Run Text="{Binding HardwareSummaryInfo.OsName}" /></TextBlock>
+                                        <TextBlock><Run Text="版本：" FontWeight="SemiBold" /><Run Text="{Binding HardwareSummaryInfo.OsVersion}" /><Run Text=" · " /><Run Text="{Binding HardwareSummaryInfo.OsArchitecture}" /></TextBlock>
+                                        <TextBlock><Run Text="制造商：" FontWeight="SemiBold" /><Run Text="{Binding HardwareSummaryInfo.Manufacturer}" /></TextBlock>
+                                        <TextBlock><Run Text="型号：" FontWeight="SemiBold" /><Run Text="{Binding HardwareSummaryInfo.Model}" /></TextBlock>
+                                        <TextBlock><Run Text="主板：" FontWeight="SemiBold" /><Run Text="{Binding HardwareSummaryInfo.MotherboardManufacturer}" /><Run Text=" " /><Run Text="{Binding HardwareSummaryInfo.MotherboardProduct}" /></TextBlock>
+                                        <TextBlock><Run Text="BIOS：" FontWeight="SemiBold" /><Run Text="{Binding HardwareSummaryInfo.BiosVersion}" /><Run Text=" · " /><Run Text="{Binding HardwareSummaryInfo.BiosDate}" /></TextBlock>
+                                        <TextBlock><Run Text="运行时间：" FontWeight="SemiBold" /><Run Text="{Binding HardwareSummaryInfo.SystemUpTime}" /></TextBlock>
+                                    </StackPanel>
+                                </StackPanel>
+                            </materialDesign:Card>
+
+                            <!-- Memory total -->
+                            <materialDesign:Card Grid.Row="0" Grid.Column="1" Padding="14,12" Margin="6,0,0,12">
+                                <StackPanel>
+                                    <StackPanel Style="{StaticResource SectionHeaderRow}">
+                                        <Border Width="26" Height="26" CornerRadius="7" Background="{StaticResource BrushTealGradient}" Margin="0,0,8,0">
+                                            <materialDesign:PackIcon Kind="Memory" Width="14" Height="14" Foreground="White" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                        </Border>
+                                        <TextBlock Text="内存" Style="{StaticResource TextSubtitle}" VerticalAlignment="Center" />
+                                        <TextBlock Style="{StaticResource TextCaption}" Margin="10,0,0,0" VerticalAlignment="Center">
+                                            <Run Text="总容量：" /><Run Text="{Binding HardwareSummaryInfo.TotalMemoryGb}" FontWeight="SemiBold" />
+                                        </TextBlock>
+                                    </StackPanel>
+                                    <ItemsControl ItemsSource="{Binding HardwareSummaryInfo.MemoryModules}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Background="{DynamicResource MaterialDesignToolBarBackground}" CornerRadius="6" Padding="8,6" Margin="0,0,0,4">
+                                                    <StackPanel>
+                                                        <TextBlock Style="{StaticResource TextBodyStandard}">
+                                                            <Run Text="{Binding BankLabel}" FontWeight="SemiBold" /><Run Text=" · " /><Run Text="{Binding CapacityGb}" /><Run Text=" · " /><Run Text="{Binding MemoryType}" /><Run Text=" · " /><Run Text="{Binding SpeedMhz}" /><Run Text=" MHz" />
+                                                        </TextBlock>
+                                                        <TextBlock Style="{StaticResource TextHint}">
+                                                            <Run Text="{Binding Manufacturer}" /><Run Text=" · " /><Run Text="{Binding PartNumber}" />
+                                                        </TextBlock>
+                                                    </StackPanel>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </materialDesign:Card>
+
+                            <!-- CPUs -->
+                            <materialDesign:Card Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Padding="14,12" Margin="0,0,0,12">
+                                <StackPanel>
+                                    <StackPanel Style="{StaticResource SectionHeaderRow}">
+                                        <Border Width="26" Height="26" CornerRadius="7" Background="{StaticResource BrushAccentGradient}" Margin="0,0,8,0">
+                                            <materialDesign:PackIcon Kind="Cpu64Bit" Width="14" Height="14" Foreground="White" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                        </Border>
+                                        <TextBlock Text="处理器" Style="{StaticResource TextSubtitle}" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                    <ItemsControl ItemsSource="{Binding HardwareSummaryInfo.Cpus}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Background="{DynamicResource MaterialDesignToolBarBackground}" CornerRadius="6" Padding="10,8" Margin="0,0,0,6">
+                                                    <StackPanel>
+                                                        <TextBlock Text="{Binding Name}" Style="{StaticResource TextSubtitle}" />
+                                                        <TextBlock Style="{StaticResource TextCaption}">
+                                                            <Run Text="厂商：" /><Run Text="{Binding Manufacturer}" />
+                                                            <Run Text="  ·  插槽：" /><Run Text="{Binding Socket}" />
+                                                        </TextBlock>
+                                                        <TextBlock Style="{StaticResource TextCaption}">
+                                                            <Run Text="物理核心：" /><Run Text="{Binding Cores}" FontWeight="SemiBold" />
+                                                            <Run Text="  ·  逻辑处理器：" /><Run Text="{Binding LogicalProcessors}" FontWeight="SemiBold" />
+                                                            <Run Text="  ·  最大频率：" /><Run Text="{Binding MaxClockMhz}" /><Run Text=" MHz" />
+                                                            <Run Text="  ·  当前：" /><Run Text="{Binding CurrentClockMhz}" /><Run Text=" MHz" />
+                                                        </TextBlock>
+                                                        <TextBlock Style="{StaticResource TextHint}">
+                                                            <Run Text="L2：" /><Run Text="{Binding L2CacheKb}" /><Run Text=" KB · L3：" /><Run Text="{Binding L3CacheKb}" /><Run Text=" KB" />
+                                                        </TextBlock>
+                                                    </StackPanel>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </materialDesign:Card>
+
+                            <!-- GPUs -->
+                            <materialDesign:Card Grid.Row="2" Grid.Column="0" Padding="14,12" Margin="0,0,6,12">
+                                <StackPanel>
+                                    <StackPanel Style="{StaticResource SectionHeaderRow}">
+                                        <Border Width="26" Height="26" CornerRadius="7" Background="{StaticResource BrushAccentGradient}" Margin="0,0,8,0">
+                                            <materialDesign:PackIcon Kind="VideoOutline" Width="14" Height="14" Foreground="White" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                        </Border>
+                                        <TextBlock Text="显卡" Style="{StaticResource TextSubtitle}" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                    <ItemsControl ItemsSource="{Binding HardwareSummaryInfo.Gpus}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Background="{DynamicResource MaterialDesignToolBarBackground}" CornerRadius="6" Padding="10,8" Margin="0,0,0,6">
+                                                    <StackPanel>
+                                                        <TextBlock Text="{Binding Name}" Style="{StaticResource TextSubtitle}" />
+                                                        <TextBlock Style="{StaticResource TextCaption}">
+                                                            <Run Text="厂商：" /><Run Text="{Binding Manufacturer}" />
+                                                            <Run Text="  ·  显存：" /><Run Text="{Binding AdapterRamGb}" FontWeight="SemiBold" />
+                                                        </TextBlock>
+                                                        <TextBlock Style="{StaticResource TextHint}">
+                                                            <Run Text="驱动：" /><Run Text="{Binding DriverVersion}" /><Run Text=" · " /><Run Text="{Binding DriverDate}" />
+                                                        </TextBlock>
+                                                        <TextBlock Text="{Binding VideoMode}" Style="{StaticResource TextHint}" />
+                                                    </StackPanel>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </materialDesign:Card>
+
+                            <!-- Disks -->
+                            <materialDesign:Card Grid.Row="2" Grid.Column="1" Padding="14,12" Margin="6,0,0,12">
+                                <StackPanel>
+                                    <StackPanel Style="{StaticResource SectionHeaderRow}">
+                                        <Border Width="26" Height="26" CornerRadius="7" Background="{StaticResource BrushTealGradient}" Margin="0,0,8,0">
+                                            <materialDesign:PackIcon Kind="Harddisk" Width="14" Height="14" Foreground="White" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                        </Border>
+                                        <TextBlock Text="存储" Style="{StaticResource TextSubtitle}" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                    <ItemsControl ItemsSource="{Binding HardwareSummaryInfo.Disks}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Background="{DynamicResource MaterialDesignToolBarBackground}" CornerRadius="6" Padding="10,8" Margin="0,0,0,6">
+                                                    <StackPanel>
+                                                        <TextBlock Text="{Binding Model}" Style="{StaticResource TextSubtitle}" />
+                                                        <TextBlock Style="{StaticResource TextCaption}">
+                                                            <Run Text="容量：" /><Run Text="{Binding SizeGb}" FontWeight="SemiBold" />
+                                                            <Run Text="  ·  接口：" /><Run Text="{Binding InterfaceType}" />
+                                                            <Run Text="  ·  介质：" /><Run Text="{Binding MediaType}" />
+                                                        </TextBlock>
+                                                        <TextBlock Style="{StaticResource TextHint}">
+                                                            <Run Text="序列号：" /><Run Text="{Binding SerialNumber}" />
+                                                        </TextBlock>
+                                                    </StackPanel>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </materialDesign:Card>
+
+                            <!-- Network adapters + Monitors -->
+                            <materialDesign:Card Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2" Padding="14,12">
+                                <StackPanel>
+                                    <StackPanel Style="{StaticResource SectionHeaderRow}">
+                                        <Border Width="26" Height="26" CornerRadius="7" Background="{StaticResource BrushBlueGradient}" Margin="0,0,8,0">
+                                            <materialDesign:PackIcon Kind="LanConnect" Width="14" Height="14" Foreground="White" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                        </Border>
+                                        <TextBlock Text="网络适配器与显示器" Style="{StaticResource TextSubtitle}" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                    <ItemsControl ItemsSource="{Binding HardwareSummaryInfo.NetworkAdapters}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Style="{StaticResource TextCaption}" Margin="0,0,0,2">
+                                                    <Run Text="{Binding Name}" FontWeight="SemiBold" />
+                                                    <Run Text=" · MAC " /><Run Text="{Binding MacAddress}" />
+                                                    <Run Text=" · " /><Run Text="{Binding LinkSpeed}" />
+                                                </TextBlock>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <ItemsControl ItemsSource="{Binding HardwareSummaryInfo.Monitors}" Margin="0,6,0,0">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Style="{StaticResource TextCaption}" Margin="0,0,0,2">
+                                                    <Run Text="显示器：" FontWeight="SemiBold" />
+                                                    <Run Text="{Binding Name}" />
+                                                    <Run Text=" · " /><Run Text="{Binding Manufacturer}" />
+                                                    <Run Text=" · " /><Run Text="{Binding Resolution}" />
+                                                </TextBlock>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </materialDesign:Card>
+                        </Grid>
+
+                        <!-- Sensors live readings -->
+                        <materialDesign:Card Padding="14,12" Margin="0,0,0,12">
+                            <StackPanel>
+                                <StackPanel Style="{StaticResource SectionHeaderRow}">
+                                    <Border Width="26" Height="26" CornerRadius="7" Background="{StaticResource BrushAccentGradient}" Margin="0,0,8,0">
+                                        <materialDesign:PackIcon Kind="ThermometerLines" Width="14" Height="14" Foreground="White" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                    </Border>
+                                    <TextBlock Text="实时传感器" Style="{StaticResource TextSubtitle}" VerticalAlignment="Center" />
+                                    <Border Style="{StaticResource StatusPill}" Margin="10,0,0,0">
+                                        <TextBlock Text="{Binding SensorStatusMessage}" />
+                                    </Border>
+                                </StackPanel>
+                                <DataGrid ItemsSource="{Binding SensorReadings}"
+                                          AutoGenerateColumns="False"
+                                          CanUserAddRows="False"
+                                          IsReadOnly="True"
+                                          HeadersVisibility="Column"
+                                          GridLinesVisibility="Horizontal"
+                                          MinHeight="180"
+                                          MaxHeight="360">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="硬件" Binding="{Binding HardwareName}" Width="*" />
+                                        <DataGridTextColumn Header="类型" Binding="{Binding HardwareKind}" Width="80" />
+                                        <DataGridTextColumn Header="传感器" Binding="{Binding SensorName}" Width="*" />
+                                        <DataGridTextColumn Header="种类" Binding="{Binding SensorKind}" Width="80" />
+                                        <DataGridTextColumn Header="读数" Binding="{Binding Value}" Width="80" />
+                                        <DataGridTextColumn Header="单位" Binding="{Binding Unit}" Width="60" />
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                                <TextBlock Text="提示：温度/风扇/电压等需要 LibreHardwareMonitor 驱动权限，建议以管理员身份运行 MyTools 后再启用传感器。"
+                                           Style="{StaticResource TextHint}" TextWrapping="Wrap" Margin="0,8,0,0" />
+                            </StackPanel>
+                        </materialDesign:Card>
+
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+
+            <!-- File Verify module -->
+            <Grid Margin="16">
+                <Grid.Style>
+                    <Style TargetType="Grid">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding CurrentModule}" Value="FileVerify">
+                                <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Grid.Style>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <!-- Header -->
+                <Border Grid.Row="0" Margin="0,0,0,12"
+                        BorderBrush="{DynamicResource MaterialDesignDivider}"
+                        BorderThickness="0,0,0,1"
+                        CornerRadius="{StaticResource CornerRadiusCard}"
+                        Padding="12,8">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                            <GradientStop Color="{DynamicResource BrushHeaderGradientStartColor}" Offset="0" />
+                            <GradientStop Color="{DynamicResource BrushHeaderGradientEndColor}" Offset="1" />
+                        </LinearGradientBrush>
+                    </Border.Background>
+                    <DockPanel>
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button Style="{StaticResource PrimaryActionButton}"
+                                    Command="{Binding VerifyFileCommand}">
+                                <StackPanel Orientation="Horizontal">
+                                    <materialDesign:PackIcon Kind="FileSearch" Width="14" Height="14" Margin="0,0,6,0" />
+                                    <TextBlock Text="选择文件并校验" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <Border Width="32" Height="32" CornerRadius="8" Background="{StaticResource BrushTealGradient}" Margin="0,0,10,0" VerticalAlignment="Center">
+                                <materialDesign:PackIcon Kind="ShieldCheckOutline" Width="16" Height="16" Foreground="White" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                            </Border>
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="文件验证" Style="{StaticResource TextHeadline}" />
+                                <TextBlock Text="{Binding FileHashStatusMessage}" Style="{StaticResource TextCaption}" Margin="0,1,0,0" />
+                            </StackPanel>
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <materialDesign:Card Padding="14,12" Margin="0,0,0,12">
+                            <StackPanel>
+                                <TextBlock Text="支持算法：MD5 / SHA-1 / SHA-256 / CRC32" Style="{StaticResource TextSubtitle}" />
+                                <TextBlock Style="{StaticResource TextCaption}" Margin="0,4,0,0" TextWrapping="Wrap"
+                                           Text="选择任意文件后将依次计算 4 种校验值，结果为大写十六进制。结果块支持点击复制全部内容到剪贴板，可直接与官方校验值比对。" />
+                                <ProgressBar IsIndeterminate="True" Margin="0,10,0,0"
+                                             Style="{StaticResource MaterialDesignLinearProgressBar}"
+                                             Visibility="{Binding IsFileHashBusy, Converter={StaticResource BoolToVis}}" />
+                            </StackPanel>
+                        </materialDesign:Card>
+
+                        <materialDesign:Card Padding="14,12"
+                                             Visibility="{Binding FileHashResult, Converter={StaticResource StringNotEmptyToVisibility}}">
+                            <StackPanel>
+                                <StackPanel Style="{StaticResource SectionHeaderRow}">
+                                    <materialDesign:PackIcon Kind="ClipboardCheckOutline" Width="16" Height="16" Margin="0,0,8,0"
+                                                              Foreground="{DynamicResource BrushSuccess}" VerticalAlignment="Center" />
+                                    <TextBlock Text="校验结果" Style="{StaticResource TextSubtitle}" VerticalAlignment="Center" />
+                                </StackPanel>
+                                <Border Background="{DynamicResource MaterialDesignToolBarBackground}"
+                                        CornerRadius="6" Padding="12,10"
+                                        Cursor="Hand"
+                                        MouseLeftButtonUp="FileHashResult_OnClick"
+                                        ToolTip="点击复制到剪贴板">
+                                    <TextBlock Text="{Binding FileHashResult}" Style="{StaticResource TextMonoCode}" />
+                                </Border>
+                            </StackPanel>
+                        </materialDesign:Card>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+
+            <!-- Convert module -->
+            <Grid Margin="16">
+                <Grid.Style>
+                    <Style TargetType="Grid">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding CurrentModule}" Value="Convert">
+                                <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Grid.Style>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <!-- Header -->
+                <Border Grid.Row="0" Margin="0,0,0,12"
+                        BorderBrush="{DynamicResource MaterialDesignDivider}"
+                        BorderThickness="0,0,0,1"
+                        CornerRadius="{StaticResource CornerRadiusCard}"
+                        Padding="12,8">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                            <GradientStop Color="{DynamicResource BrushHeaderGradientStartColor}" Offset="0" />
+                            <GradientStop Color="{DynamicResource BrushHeaderGradientEndColor}" Offset="1" />
+                        </LinearGradientBrush>
+                    </Border.Background>
+                    <DockPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <Border Width="32" Height="32" CornerRadius="8" Margin="0,0,10,0" VerticalAlignment="Center">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                        <GradientStop Color="#F59E0B" Offset="0" />
+                                        <GradientStop Color="#EF4444" Offset="1" />
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                                <materialDesign:PackIcon Kind="SwapHorizontal" Width="16" Height="16" Foreground="White" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                            </Border>
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="格式转换" Style="{StaticResource TextHeadline}" />
+                                <TextBlock Text="{Binding ConvertStatusMessage}" Style="{StaticResource TextCaption}" Margin="0,1,0,0" />
+                            </StackPanel>
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <!-- Image conversion card -->
+                        <materialDesign:Card Padding="14,12" Margin="0,0,0,12">
+                            <StackPanel>
+                                <StackPanel Style="{StaticResource SectionHeaderRow}">
+                                    <Border Width="26" Height="26" CornerRadius="7" Background="{StaticResource BrushTealGradient}" Margin="0,0,8,0">
+                                        <materialDesign:PackIcon Kind="Image" Width="14" Height="14" Foreground="White" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                    </Border>
+                                    <TextBlock Text="图片转换" Style="{StaticResource TextSubtitle}" VerticalAlignment="Center" />
+                                    <TextBlock Text="（内置，无需外部依赖）" Style="{StaticResource TextHint}" Margin="8,0,0,0" VerticalAlignment="Center" />
+                                </StackPanel>
+                                <TextBlock Text="支持 JPG / PNG / BMP / GIF / TIFF 互转，可设置最大尺寸和 JPEG 质量。"
+                                           Style="{StaticResource TextCaption}" Margin="0,4,0,10" TextWrapping="Wrap" />
+
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Margin="{StaticResource ThicknessFieldGap}">
+                                        <TextBlock Text="输出格式" Style="{StaticResource TextFieldLabel}" />
+                                        <TextBox Text="{Binding ImageOutputFormat, UpdateSourceTrigger=PropertyChanged}"
+                                                 materialDesign:HintAssist.Hint="jpg"
+                                                 Style="{StaticResource MaterialDesignOutlinedTextBox}" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" Margin="{StaticResource ThicknessFieldGap}">
+                                        <TextBlock Text="最大宽度 (0=不限)" Style="{StaticResource TextFieldLabel}" />
+                                        <TextBox Text="{Binding ImageMaxWidth, UpdateSourceTrigger=PropertyChanged}"
+                                                 materialDesign:HintAssist.Hint="0"
+                                                 Style="{StaticResource MaterialDesignOutlinedTextBox}" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2" Margin="{StaticResource ThicknessFieldGap}">
+                                        <TextBlock Text="最大高度 (0=不限)" Style="{StaticResource TextFieldLabel}" />
+                                        <TextBox Text="{Binding ImageMaxHeight, UpdateSourceTrigger=PropertyChanged}"
+                                                 materialDesign:HintAssist.Hint="0"
+                                                 Style="{StaticResource MaterialDesignOutlinedTextBox}" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="3">
+                                        <TextBlock Text="JPEG 质量 (1-100)" Style="{StaticResource TextFieldLabel}" />
+                                        <TextBox Text="{Binding ImageQuality, UpdateSourceTrigger=PropertyChanged}"
+                                                 materialDesign:HintAssist.Hint="85"
+                                                 Style="{StaticResource MaterialDesignOutlinedTextBox}" />
+                                    </StackPanel>
+                                </Grid>
+
+                                <Button Style="{StaticResource PrimaryActionButton}" Margin="0,12,0,0"
+                                        HorizontalAlignment="Left"
+                                        Command="{Binding ConvertImageCommand}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <materialDesign:PackIcon Kind="ImageMove" Width="14" Height="14" Margin="0,0,6,0" />
+                                        <TextBlock Text="选择图片并转换" />
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+                        </materialDesign:Card>
+
+                        <!-- Audio/Video conversion card -->
+                        <materialDesign:Card Padding="14,12" Margin="0,0,0,12">
+                            <StackPanel>
+                                <StackPanel Style="{StaticResource SectionHeaderRow}">
+                                    <Border Width="26" Height="26" CornerRadius="7" Background="{StaticResource BrushAccentGradient}" Margin="0,0,8,0">
+                                        <materialDesign:PackIcon Kind="MovieOpenOutline" Width="14" Height="14" Foreground="White" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                    </Border>
+                                    <TextBlock Text="音视频转换" Style="{StaticResource TextSubtitle}" VerticalAlignment="Center" />
+                                    <Border Margin="8,0,0,0" VerticalAlignment="Center">
+                                        <Border.Style>
+                                            <Style TargetType="Border" BasedOn="{StaticResource BadgeSuccess}">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsFfmpegAvailable}" Value="False">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <TextBlock Text="FFmpeg 就绪" Foreground="White" FontWeight="Bold" FontSize="11" />
+                                    </Border>
+                                    <Border Margin="8,0,0,0" VerticalAlignment="Center">
+                                        <Border.Style>
+                                            <Style TargetType="Border" BasedOn="{StaticResource BadgeWarning}">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsFfmpegAvailable}" Value="False">
+                                                        <Setter Property="Visibility" Value="Visible" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <TextBlock Text="FFmpeg 未检测到" Foreground="White" FontWeight="Bold" FontSize="11" />
+                                    </Border>
+                                </StackPanel>
+                                <TextBlock Text="需要系统已安装 FFmpeg（加入 PATH 或放在程序同级目录）。支持 MP4/MKV/AVI/MOV/MP3/WAV/AAC/FLAC/OGG 等常见格式互转。"
+                                           Style="{StaticResource TextCaption}" Margin="0,4,0,10" TextWrapping="Wrap" />
+
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="2*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Margin="{StaticResource ThicknessFieldGap}">
+                                        <TextBlock Text="输出格式" Style="{StaticResource TextFieldLabel}" />
+                                        <TextBox Text="{Binding MediaOutputFormat, UpdateSourceTrigger=PropertyChanged}"
+                                                 materialDesign:HintAssist.Hint="mp3"
+                                                 Style="{StaticResource MaterialDesignOutlinedTextBox}" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1">
+                                        <TextBlock Text="FFmpeg 附加参数（可选）" Style="{StaticResource TextFieldLabel}" />
+                                        <TextBox Text="{Binding MediaExtraArgs, UpdateSourceTrigger=PropertyChanged}"
+                                                 materialDesign:HintAssist.Hint="-b:a 192k"
+                                                 Style="{StaticResource MaterialDesignOutlinedTextBox}" />
+                                    </StackPanel>
+                                </Grid>
+
+                                <Button Style="{StaticResource PrimaryActionButton}" Margin="0,12,0,0"
+                                        HorizontalAlignment="Left"
+                                        Command="{Binding ConvertMediaCommand}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <materialDesign:PackIcon Kind="FileMusic" Width="14" Height="14" Margin="0,0,6,0" />
+                                        <TextBlock Text="选择音视频并转换" />
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+                        </materialDesign:Card>
+
+                        <!-- Convert result -->
+                        <materialDesign:Card Padding="14,12"
+                                             Visibility="{Binding ConvertResult, Converter={StaticResource StringNotEmptyToVisibility}}">
+                            <StackPanel>
+                                <StackPanel Style="{StaticResource SectionHeaderRow}">
+                                    <materialDesign:PackIcon Kind="CheckCircleOutline" Width="16" Height="16" Margin="0,0,8,0"
+                                                              Foreground="{DynamicResource BrushSuccess}" VerticalAlignment="Center" />
+                                    <TextBlock Text="转换结果" Style="{StaticResource TextSubtitle}" VerticalAlignment="Center" />
+                                </StackPanel>
+                                <TextBlock Text="{Binding ConvertResult}" Style="{StaticResource TextMonoCode}" Margin="0,6,0,0" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </materialDesign:Card>
+
+                        <ProgressBar IsIndeterminate="True" Margin="0,10,0,0"
+                                     Style="{StaticResource MaterialDesignLinearProgressBar}"
+                                     Visibility="{Binding IsConvertBusy, Converter={StaticResource BoolToVis}}" />
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+
+            <!-- Benchmark module -->
+            <Grid Margin="16">
+                <Grid.Style>
+                    <Style TargetType="Grid">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding CurrentModule}" Value="Benchmark">
+                                <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Grid.Style>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <!-- Header -->
+                <Border Grid.Row="0" Margin="0,0,0,12"
+                        BorderBrush="{DynamicResource MaterialDesignDivider}"
+                        BorderThickness="0,0,0,1"
+                        CornerRadius="{StaticResource CornerRadiusCard}"
+                        Padding="12,8">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                            <GradientStop Color="{DynamicResource BrushHeaderGradientStartColor}" Offset="0" />
+                            <GradientStop Color="{DynamicResource BrushHeaderGradientEndColor}" Offset="1" />
+                        </LinearGradientBrush>
+                    </Border.Background>
+                    <DockPanel>
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button Style="{StaticResource PrimaryActionButton}"
+                                    Command="{Binding RunAllBenchmarksCommand}">
+                                <StackPanel Orientation="Horizontal">
+                                    <materialDesign:PackIcon Kind="Play" Width="14" Height="14" Margin="0,0,6,0" />
+                                    <TextBlock Text="运行全部测试" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <Border Width="32" Height="32" CornerRadius="8" Margin="0,0,10,0" VerticalAlignment="Center">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                        <GradientStop Color="#F43F5E" Offset="0" />
+                                        <GradientStop Color="#EC4899" Offset="1" />
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                                <materialDesign:PackIcon Kind="SpeedometerMedium" Width="16" Height="16" Foreground="White" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                            </Border>
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="性能测试" Style="{StaticResource TextHeadline}" />
+                                <TextBlock Text="{Binding BenchmarkStatusMessage}" Style="{StaticResource TextCaption}" Margin="0,1,0,0" />
+                            </StackPanel>
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <ProgressBar IsIndeterminate="True" Margin="0,0,0,10"
+                                     Style="{StaticResource MaterialDesignLinearProgressBar}"
+                                     Visibility="{Binding IsBenchmarkBusy, Converter={StaticResource BoolToVis}}" />
+
+                        <!-- Individual test buttons -->
+                        <materialDesign:Card Padding="14,12" Margin="0,0,0,12">
+                            <StackPanel>
+                                <TextBlock Text="单项测试" Style="{StaticResource TextSubtitle}" Margin="0,0,0,8" />
+                                <WrapPanel>
+                                    <Button Style="{StaticResource GhostActionButton}" Margin="0,0,8,8"
+                                            Command="{Binding RunSingleBenchmarkCommand}" CommandParameter="CpuSingle">
+                                        <StackPanel Orientation="Horizontal">
+                                            <materialDesign:PackIcon Kind="Cpu64Bit" Width="14" Height="14" Margin="0,0,6,0" />
+                                            <TextBlock Text="CPU 单线程" />
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Style="{StaticResource GhostActionButton}" Margin="0,0,8,8"
+                                            Command="{Binding RunSingleBenchmarkCommand}" CommandParameter="CpuMulti">
+                                        <StackPanel Orientation="Horizontal">
+                                            <materialDesign:PackIcon Kind="Cpu64Bit" Width="14" Height="14" Margin="0,0,6,0" />
+                                            <TextBlock Text="CPU 多线程" />
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Style="{StaticResource GhostActionButton}" Margin="0,0,8,8"
+                                            Command="{Binding RunSingleBenchmarkCommand}" CommandParameter="MemBandwidth">
+                                        <StackPanel Orientation="Horizontal">
+                                            <materialDesign:PackIcon Kind="Memory" Width="14" Height="14" Margin="0,0,6,0" />
+                                            <TextBlock Text="内存带宽" />
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Style="{StaticResource GhostActionButton}" Margin="0,0,8,8"
+                                            Command="{Binding RunSingleBenchmarkCommand}" CommandParameter="MemLatency">
+                                        <StackPanel Orientation="Horizontal">
+                                            <materialDesign:PackIcon Kind="Memory" Width="14" Height="14" Margin="0,0,6,0" />
+                                            <TextBlock Text="内存延迟" />
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Style="{StaticResource GhostActionButton}" Margin="0,0,8,8"
+                                            Command="{Binding RunSingleBenchmarkCommand}" CommandParameter="GpuInfo">
+                                        <StackPanel Orientation="Horizontal">
+                                            <materialDesign:PackIcon Kind="VideoOutline" Width="14" Height="14" Margin="0,0,6,0" />
+                                            <TextBlock Text="GPU 信息" />
+                                        </StackPanel>
+                                    </Button>
+                                </WrapPanel>
+                            </StackPanel>
+                        </materialDesign:Card>
+
+                        <!-- Results DataGrid -->
+                        <materialDesign:Card Padding="14,12">
+                            <StackPanel>
+                                <StackPanel Style="{StaticResource SectionHeaderRow}">
+                                    <materialDesign:PackIcon Kind="ChartBar" Width="16" Height="16" Margin="0,0,8,0" Foreground="{DynamicResource BrushAccentBlue}" VerticalAlignment="Center" />
+                                    <TextBlock Text="测试结果" Style="{StaticResource TextSubtitle}" VerticalAlignment="Center" />
+                                </StackPanel>
+                                <DataGrid ItemsSource="{Binding BenchmarkResults}"
+                                          AutoGenerateColumns="False"
+                                          CanUserAddRows="False"
+                                          IsReadOnly="True"
+                                          HeadersVisibility="Column"
+                                          GridLinesVisibility="Horizontal"
+                                          MinHeight="200">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="项目" Binding="{Binding Name}" Width="*" />
+                                        <DataGridTextColumn Header="得分" Binding="{Binding Score}" Width="180">
+                                            <DataGridTextColumn.ElementStyle>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="FontWeight" Value="Bold" />
+                                                    <Setter Property="Foreground" Value="{DynamicResource PrimaryHueMidBrush}" />
+                                                </Style>
+                                            </DataGridTextColumn.ElementStyle>
+                                        </DataGridTextColumn>
+                                        <DataGridTextColumn Header="详情" Binding="{Binding Detail}" Width="*" />
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </StackPanel>
+                        </materialDesign:Card>
                     </StackPanel>
                 </ScrollViewer>
             </Grid>

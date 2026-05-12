@@ -123,9 +123,14 @@ namespace MyTools.ViewModels
         private uint _pendingModifiers = 0x0006;
         private uint _pendingKey = 0x5A;
         private string _codexProfilesStatusMessage = "拖入包含 config.toml 和 auth.json 的文件夹，生成可应用的 Codex 配置记录。";
+        private bool _isAutoStartEnabled;
+        private string _fileHashResult = string.Empty;
+        private bool _isFileHashBusy;
+        private string _fileHashStatusMessage = "选择文件后计算 MD5 / SHA-1 / SHA-256。";
 
         private readonly AsyncRelayCommand _executeQueryCommand;
         private readonly AsyncRelayCommand _exportQueryResultCommand;
+        private readonly RelayCommand _cancelQueryCommand;
         private readonly AsyncRelayParameterCommand _applyCodexProfileCommand;
         private readonly AsyncRelayParameterCommand _exportCodexProfileCommand;
         private readonly AsyncRelayCommand _importCodexProfileCommand;
@@ -190,13 +195,26 @@ namespace MyTools.ViewModels
             _audioRecordingTimer.Tick += AudioRecordingTimer_OnTick;
 
             RefreshCommand = new RelayCommand(Refresh);
+            ShowHomeCommand = new RelayCommand(() => { CurrentModule = "Home"; });
             ShowNetworkCommand = new RelayCommand(() => { CurrentModule = "Network"; Refresh(); });
             ShowStartupCommand = new RelayCommand(() => { CurrentModule = "Startup"; Refresh(); });
             ShowWireGuardCommand = new RelayCommand(() => { CurrentModule = "WireGuard"; Refresh(); });
             ShowSystemCommand = new RelayCommand(() => { CurrentModule = "System"; Refresh(); });
-            ShowUninstallCommand = new RelayCommand(() => { CurrentModule = "Uninstall"; _ = LoadInstalledProgramsAsync(); });
+            ShowUninstallCommand = new RelayCommand(() => { CurrentModule = "Uninstall"; SafeFireAndForget(LoadInstalledProgramsAsync()); });
             ShowSqlExportCommand = new RelayCommand(() => { CurrentModule = "SqlExport"; Refresh(); });
             ShowCodexProfilesCommand = new RelayCommand(() => { CurrentModule = "CodexProfiles"; });
+            ShowSystemInfoCommand = new RelayCommand(() => { CurrentModule = "SystemInfo"; SafeFireAndForget(LoadSystemInfoAsync()); });
+            ShowFileVerifyCommand = new RelayCommand(() => { CurrentModule = "FileVerify"; });
+            ShowConvertCommand = new RelayCommand(() => { CurrentModule = "Convert"; DetectFfmpeg(); });
+            ShowBenchmarkCommand = new RelayCommand(() => { CurrentModule = "Benchmark"; });
+            LoadSystemInfoCommand = new AsyncRelayCommand(LoadSystemInfoAsync, () => !_isSystemInfoBusy);
+            ToggleHardwareSensorsCommand = new RelayCommand(ToggleHardwareSensors);
+            RestartAsAdminCommand = new RelayCommand(RestartAsAdmin);
+            VerifyFileCommand = new AsyncRelayCommand(VerifyFileAsync, () => !_isFileHashBusy);
+            ConvertImageCommand = new AsyncRelayCommand(ConvertImageAsync, () => !_isConvertBusy);
+            ConvertMediaCommand = new AsyncRelayCommand(ConvertMediaAsync, () => !_isConvertBusy);
+            RunAllBenchmarksCommand = new AsyncRelayCommand(RunAllBenchmarksAsync, () => !_isBenchmarkBusy);
+            RunSingleBenchmarkCommand = new AsyncRelayParameterCommand(RunSingleBenchmarkAsync);
             ToggleStartupCommand = new RelayParameterCommand(obj =>
             {
                 if (obj is StartupItem item)
@@ -225,6 +243,9 @@ namespace MyTools.ViewModels
             LockWin10Command = new RelayCommand(LockWin10Version);
             ExitCommand = new RelayCommand(ExitApplication);
             RestoreCommand = new RelayCommand(RestoreWindow);
+            OpenLogFolderCommand = new RelayCommand(OpenLogFolder);
+            ToggleAutoStartCommand = new RelayCommand(ToggleAutoStart);
+            _isAutoStartEnabled = ReadAutoStartStatus();
 
             _toggleDefenderCommand = new AsyncRelayCommand(ToggleDefenderAsync);
             _toggleAutoUpdateCommand = new AsyncRelayCommand(ToggleAutoUpdateAsync);
@@ -260,8 +281,10 @@ namespace MyTools.ViewModels
 
             _executeQueryCommand = new AsyncRelayCommand(ExecuteSqlQueryAsync, CanExecuteSqlQuery);
             _exportQueryResultCommand = new AsyncRelayCommand(ExportQueryResultAsync, CanExportQueryResult);
+            _cancelQueryCommand = new RelayCommand(CancelSqlQuery, () => IsQueryBusy);
             ExecuteSqlQueryCommand = _executeQueryCommand;
             ExportQueryResultCommand = _exportQueryResultCommand;
+            CancelSqlQueryCommand = _cancelQueryCommand;
 
             _testSqlConnectionCommand = new AsyncRelayCommand(TestSqlConnectionAsync, () => !IsSqlBusy);
             _exportSqlTableCommand = new AsyncRelayCommand(ExportSelectedTableAsync, CanExportSqlTable);
@@ -282,6 +305,8 @@ namespace MyTools.ViewModels
             CancelCaptureHotkeyCommand = new RelayCommand(() => IsCapturingHotkey = false);
             SaveScreenshotSettingsCommand = new AsyncRelayCommand(SaveScreenshotSettingsAsync);
             EditClipboardImageCommand = new RelayCommand(EditClipboardImage);
+            OcrClipboardImageCommand = new AsyncRelayCommand(OcrClipboardImageAsync, () => OsVersionService.IsWindows10OrGreater);
+            ComputeFileHashCommand = new AsyncRelayCommand(ComputeFileHashAsync, () => !_isFileHashBusy);
 
             _applyCodexProfileCommand = new AsyncRelayParameterCommand(ApplyCodexProfileAsync);
             ApplyCodexProfileCommand = _applyCodexProfileCommand;
@@ -291,12 +316,13 @@ namespace MyTools.ViewModels
             ImportCodexProfileCommand = _importCodexProfileCommand;
             DeleteCodexProfileCommand = new RelayParameterCommand(DeleteCodexProfile);
 
+            SafeFireAndForget(LoadSystemInfoSnapshotAsync());
             CurrentModule = "Home";
-            _ = LoadSqlConnectionHistoryAsync();
-            _ = LoadScreenshotSettingsAsync();
-            _ = LoadCodexProfilesAsync();
-            _ = LoadOptimizationReportsAsync();
-            _ = LoadWeChatRootsAsync();
+            SafeFireAndForget(LoadSqlConnectionHistoryAsync());
+            SafeFireAndForget(LoadScreenshotSettingsAsync());
+            SafeFireAndForget(LoadCodexProfilesAsync());
+            SafeFireAndForget(LoadOptimizationReportsAsync());
+            SafeFireAndForget(LoadWeChatRootsAsync());
         }
 
         public ObservableCollection<NetworkData> NetworkList
@@ -468,10 +494,42 @@ namespace MyTools.ViewModels
         public string CurrentModule
         {
             get => _currentModule;
-            set { _currentModule = value; OnPropertyChanged(); }
+            set
+            {
+                if (_currentModule == value) return;
+                var prev = _currentModule;
+                _currentModule = value;
+                OnPropertyChanged();
+
+                // Auto-pause sensor polling when leaving SystemInfo page to save CPU
+                if (prev == "SystemInfo" && _isSensorsRunning && _sensorTimer.IsEnabled)
+                {
+                    _sensorTimer.Stop();
+                }
+                else if (value == "SystemInfo" && _isSensorsRunning && !_sensorTimer.IsEnabled)
+                {
+                    _sensorTimer.Start();
+                }
+            }
         }
 
         public string AppVersionText => BuildAppVersionText();
+
+        public bool IsWindows10OrGreater => OsVersionService.IsWindows10OrGreater;
+        public bool IsWindows11OrGreater => OsVersionService.IsWindows11OrGreater;
+        public string OsDisplayName => OsVersionService.DisplayName;
+        private SystemInfoSnapshot _systemInfoSnapshot;
+        public SystemInfoSnapshot SystemInfo
+        {
+            get => _systemInfoSnapshot;
+            private set { _systemInfoSnapshot = value; OnPropertyChanged(); }
+        }
+
+        private async Task LoadSystemInfoSnapshotAsync()
+        {
+            try { SystemInfo = await SystemInfoService.GetSnapshotAsync().ConfigureAwait(false); }
+            catch (Exception ex) { AppLogService.Warning("SystemInfoSnapshot load failed: {Msg}", ex.Message); }
+        }
 
         public IReadOnlyList<SqlProviderOption> SqlProviderOptions => SqlProviderOptionItems;
 
@@ -490,7 +548,7 @@ namespace MyTools.ViewModels
                 OnPropertyChanged(nameof(SqlPortHint));
                 ApplyDefaultSqlPortIfNeeded();
                 MarkSqlConnectionInputAsUserModified();
-                _ = LoadSqlConnectionHistoryAsync();
+                SafeFireAndForget(LoadSqlConnectionHistoryAsync());
             }
         }
 
@@ -611,7 +669,7 @@ namespace MyTools.ViewModels
                 TriggerCommandRequery();
                 if (!_suppressSqlTableAutoLoad)
                 {
-                    _ = LoadTablesForSelectedDatabaseAsync();
+                    SafeFireAndForget(LoadTablesForSelectedDatabaseAsync());
                 }
             }
         }
@@ -645,6 +703,7 @@ namespace MyTools.ViewModels
         }
 
         public ICommand RefreshCommand { get; }
+        public ICommand ShowHomeCommand { get; }
         public ICommand ShowNetworkCommand { get; }
         public ICommand ShowStartupCommand { get; }
         public ICommand ShowWireGuardCommand { get; }
@@ -718,6 +777,7 @@ namespace MyTools.ViewModels
 
         public ICommand ExecuteSqlQueryCommand { get; }
         public ICommand ExportQueryResultCommand { get; }
+        public ICommand CancelSqlQueryCommand { get; }
 
         public bool IsDefenderEnabled
         {
@@ -1031,6 +1091,7 @@ namespace MyTools.ViewModels
         public ICommand CancelCaptureHotkeyCommand { get; }
         public ICommand SaveScreenshotSettingsCommand { get; }
         public ICommand EditClipboardImageCommand { get; }
+        public ICommand OcrClipboardImageCommand { get; }
         public ICommand ApplyCodexProfileCommand { get; }
         public ICommand ExportCodexProfileCommand { get; }
         public ICommand ImportCodexProfileCommand { get; }
@@ -1096,6 +1157,33 @@ namespace MyTools.ViewModels
         public ICommand LockWin10Command { get; }
         public ICommand ExitCommand { get; }
         public ICommand RestoreCommand { get; }
+        public ICommand OpenLogFolderCommand { get; }
+        public ICommand ToggleAutoStartCommand { get; }
+        public ICommand ComputeFileHashCommand { get; }
+
+        public string FileHashResult
+        {
+            get => _fileHashResult;
+            set { _fileHashResult = value; OnPropertyChanged(); }
+        }
+
+        public bool IsFileHashBusy
+        {
+            get => _isFileHashBusy;
+            set { _isFileHashBusy = value; OnPropertyChanged(); }
+        }
+
+        public string FileHashStatusMessage
+        {
+            get => _fileHashStatusMessage;
+            set { _fileHashStatusMessage = value; OnPropertyChanged(); }
+        }
+
+        public bool IsAutoStartEnabled
+        {
+            get => _isAutoStartEnabled;
+            set { _isAutoStartEnabled = value; OnPropertyChanged(); }
+        }
         public ICommand TestSqlConnectionCommand { get; }
         public ICommand ExportSqlTableCommand { get; }
         public ICommand ToggleDefenderCommand { get; }
@@ -1119,7 +1207,7 @@ namespace MyTools.ViewModels
 
         public void AddCodexProfileFolders(IEnumerable<string> folderPaths)
         {
-            _ = AddCodexProfileFoldersAsync(folderPaths);
+            SafeFireAndForget(AddCodexProfileFoldersAsync(folderPaths));
         }
 
         public async Task AddCodexProfileFoldersAsync(IEnumerable<string> folderPaths)
@@ -1250,7 +1338,7 @@ namespace MyTools.ViewModels
         {
             if (e.PropertyName == nameof(CodexProfileItem.Remark))
             {
-                _ = SaveCodexProfilesAsync();
+                SafeFireAndForget(SaveCodexProfilesAsync());
             }
         }
 
@@ -1309,6 +1397,11 @@ namespace MyTools.ViewModels
                 item.StatusMessage = $"已应用到 {result.TargetFolderPath}：{DateTime.Now:yyyy-MM-dd HH:mm:ss}";
                 CodexProfilesStatusMessage = $"已应用「{item.Name}」。";
                 await SaveCodexProfilesAsync();
+                MessageBox.Show(
+                    $"已成功应用「{item.Name}」。\n\n目标目录：{result.TargetFolderPath}",
+                    "Codex 配置应用成功",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
@@ -1465,7 +1558,7 @@ namespace MyTools.ViewModels
             item.PropertyChanged -= CodexProfileItem_OnPropertyChanged;
             CodexProfiles.Remove(item);
             CodexProfilesStatusMessage = $"已删除「{item.Name}」。";
-            _ = SaveCodexProfilesAsync();
+            SafeFireAndForget(SaveCodexProfilesAsync());
         }
 
         private static string ResolveCodexProfileName(string name, string normalizedFolderPath)
@@ -1604,6 +1697,99 @@ namespace MyTools.ViewModels
             MessageBox.Show("剪贴板中没有图片", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
+        private async Task OcrClipboardImageAsync()
+        {
+            if (!OsVersionService.IsWindows10OrGreater)
+            {
+                MessageBox.Show("WindowsOCR 仅支持 Windows 10 1903 及以上系统。", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            if (!TryGetClipboardImage(out var image, out var clipboardError))
+            {
+                if (clipboardError != null)
+                {
+                    AppLogService.Error(clipboardError, "OCR: reading clipboard image failed.");
+                    MessageBox.Show("剪贴板图片数据无效，请重新复制图片后再试。", "OCR", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+                MessageBox.Show("剪贴板中没有图片。请先截图或复制一张图片，再点击此按钮。", "OCR", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            try
+            {
+                AppLogService.Information("OCR: starting recognize, size={W}x{H}", image.PixelWidth, image.PixelHeight);
+                var text = await OcrService.RecognizeAsync(image);
+                if (string.IsNullOrWhiteSpace(text))
+                {
+                    MessageBox.Show("未识别到任何文字。", "OCR", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+
+                try { Clipboard.SetText(text); } catch { }
+                AppLogService.Information("OCR: recognized {Len} characters", text.Length);
+
+                var preview = text.Length > 800 ? text.Substring(0, 800) + "..." : text;
+                MessageBox.Show($"识别完成，已复制到剪贴板（{text.Length} 字符）：\n\n{preview}",
+                    "OCR", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "OCR recognize failed");
+                MessageBox.Show("OCR 识别失败：" + ex.Message, "OCR", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private async Task ComputeFileHashAsync()
+        {
+            var dialog = new Microsoft.Win32.OpenFileDialog
+            {
+                Title = "选择要计算哈希的文件",
+                Filter = "所有文件 (*.*)|*.*"
+            };
+
+            if (dialog.ShowDialog() != true) return;
+
+            IsFileHashBusy = true;
+            FileHashStatusMessage = "正在计算…";
+            FileHashResult = string.Empty;
+
+            try
+            {
+                var progress = new Progress<string>(msg => FileHashStatusMessage = msg);
+                var result = await FileHashService.ComputeAsync(dialog.FileName, progress, CancellationToken.None);
+
+                var sizeText = result.FileSize >= 1_073_741_824
+                    ? $"{result.FileSize / 1_073_741_824.0:0.##} GB"
+                    : result.FileSize >= 1_048_576
+                        ? $"{result.FileSize / 1_048_576.0:0.##} MB"
+                        : $"{result.FileSize / 1024.0:0.##} KB";
+
+                FileHashResult = $"文件：{result.FileName}（{sizeText}）\n"
+                    + $"MD5：{result.Md5}\n"
+                    + $"SHA-1：{result.Sha1}\n"
+                    + $"SHA-256：{result.Sha256}";
+
+                FileHashStatusMessage = "计算完成。点击结果可复制到剪贴板。";
+                AppLogService.Information("File hash computed for {File}", result.FileName);
+            }
+            catch (OperationCanceledException)
+            {
+                FileHashStatusMessage = "已取消。";
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "File hash computation failed");
+                FileHashStatusMessage = "计算失败：" + ex.Message;
+                MessageBox.Show("哈希计算失败：" + ex.Message, "提示", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                IsFileHashBusy = false;
+            }
+        }
+
         private static bool TryGetClipboardImage(out System.Windows.Media.Imaging.BitmapSource image, out Exception error)
         {
             image = null;
@@ -1647,7 +1833,7 @@ namespace MyTools.ViewModels
                 return;
             }
 
-            _ = TryRegisterHotkeyAsync(_pendingModifiers, _pendingKey, false);
+            SafeFireAndForget(TryRegisterHotkeyAsync(_pendingModifiers, _pendingKey, false));
         }
 
         public void ApplyPendingHotkey(uint modifiers, uint key)
@@ -1660,12 +1846,12 @@ namespace MyTools.ViewModels
             _pendingKey = key;
             ScreenshotHotkeyText = HotkeyService.BuildDisplayText(modifiers, key);
 
-            _ = TryRegisterHotkeyAsync(modifiers, key, true, () =>
+            SafeFireAndForget(TryRegisterHotkeyAsync(modifiers, key, true, () =>
             {
                 _pendingModifiers = previousModifiers;
                 _pendingKey = previousKey;
                 ScreenshotHotkeyText = previousDisplayText;
-            });
+            }));
 
             IsCapturingHotkey = false;
         }
@@ -2248,7 +2434,7 @@ namespace MyTools.ViewModels
             {
                 if (SelectedSqlDatabase != null && SqlTableList.Count == 0)
                 {
-                    _ = LoadTablesForSelectedDatabaseAsync();
+                    SafeFireAndForget(LoadTablesForSelectedDatabaseAsync());
                 }
             }
             else if (CurrentModule == "System")
@@ -2756,6 +2942,537 @@ namespace MyTools.ViewModels
             Application.Current.Shutdown();
         }
 
+        private static bool ReadAutoStartStatus()
+        {
+            try
+            {
+                using (var key = Registry.CurrentUser.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", false))
+                {
+                    return key?.GetValue("MyTools") != null;
+                }
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private void ToggleAutoStart()
+        {
+            try
+            {
+                using (var key = Registry.CurrentUser.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", true))
+                {
+                    if (key == null) return;
+                    if (IsAutoStartEnabled)
+                    {
+                        key.DeleteValue("MyTools", false);
+                        IsAutoStartEnabled = false;
+                        SystemStatusMessage = "已取消开机自启。";
+                    }
+                    else
+                    {
+                        var exePath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
+                        if (!string.IsNullOrWhiteSpace(exePath))
+                        {
+                            key.SetValue("MyTools", $"\"{exePath}\"");
+                            IsAutoStartEnabled = true;
+                            SystemStatusMessage = "已设置开机自启。";
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "Toggle auto-start failed");
+                MessageBox.Show("设置开机自启失败：" + ex.Message, "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        private void OpenLogFolder()
+        {
+            try
+            {
+                var baseDir = AppDomain.CurrentDomain.BaseDirectory;
+                var logsDir = System.IO.Path.Combine(baseDir, "logs");
+                var targetDir = System.IO.Directory.Exists(logsDir) ? logsDir : baseDir;
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = targetDir,
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "Failed to open log folder");
+                MessageBox.Show("无法打开日志目录：" + ex.Message, "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        // ==================== SystemInfo Module ====================
+        private HardwareSummary _systemInfo;
+        private bool _isSystemInfoBusy;
+        private string _systemInfoStatusMessage = "点击下方刷新读取硬件信息。";
+        private bool _isSensorsRunning;
+        private string _sensorStatusMessage = "点击启用传感器后实时显示 CPU/GPU/主板温度、风扇转速、电压等。";
+        private readonly DispatcherTimer _sensorTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+        private HardwareSensorService _sensorService;
+
+        public ICommand ShowSystemInfoCommand { get; }
+        public ICommand LoadSystemInfoCommand { get; }
+        public ICommand ToggleHardwareSensorsCommand { get; }
+
+        public ObservableCollection<SensorReading> SensorReadings { get; } = new ObservableCollection<SensorReading>();
+
+        public HardwareSummary HardwareSummaryInfo
+        {
+            get => _systemInfo;
+            set { _systemInfo = value; OnPropertyChanged(); OnPropertyChanged(nameof(HasHardwareSummary)); }
+        }
+
+        public bool HasHardwareSummary => _systemInfo != null;
+
+        public bool IsSystemInfoBusy
+        {
+            get => _isSystemInfoBusy;
+            set { _isSystemInfoBusy = value; OnPropertyChanged(); }
+        }
+
+        public string SystemInfoStatusMessage
+        {
+            get => _systemInfoStatusMessage;
+            set { _systemInfoStatusMessage = value; OnPropertyChanged(); }
+        }
+
+        public bool IsSensorsRunning
+        {
+            get => _isSensorsRunning;
+            set { _isSensorsRunning = value; OnPropertyChanged(); OnPropertyChanged(nameof(SensorsToggleLabel)); }
+        }
+
+        public string SensorsToggleLabel => _isSensorsRunning ? "停止采集" : "启用传感器";
+
+        public string SensorStatusMessage
+        {
+            get => _sensorStatusMessage;
+            set { _sensorStatusMessage = value; OnPropertyChanged(); }
+        }
+
+        private async Task LoadSystemInfoAsync()
+        {
+            if (_isSystemInfoBusy) return;
+            IsSystemInfoBusy = true;
+            SystemInfoStatusMessage = "正在读取硬件信息…";
+            try
+            {
+                var summary = await HardwareInfoService.GetSummaryAsync().ConfigureAwait(true);
+                HardwareSummaryInfo = summary;
+                SystemInfoStatusMessage = $"已读取 · {summary.Cpus.Count} CPU · {summary.Gpus.Count} GPU · {summary.MemoryModules.Count} 内存条 · {summary.Disks.Count} 硬盘";
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "LoadSystemInfo failed");
+                SystemInfoStatusMessage = "读取失败：" + ex.Message;
+            }
+            finally
+            {
+                IsSystemInfoBusy = false;
+            }
+        }
+
+        private void ToggleHardwareSensors()
+        {
+            if (_isSensorsRunning)
+            {
+                _sensorTimer.Stop();
+                _sensorTimer.Tick -= SensorTimer_OnTick;
+                _sensorService?.Dispose();
+                _sensorService = null;
+                IsSensorsRunning = false;
+                SensorReadings.Clear();
+                SensorStatusMessage = "已停止采集。";
+                return;
+            }
+
+            _sensorService = new HardwareSensorService();
+            if (!_sensorService.TryStart())
+            {
+                SensorStatusMessage = "传感器启动失败：" + (_sensorService.LastError ?? "未知错误。请以管理员身份重新运行 MyTools。");
+                _sensorService.Dispose();
+                _sensorService = null;
+                return;
+            }
+
+            _sensorTimer.Tick += SensorTimer_OnTick;
+            _sensorTimer.Start();
+            SensorTimer_OnTick(this, EventArgs.Empty);
+            IsSensorsRunning = true;
+
+            if (SensorReadings.Count == 0)
+            {
+                SensorStatusMessage = HardwareSensorService.IsRunningAsAdmin
+                    ? "未读取到传感器数据，硬件可能不被支持。"
+                    : "当前为非管理员模式：温度/风扇/电压通常无法读取。请以管理员身份重启 MyTools。";
+            }
+            else
+            {
+                SensorStatusMessage = HardwareSensorService.IsRunningAsAdmin
+                    ? $"已启用 · {SensorReadings.Count} 项 · 每 2 秒刷新"
+                    : $"已启用（非管理员，仅 {SensorReadings.Count} 项可读）";
+            }
+        }
+
+        private void SensorTimer_OnTick(object sender, EventArgs e)
+        {
+            try
+            {
+                var readings = _sensorService?.ReadAll();
+                if (readings == null) return;
+                SensorReadings.Clear();
+                foreach (var r in readings.OrderBy(r => r.HardwareKind).ThenBy(r => r.HardwareName).ThenBy(r => r.SensorKind))
+                {
+                    SensorReadings.Add(r);
+                }
+
+                // Keep status fresh on each tick if user is running as non-admin
+                if (_isSensorsRunning && SensorReadings.Count == 0 && !HardwareSensorService.IsRunningAsAdmin)
+                {
+                    SensorStatusMessage = "未读到传感器：请以管理员身份重启 MyTools。";
+                }
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Warning("Sensor read failed: {Msg}", ex.Message);
+            }
+        }
+
+        private void RestartAsAdmin()
+        {
+            try
+            {
+                var exe = System.Reflection.Assembly.GetEntryAssembly()?.Location;
+                if (string.IsNullOrEmpty(exe) || !System.IO.File.Exists(exe))
+                {
+                    SensorStatusMessage = "无法定位 MyTools.exe 路径。";
+                    return;
+                }
+                var psi = new System.Diagnostics.ProcessStartInfo(exe)
+                {
+                    UseShellExecute = true,
+                    Verb = "runas",
+                    WorkingDirectory = System.IO.Path.GetDirectoryName(exe) ?? string.Empty
+                };
+                System.Diagnostics.Process.Start(psi);
+                System.Windows.Application.Current?.Shutdown();
+            }
+            catch (System.ComponentModel.Win32Exception)
+            {
+                // User cancelled UAC
+                SensorStatusMessage = "已取消管理员授权。";
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Warning("RestartAsAdmin failed: {Msg}", ex.Message);
+                SensorStatusMessage = "重启失败：" + ex.Message;
+            }
+        }
+
+        public bool IsRunningAsAdmin => HardwareSensorService.IsRunningAsAdmin;
+        public ICommand RestartAsAdminCommand { get; }
+
+        // ==================== Convert Module ====================
+        private bool _isConvertBusy;
+        private string _convertStatusMessage = "选择图片或音视频文件进行格式转换。";
+        private string _convertResult = string.Empty;
+        private string _ffmpegPath;
+        private bool _isFfmpegAvailable;
+        private string _imageOutputFormat = "jpg";
+        private int _imageMaxWidth;
+        private int _imageMaxHeight;
+        private int _imageQuality = 85;
+        private string _mediaOutputFormat = "mp3";
+        private string _mediaExtraArgs = string.Empty;
+
+        public ICommand ShowConvertCommand { get; }
+        public ICommand ConvertImageCommand { get; }
+        public ICommand ConvertMediaCommand { get; }
+
+        public bool IsConvertBusy
+        {
+            get => _isConvertBusy;
+            set { _isConvertBusy = value; OnPropertyChanged(); }
+        }
+
+        public string ConvertStatusMessage
+        {
+            get => _convertStatusMessage;
+            set { _convertStatusMessage = value; OnPropertyChanged(); }
+        }
+
+        public string ConvertResult
+        {
+            get => _convertResult;
+            set { _convertResult = value; OnPropertyChanged(); }
+        }
+
+        public bool IsFfmpegAvailable
+        {
+            get => _isFfmpegAvailable;
+            set { _isFfmpegAvailable = value; OnPropertyChanged(); }
+        }
+
+        public string ImageOutputFormat
+        {
+            get => _imageOutputFormat;
+            set { _imageOutputFormat = value; OnPropertyChanged(); }
+        }
+
+        public int ImageMaxWidth
+        {
+            get => _imageMaxWidth;
+            set { _imageMaxWidth = value; OnPropertyChanged(); }
+        }
+
+        public int ImageMaxHeight
+        {
+            get => _imageMaxHeight;
+            set { _imageMaxHeight = value; OnPropertyChanged(); }
+        }
+
+        public int ImageQuality
+        {
+            get => _imageQuality;
+            set { _imageQuality = value; OnPropertyChanged(); }
+        }
+
+        public string MediaOutputFormat
+        {
+            get => _mediaOutputFormat;
+            set { _mediaOutputFormat = value; OnPropertyChanged(); }
+        }
+
+        public string MediaExtraArgs
+        {
+            get => _mediaExtraArgs;
+            set { _mediaExtraArgs = value; OnPropertyChanged(); }
+        }
+
+        private void DetectFfmpeg()
+        {
+            Task.Run(() =>
+            {
+                var path = MediaConvertService.FindFfmpeg();
+                Application.Current?.Dispatcher?.Invoke(() =>
+                {
+                    _ffmpegPath = path;
+                    IsFfmpegAvailable = path != null;
+                    if (path != null)
+                        ConvertStatusMessage = "已就绪（图片内置 + FFmpeg 已检测到）。";
+                    else
+                        ConvertStatusMessage = "已就绪（图片内置）。FFmpeg 未检测到，音视频转换不可用。";
+                });
+            });
+        }
+
+        private async Task ConvertImageAsync()
+        {
+            var dialog = new Microsoft.Win32.OpenFileDialog
+            {
+                Title = "选择要转换的图片",
+                Filter = "图片文件|*.jpg;*.jpeg;*.png;*.bmp;*.gif;*.tiff;*.tif|所有文件|*.*"
+            };
+            if (dialog.ShowDialog() != true) return;
+
+            IsConvertBusy = true;
+            ConvertStatusMessage = "正在转换图片…";
+            ConvertResult = string.Empty;
+            try
+            {
+                var result = await MediaConvertService.ConvertImageAsync(
+                    dialog.FileName, _imageOutputFormat, _imageMaxWidth, _imageMaxHeight, _imageQuality, CancellationToken.None);
+                ConvertResult = result.Message;
+                ConvertStatusMessage = result.Success ? $"完成 → {result.OutputPath}" : "转换失败。";
+                if (!result.Success)
+                    MessageBox.Show(result.Message, "图片转换", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "Image convert failed");
+                ConvertStatusMessage = "转换失败：" + ex.Message;
+            }
+            finally { IsConvertBusy = false; }
+        }
+
+        private async Task ConvertMediaAsync()
+        {
+            if (!_isFfmpegAvailable)
+            {
+                MessageBox.Show("未检测到 ffmpeg.exe，请下载 FFmpeg 并加入系统 PATH 或放置在程序目录下。\n\n下载地址：https://ffmpeg.org/download.html",
+                    "FFmpeg 未找到", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            var dialog = new Microsoft.Win32.OpenFileDialog
+            {
+                Title = "选择要转换的音频/视频文件",
+                Filter = "音视频文件|*.mp4;*.mkv;*.avi;*.mov;*.flv;*.wmv;*.mp3;*.wav;*.aac;*.flac;*.ogg;*.m4a|所有文件|*.*"
+            };
+            if (dialog.ShowDialog() != true) return;
+
+            IsConvertBusy = true;
+            ConvertResult = string.Empty;
+            try
+            {
+                var progress = new Progress<string>(msg => ConvertStatusMessage = msg);
+                var result = await MediaConvertService.ConvertMediaAsync(
+                    _ffmpegPath, dialog.FileName, _mediaOutputFormat, _mediaExtraArgs ?? string.Empty, progress, CancellationToken.None);
+                ConvertResult = result.Message;
+                ConvertStatusMessage = result.Success ? $"完成 → {result.OutputPath}" : "转换失败。";
+                if (!result.Success)
+                    MessageBox.Show(result.Message, "音视频转换", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "Media convert failed");
+                ConvertStatusMessage = "转换失败：" + ex.Message;
+            }
+            finally { IsConvertBusy = false; }
+        }
+
+        // ==================== Benchmark Module ====================
+        private bool _isBenchmarkBusy;
+        private string _benchmarkStatusMessage = "点击运行开始性能测试。";
+
+        public ICommand ShowBenchmarkCommand { get; }
+        public ICommand RunAllBenchmarksCommand { get; }
+        public ICommand RunSingleBenchmarkCommand { get; }
+
+        public ObservableCollection<BenchmarkResult> BenchmarkResults { get; } = new ObservableCollection<BenchmarkResult>();
+
+        public bool IsBenchmarkBusy
+        {
+            get => _isBenchmarkBusy;
+            set { _isBenchmarkBusy = value; OnPropertyChanged(); }
+        }
+
+        public string BenchmarkStatusMessage
+        {
+            get => _benchmarkStatusMessage;
+            set { _benchmarkStatusMessage = value; OnPropertyChanged(); }
+        }
+
+        private async Task RunAllBenchmarksAsync()
+        {
+            if (_isBenchmarkBusy) return;
+            IsBenchmarkBusy = true;
+            BenchmarkResults.Clear();
+            BenchmarkStatusMessage = "正在运行全部测试…";
+            try
+            {
+                var progress = new Progress<string>(msg => BenchmarkStatusMessage = msg);
+                var results = await BenchmarkService.RunAllAsync(progress, CancellationToken.None);
+                foreach (var r in results) BenchmarkResults.Add(r);
+                BenchmarkStatusMessage = $"全部完成 · {results.Count} 项测试";
+                AppLogService.Information("Benchmark completed: {Count} tests", results.Count);
+            }
+            catch (OperationCanceledException) { BenchmarkStatusMessage = "已取消。"; }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "Benchmark failed");
+                BenchmarkStatusMessage = "测试失败：" + ex.Message;
+            }
+            finally { IsBenchmarkBusy = false; }
+        }
+
+        private async Task RunSingleBenchmarkAsync(object param)
+        {
+            if (_isBenchmarkBusy) return;
+            var testName = param as string;
+            if (string.IsNullOrEmpty(testName)) return;
+
+            IsBenchmarkBusy = true;
+            BenchmarkStatusMessage = $"正在运行 {testName}…";
+            try
+            {
+                var progress = new Progress<string>(msg => BenchmarkStatusMessage = msg);
+                BenchmarkResult result;
+                switch (testName)
+                {
+                    case "CpuSingle":
+                        result = await BenchmarkService.RunCpuSingleThreadAsync(progress, CancellationToken.None);
+                        break;
+                    case "CpuMulti":
+                        result = await BenchmarkService.RunCpuMultiThreadAsync(progress, CancellationToken.None);
+                        break;
+                    case "MemBandwidth":
+                        result = await BenchmarkService.RunMemoryBandwidthAsync(progress, CancellationToken.None);
+                        break;
+                    case "MemLatency":
+                        result = await BenchmarkService.RunMemoryLatencyAsync(progress, CancellationToken.None);
+                        break;
+                    case "GpuInfo":
+                        result = await BenchmarkService.RunGpuInfoAsync(progress, CancellationToken.None);
+                        break;
+                    default:
+                        return;
+                }
+                BenchmarkResults.Add(result);
+                BenchmarkStatusMessage = $"完成 · {result.Name}：{result.Score}";
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "Single benchmark failed");
+                BenchmarkStatusMessage = "测试失败：" + ex.Message;
+            }
+            finally { IsBenchmarkBusy = false; }
+        }
+
+        // ==================== FileVerify Module ====================
+        public ICommand VerifyFileCommand { get; }
+        public ICommand ShowFileVerifyCommand { get; }
+
+        private async Task VerifyFileAsync()
+        {
+            // Reuse ComputeFileHashAsync logic but write detailed multi-line result with CRC32
+            var dialog = new Microsoft.Win32.OpenFileDialog
+            {
+                Title = "选择要校验的文件",
+                Filter = "所有文件|*.*"
+            };
+            if (dialog.ShowDialog() != true) return;
+
+            IsFileHashBusy = true;
+            FileHashStatusMessage = "正在计算…";
+            FileHashResult = string.Empty;
+            try
+            {
+                var progress = new Progress<string>(msg => FileHashStatusMessage = msg);
+                var r = await FileHashService.ComputeAsync(dialog.FileName, progress, CancellationToken.None);
+
+                var sizeText = r.FileSize >= 1_073_741_824
+                    ? $"{r.FileSize / 1_073_741_824.0:0.##} GB"
+                    : r.FileSize >= 1_048_576
+                        ? $"{r.FileSize / 1_048_576.0:0.##} MB"
+                        : $"{r.FileSize / 1024.0:0.##} KB";
+
+                FileHashResult = $"文件：{r.FileName}（{sizeText}）\n"
+                    + $"路径：{r.FilePath}\n"
+                    + $"MD5：{r.Md5}\n"
+                    + $"SHA-1：{r.Sha1}\n"
+                    + $"SHA-256：{r.Sha256}\n"
+                    + $"CRC32：{r.Crc32}";
+                FileHashStatusMessage = "计算完成。点击结果可复制到剪贴板。";
+                AppLogService.Information("File verify computed for {File}", r.FileName);
+            }
+            catch (OperationCanceledException) { FileHashStatusMessage = "已取消。"; }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "File verify failed");
+                FileHashStatusMessage = "计算失败：" + ex.Message;
+            }
+            finally { IsFileHashBusy = false; }
+        }
+
         public void Dispose()
         {
             if (_isDisposed)
@@ -2765,8 +3482,16 @@ namespace MyTools.ViewModels
 
             _isDisposed = true;
             CancelPendingTableLoad();
+            _queryCts?.Cancel();
+            _queryCts?.Dispose();
+            _queryCts = null;
             _audioRecordingTimer.Stop();
             _audioRecordingTimer.Tick -= AudioRecordingTimer_OnTick;
+
+            _sensorTimer.Stop();
+            try { _sensorTimer.Tick -= SensorTimer_OnTick; } catch { }
+            _sensorService?.Dispose();
+            _sensorService = null;
 
             CloseOwnedWindowsForShutdown();
             StopActiveRecordingsForShutdown();
@@ -2919,11 +3644,19 @@ namespace MyTools.ViewModels
         private bool CanExportQueryResult()
             => !IsQueryBusy && SqlQueryResult != null && SqlQueryResult.Count > 0;
 
+        private CancellationTokenSource _queryCts;
+
         private async Task ExecuteSqlQueryAsync()
         {
+            _queryCts?.Cancel();
+            _queryCts?.Dispose();
+            _queryCts = new CancellationTokenSource();
+            var ct = _queryCts.Token;
+
             IsQueryBusy = true;
             QueryStatusMessage = "正在执行查询...";
             SqlQueryResult = null;
+            _cancelQueryCommand?.RaiseCanExecuteChanged();
             try
             {
                 var options = GetEffectiveSqlConnectionOptions();
@@ -2932,10 +3665,15 @@ namespace MyTools.ViewModels
                     options,
                     SelectedSqlDatabase.Name,
                     SqlQueryText,
-                    CancellationToken.None);
+                    ct);
 
                 SqlQueryResult = table.DefaultView;
                 QueryStatusMessage = $"共 {table.Rows.Count} 行，{table.Columns.Count} 列。";
+            }
+            catch (OperationCanceledException)
+            {
+                AppLogService.Information("SQL query cancelled by user");
+                QueryStatusMessage = "查询已取消。";
             }
             catch (Exception ex)
             {
@@ -2946,6 +3684,20 @@ namespace MyTools.ViewModels
             finally
             {
                 IsQueryBusy = false;
+                _cancelQueryCommand?.RaiseCanExecuteChanged();
+            }
+        }
+
+        private void CancelSqlQuery()
+        {
+            try
+            {
+                _queryCts?.Cancel();
+                QueryStatusMessage = "正在取消查询...";
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "Cancelling SQL query failed");
             }
         }
 
@@ -3504,7 +4256,7 @@ namespace MyTools.ViewModels
             }
 
             WeChatRestoreZipPath = dialog.FileName;
-            _ = LoadRestoreManifestSummaryAsync(dialog.FileName);
+            SafeFireAndForget(LoadRestoreManifestSummaryAsync(dialog.FileName));
         }
 
         private async Task LoadRestoreManifestSummaryAsync(string zipPath)
@@ -3734,6 +4486,18 @@ namespace MyTools.ViewModels
         protected virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+
+        private static async void SafeFireAndForget(Task task, [CallerMemberName] string caller = null)
+        {
+            try
+            {
+                await task.ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "Unobserved async exception in {Caller}", caller ?? "unknown");
+            }
         }
     }
 

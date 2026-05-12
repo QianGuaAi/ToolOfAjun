@@ -7,6 +7,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
+using VbFileIO = Microsoft.VisualBasic.FileIO;
 
 namespace MyTools.Services
 {
@@ -405,11 +406,12 @@ Start-Service -Name dosvc -ErrorAction SilentlyContinue";
             {
                 var info = new FileInfo(fullPath);
                 var bytes = info.Length;
-                AppLogService.Information("Junk cleanup plan: delete file {Path}", fullPath);
+                AppLogService.Information("Junk cleanup plan: recycle file {Path}", fullPath);
                 info.Attributes = FileAttributes.Normal;
-                File.Delete(fullPath);
+                // 发送到回收站而非永久删除，避免误删后无法恢复
+                VbFileIO.FileSystem.DeleteFile(fullPath, VbFileIO.UIOption.OnlyErrorDialogs, VbFileIO.RecycleOption.SendToRecycleBin, VbFileIO.UICancelOption.ThrowException);
                 await Task.Yield();
-                AppLogService.Information("Junk cleanup done: deleted file {Path}, freed {Bytes}B", fullPath, bytes);
+                AppLogService.Information("Junk cleanup done: recycled file {Path}, freed {Bytes}B", fullPath, bytes);
                 return bytes;
             }
 

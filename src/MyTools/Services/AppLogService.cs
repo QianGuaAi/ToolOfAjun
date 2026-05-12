@@ -48,6 +48,12 @@ namespace MyTools.Services
             Log.Information(messageTemplate, propertyValues);
         }
 
+        public static void Warning(string messageTemplate, params object[] propertyValues)
+        {
+            Initialize();
+            Log.Warning(messageTemplate, propertyValues);
+        }
+
         public static void Error(Exception exception, string messageTemplate, params object[] propertyValues)
         {
             Initialize();

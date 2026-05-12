@@ -13,6 +13,9 @@ namespace MyTools.Services
         public string Gateway { get; set; }
         public string Dns { get; set; }
         public OperationalStatus Status { get; set; }
+        public string MacAddress { get; set; }
+        public string LinkSpeed { get; set; }
+        public string AdapterType { get; set; }
     }
 
     public static class NetworkService
@@ -43,12 +46,45 @@ namespace MyTools.Services
                         Status = ni.OperationalStatus,
                         IpAddress = string.Join("\n", ipv4Addresses.Concat(ipv6Addresses)),
                         Gateway = string.Join("\n", props.GatewayAddresses.Select(g => g.Address.ToString())),
-                        Dns = string.Join("\n", props.DnsAddresses.Select(d => d.ToString()))
+                        Dns = string.Join("\n", props.DnsAddresses.Select(d => d.ToString())),
+                        MacAddress = FormatMacAddress(ni.GetPhysicalAddress()),
+                        LinkSpeed = FormatLinkSpeed(ni.Speed),
+                        AdapterType = FormatAdapterType(ni.NetworkInterfaceType)
                     });
                 }
             }
             catch { }
             return list;
+        }
+
+        private static string FormatMacAddress(PhysicalAddress address)
+        {
+            if (address == null) return string.Empty;
+            var bytes = address.GetAddressBytes();
+            if (bytes.Length == 0) return string.Empty;
+            return string.Join(":", bytes.Select(b => b.ToString("X2")));
+        }
+
+        private static string FormatLinkSpeed(long speedBps)
+        {
+            if (speedBps <= 0) return "未知";
+            if (speedBps >= 1_000_000_000) return $"{speedBps / 1_000_000_000.0:0.#} Gbps";
+            if (speedBps >= 1_000_000) return $"{speedBps / 1_000_000.0:0.#} Mbps";
+            if (speedBps >= 1_000) return $"{speedBps / 1_000.0:0.#} Kbps";
+            return $"{speedBps} bps";
+        }
+
+        private static string FormatAdapterType(NetworkInterfaceType type)
+        {
+            switch (type)
+            {
+                case NetworkInterfaceType.Ethernet: return "以太网";
+                case NetworkInterfaceType.Wireless80211: return "Wi-Fi";
+                case NetworkInterfaceType.Loopback: return "回环";
+                case NetworkInterfaceType.Tunnel: return "隧道";
+                case NetworkInterfaceType.Ppp: return "PPP";
+                default: return type.ToString();
+            }
         }
     }
 }
