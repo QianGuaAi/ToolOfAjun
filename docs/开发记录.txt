@@ -349,3 +349,11 @@
    - 转换模块两个主按钮原来用 `InverseBoolToVis`（Visibility）绑定给 `IsEnabled`（bool），类型不匹配、仅靠隐式转换凑效。已删除该绑定，交由 Command 的 CanExecute 自动控制禁用态。
 
 构建验证：0 errors，单 EXE 仍为 12.83 MB。
+
+## [2026-05-12] 安装程序打包
+- 新增 `MyTools.Installer` 安装器工程，生成单个 `MyToolsSetup.exe`，内嵌 Release payload 与卸载器，不依赖第三方打包工具。
+- 新增 `MyTools.Uninstaller` 卸载器工程，卸载时删除程序文件、开始菜单快捷方式与卸载注册表项，默认保留同目录用户配置、日志和历史数据。
+- 新增 `scripts/Build-Installer.ps1`：先构建主程序与卸载器，再按白名单压缩 payload 并嵌入安装器；默认包含 `NativeBinaries\ffmpeg\ffmpeg.exe`，可通过 `-SkipFfmpeg` 生成轻量包。
+- 安装开始时先扫描 HKLM/HKCU 32/64 位卸载注册表视图；发现旧版 `MyTools` 或“阿君的工具”后，静默运行旧卸载器，成功后再继续安装新版。
+- 兼容注册表缺失场景：目标目录存在旧卸载器时直接调用；如果是早期手工复制版本，则停止正在运行的 `MyTools.exe` 并清理已知程序文件后覆盖安装。
+- 构建验证：`artifacts\installer\MyToolsSetup.exe` 生成成功，完整包约 40.65 MB，SHA256 为 `9AB16C3745D012C4E0387DD0499BE94C26769C0F8ED173F89A0EF3804E180AB4`。
