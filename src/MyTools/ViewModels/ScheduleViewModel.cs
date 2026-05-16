@@ -34,6 +34,7 @@ namespace MyTools.ViewModels
             RefreshVersionsCommand = new RelayCommand(LoadVersions);
             AutoOptimizeCommand = new RelayCommand(AutoOptimize, () => Current != null && IsEditing);
             LoadVersionCommand = new AsyncRelayParameterCommand(LoadVersionAsync);
+            ExportExcelCommand = new AsyncRelayCommand(ExportExcelAsync, () => Current != null);
 
             LoadVersions();
         }
@@ -101,6 +102,40 @@ namespace MyTools.ViewModels
         public ICommand RefreshVersionsCommand { get; }
         public ICommand AutoOptimizeCommand { get; }
         public ICommand LoadVersionCommand { get; }
+        public ICommand ExportExcelCommand { get; }
+
+        private async System.Threading.Tasks.Task ExportExcelAsync()
+        {
+            if (Current == null) return;
+            try
+            {
+                var dlg = new Microsoft.Win32.SaveFileDialog
+                {
+                    Filter = "Excel 文件 (*.xlsx)|*.xlsx",
+                    FileName = $"排班_{Current.Year}-{Current.Month:00}_{Current.VersionName}_{DateTime.Now:yyyyMMddHHmmss}.xlsx",
+                    Title = "导出排班表"
+                };
+                if (dlg.ShowDialog() != true) return;
+
+                await ScheduleExcelExporter.ExportAsync(Current, dlg.FileName).ConfigureAwait(true);
+                StatusMessage = "已导出：" + dlg.FileName;
+
+                var open = System.Windows.MessageBox.Show(
+                    "导出成功：\n" + dlg.FileName + "\n\n是否打开该文件？",
+                    "导出排班", System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxImage.Information);
+                if (open == System.Windows.MessageBoxResult.Yes)
+                {
+                    try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(dlg.FileName) { UseShellExecute = true }); }
+                    catch { }
+                }
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "Schedule export failed: {Msg}", ex.Message);
+                StatusMessage = "导出失败：" + ex.Message;
+                System.Windows.MessageBox.Show(ex.Message, "导出失败", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+            }
+        }
 
         // ============================ New ============================
         private async void NewSchedule()

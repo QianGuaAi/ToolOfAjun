@@ -14,6 +14,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Input;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Microsoft.VisualBasic;
 using Microsoft.Win32;
@@ -210,6 +211,8 @@ namespace MyTools.ViewModels
             ShowBenchmarkCommand = new RelayCommand(() => { CurrentModule = "Benchmark"; });
             ShowScheduleCommand = new RelayCommand(() => { CurrentModule = "Schedule"; });
             Schedule = new ScheduleViewModel();
+            ShowSystemSettingsCommand = new RelayCommand(() => { CurrentModule = "SystemSettings"; });
+            SystemSettings = new SystemSettingsViewModel();
             LoadSystemInfoCommand = new AsyncRelayCommand(LoadSystemInfoAsync, () => !_isSystemInfoBusy);
             ToggleHardwareSensorsCommand = new RelayCommand(ToggleHardwareSensors);
             RestartAsAdminCommand = new RelayCommand(RestartAsAdmin);
@@ -318,6 +321,8 @@ namespace MyTools.ViewModels
             _importCodexProfileCommand = new AsyncRelayCommand(ImportCodexProfileAsync);
             ImportCodexProfileCommand = _importCodexProfileCommand;
             DeleteCodexProfileCommand = new RelayParameterCommand(DeleteCodexProfile);
+            EditCodexConfigTomlCommand = new AsyncRelayParameterCommand(p => EditCodexFileAsync(p, CodexConfigProfileService.ConfigFileName));
+            EditCodexAuthJsonCommand = new AsyncRelayParameterCommand(p => EditCodexFileAsync(p, CodexConfigProfileService.AuthFileName));
 
             SafeFireAndForget(LoadSystemInfoSnapshotAsync());
             CurrentModule = "Home";
@@ -1071,7 +1076,47 @@ namespace MyTools.ViewModels
         public bool ShowEditorAfterCapture
         {
             get => _showEditorAfterCapture;
-            set { _showEditorAfterCapture = value; OnPropertyChanged(); }
+            set
+            {
+                if (_showEditorAfterCapture == value) return;
+                _showEditorAfterCapture = value;
+                OnPropertyChanged();
+                SafeFireAndForget(PersistScreenshotBehaviorAsync());
+            }
+        }
+
+        // ===== 截图模式：FullScreen / Region / Window =====
+        private string _screenshotMode = "FullScreen";
+        public string ScreenshotMode
+        {
+            get => _screenshotMode;
+            set
+            {
+                var v = value ?? "FullScreen";
+                if (v != "FullScreen" && v != "Region" && v != "Window") v = "FullScreen";
+                if (_screenshotMode == v) return;
+                _screenshotMode = v;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(IsScreenshotModeFullScreen));
+                OnPropertyChanged(nameof(IsScreenshotModeRegion));
+                OnPropertyChanged(nameof(IsScreenshotModeWindow));
+                SafeFireAndForget(PersistScreenshotBehaviorAsync());
+            }
+        }
+        public bool IsScreenshotModeFullScreen
+        {
+            get => _screenshotMode == "FullScreen";
+            set { if (value) ScreenshotMode = "FullScreen"; }
+        }
+        public bool IsScreenshotModeRegion
+        {
+            get => _screenshotMode == "Region";
+            set { if (value) ScreenshotMode = "Region"; }
+        }
+        public bool IsScreenshotModeWindow
+        {
+            get => _screenshotMode == "Window";
+            set { if (value) ScreenshotMode = "Window"; }
         }
 
         public string ScreenshotHotkeyText
@@ -1099,6 +1144,8 @@ namespace MyTools.ViewModels
         public ICommand ExportCodexProfileCommand { get; }
         public ICommand ImportCodexProfileCommand { get; }
         public ICommand DeleteCodexProfileCommand { get; }
+        public ICommand EditCodexConfigTomlCommand { get; }
+        public ICommand EditCodexAuthJsonCommand { get; }
 
         public bool IsVideoRecording
         {
@@ -1564,6 +1611,60 @@ namespace MyTools.ViewModels
             SafeFireAndForget(SaveCodexProfilesAsync());
         }
 
+        private async Task EditCodexFileAsync(object parameter, string fileName)
+        {
+            if (!(parameter is CodexProfileItem item))
+            {
+                return;
+            }
+
+            try
+            {
+                bool isConfigToml = string.Equals(fileName, CodexConfigProfileService.ConfigFileName, StringComparison.OrdinalIgnoreCase);
+                var protectedContent = isConfigToml ? item.ConfigTomlContentProtected : item.AuthJsonContentProtected;
+
+                // 解密；若无内容则从文件夹回退
+                byte[] currentBytes = CodexConfigProfileService.UnprotectBytesFromBase64(protectedContent);
+                if (currentBytes == null)
+                {
+                    var fallbackFolderPath = NormalizeFolderPath(item.FolderPath);
+                    var fallbackFile = string.IsNullOrWhiteSpace(fallbackFolderPath)
+                        ? null
+                        : Path.Combine(fallbackFolderPath, fileName);
+                    if (!string.IsNullOrWhiteSpace(fallbackFile) && File.Exists(fallbackFile))
+                    {
+                        currentBytes = await ReadAllBytesAsync(fallbackFile, CancellationToken.None).ConfigureAwait(true);
+                    }
+                    else
+                    {
+                        currentBytes = new byte[0];
+                    }
+                }
+
+                var initialText = Encoding.UTF8.GetString(currentBytes);
+                var dlg = new MyTools.Views.CodexFileEditorDialog(fileName, item.Name, initialText)
+                {
+                    Owner = Application.Current?.MainWindow
+                };
+                if (dlg.ShowDialog() != true) return; // 关闭/取消
+
+                var newBytes = Encoding.UTF8.GetBytes(dlg.EditedText ?? string.Empty);
+                var newProtected = CodexConfigProfileService.ProtectBytesToBase64(newBytes);
+                if (isConfigToml) item.ConfigTomlContentProtected = newProtected;
+                else item.AuthJsonContentProtected = newProtected;
+
+                item.StatusMessage = $"已保存 {fileName}：{DateTime.Now:HH:mm:ss}";
+                CodexProfilesStatusMessage = $"已更新「{item.Name}」的 {fileName}。";
+                await SaveCodexProfilesAsync().ConfigureAwait(true);
+                AppLogService.Information("Edited Codex {File} for profile {Name}", fileName, item.Name ?? string.Empty);
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "Editing Codex {File} failed for {Name}", fileName, item.Name ?? string.Empty);
+                MessageBox.Show(ex.Message, "编辑失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
         private static string ResolveCodexProfileName(string name, string normalizedFolderPath)
         {
             if (!string.IsNullOrWhiteSpace(name))
@@ -1859,6 +1960,18 @@ namespace MyTools.ViewModels
             IsCapturingHotkey = false;
         }
 
+        // ===== Window-mode capture: P/Invoke =====
+        [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+        [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+        [DllImport("dwmapi.dll")] private static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out RECT pvAttribute, int cbAttribute);
+        [DllImport("user32.dll")] private static extern int GetSystemMetrics(int nIndex);
+        private const int SM_XVIRTUALSCREEN_FOR_CROP = 76;
+        private const int SM_YVIRTUALSCREEN_FOR_CROP = 77;
+        private const int DWMWA_EXTENDED_FRAME_BOUNDS = 9;
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct RECT { public int Left, Top, Right, Bottom; }
+
         public async Task TriggerScreenshotAsync()
         {
             if (_isScreenshotBusy)
@@ -1867,47 +1980,55 @@ namespace MyTools.ViewModels
             }
 
             _isScreenshotBusy = true;
-            Window mainWin = null;
-            var shouldRestoreMainWindow = false;
 
             try
             {
-                AppLogService.Information("Screenshot capture started.");
-                mainWin = Application.Current?.MainWindow;
-                var wasVisible = mainWin?.IsVisible == true;
-                if (wasVisible)
+                AppLogService.Information("Screenshot capture started in mode {Mode}.", ScreenshotMode);
+
+                // Window 模式：抓取当前前景窗口（即使是 MainWindow 本身也允许，符合"保持当前屏幕样子"的预期）
+                IntPtr targetWindow = IntPtr.Zero;
+                if (ScreenshotMode == "Window")
                 {
-                    mainWin.Hide();
-                    shouldRestoreMainWindow = true;
+                    targetWindow = GetForegroundWindow();
                 }
 
-                await Task.Delay(150);
+                // 不再隐藏 MainWindow，也不再延迟——立即按下即按下，画面所见即所得
+                var fullScreenshot = await Task.Run(() => ScreenshotService.CaptureFullScreen());
+                BitmapSource screenshot = fullScreenshot;
 
-                var screenshot = await Task.Run(() => ScreenshotService.CaptureFullScreen());
-
-                var dispatcher = Application.Current?.Dispatcher;
-                if (dispatcher == null || dispatcher.CheckAccess())
+                if (ScreenshotMode == "Window" && targetWindow != IntPtr.Zero)
                 {
-                    Clipboard.SetImage(screenshot);
+                    screenshot = CropToWindow(fullScreenshot, targetWindow) ?? fullScreenshot;
                 }
-                else
+                else if (ScreenshotMode == "Region")
                 {
-                    await dispatcher.InvokeAsync(() => Clipboard.SetImage(screenshot));
+                    var cropped = await ShowRegionSelectorAsync(fullScreenshot);
+                    if (cropped == null)
+                    {
+                        // 用户取消
+                        AppLogService.Information("Screenshot region selection cancelled.");
+                        return;
+                    }
+                    screenshot = cropped;
                 }
 
                 if (ShowEditorAfterCapture)
                 {
-                    ShowScreenshotEditorWindow(screenshot, () =>
+                    // 弹编辑器：剪贴板不立即写入，由编辑器关闭/保存时再写入最终图
+                    ShowScreenshotEditorWindow(screenshot);
+                }
+                else
+                {
+                    // 直接进剪贴板
+                    var dispatcher = Application.Current?.Dispatcher;
+                    if (dispatcher == null || dispatcher.CheckAccess())
                     {
-                        if (!wasVisible)
-                        {
-                            return;
-                        }
-
-                        mainWin?.Show();
-                        mainWin?.Activate();
-                    });
-                    shouldRestoreMainWindow = false;
+                        ScreenshotService.SetClipboardCompatible(screenshot);
+                    }
+                    else
+                    {
+                        await dispatcher.InvokeAsync(() => ScreenshotService.SetClipboardCompatible(screenshot));
+                    }
                 }
             }
             catch (Exception ex)
@@ -1918,14 +2039,59 @@ namespace MyTools.ViewModels
             }
             finally
             {
-                if (shouldRestoreMainWindow)
-                {
-                    mainWin?.Show();
-                    mainWin?.Activate();
-                }
-
                 _isScreenshotBusy = false;
             }
+        }
+
+        /// <summary>把全屏截图按指定窗口的物理像素边界裁剪。优先使用 DWM 扩展边界，避免 Windows 10+ 不可见阴影留白。</summary>
+        private static BitmapSource CropToWindow(BitmapSource fullSnapshot, IntPtr hwnd)
+        {
+            try
+            {
+                RECT rect;
+                int hr = DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, out rect, Marshal.SizeOf(typeof(RECT)));
+                if (hr != 0 || rect.Right <= rect.Left || rect.Bottom <= rect.Top)
+                {
+                    if (!GetWindowRect(hwnd, out rect)) return null;
+                }
+
+                int virtLeft = GetSystemMetrics(SM_XVIRTUALSCREEN_FOR_CROP);
+                int virtTop = GetSystemMetrics(SM_YVIRTUALSCREEN_FOR_CROP);
+
+                int x = Math.Max(0, rect.Left - virtLeft);
+                int y = Math.Max(0, rect.Top - virtTop);
+                int w = Math.Min(rect.Right - rect.Left, fullSnapshot.PixelWidth - x);
+                int h = Math.Min(rect.Bottom - rect.Top, fullSnapshot.PixelHeight - y);
+                if (w < 1 || h < 1) return null;
+
+                var cropped = new System.Windows.Media.Imaging.CroppedBitmap(fullSnapshot, new Int32Rect(x, y, w, h));
+                cropped.Freeze();
+                return cropped;
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Warning("CropToWindow failed: {Msg}", ex.Message);
+                return null;
+            }
+        }
+
+        /// <summary>弹出全屏区域选择窗口，返回裁剪后的图；用户取消时返回 null。</summary>
+        private async Task<BitmapSource> ShowRegionSelectorAsync(BitmapSource fullSnapshot)
+        {
+            var dispatcher = Application.Current?.Dispatcher;
+            if (dispatcher == null) return null;
+
+            return await dispatcher.InvokeAsync(() =>
+            {
+                var win = new MyTools.Views.RegionSelectorWindow(fullSnapshot);
+                var ok = win.ShowDialog() == true;
+                if (!ok) return (BitmapSource)null;
+                var rect = win.SelectedRectPx;
+                if (rect.Width < 1 || rect.Height < 1) return null;
+                var cropped = new System.Windows.Media.Imaging.CroppedBitmap(fullSnapshot, rect);
+                cropped.Freeze();
+                return (BitmapSource)cropped;
+            });
         }
 
         private void ShowScreenshotEditorWindow(System.Windows.Media.Imaging.BitmapSource screenshot, Action onClosed = null)
@@ -1969,9 +2135,12 @@ namespace MyTools.ViewModels
                 var settings = await AppSettingsService.LoadAsync();
                 await Application.Current.Dispatcher.InvokeAsync(() =>
                 {
+                    _suppressScreenshotAutoSave = true;
                     _pendingModifiers = settings.ScreenshotHotkey.Modifiers;
                     _pendingKey = settings.ScreenshotHotkey.Key;
                     ShowEditorAfterCapture = settings.ShowEditorAfterCapture;
+                    ScreenshotMode = settings.ScreenshotMode;
+                    _suppressScreenshotAutoSave = false;
                     ScreenshotHotkeyText = string.IsNullOrWhiteSpace(settings.ScreenshotHotkey.DisplayText)
                         ? HotkeyService.BuildDisplayText(_pendingModifiers, _pendingKey)
                         : settings.ScreenshotHotkey.DisplayText;
@@ -1982,6 +2151,25 @@ namespace MyTools.ViewModels
             catch (Exception ex)
             {
                 AppLogService.Error(ex, "LoadScreenshotSettings failed");
+            }
+        }
+
+        private bool _suppressScreenshotAutoSave;
+        /// <summary>静默持久化截图行为（模式 / 是否打开编辑器），不弹"已保存"对话框。</summary>
+        private async Task PersistScreenshotBehaviorAsync()
+        {
+            if (_suppressScreenshotAutoSave) return;
+            try
+            {
+                await AppSettingsService.UpdateAsync(settings =>
+                {
+                    settings.ShowEditorAfterCapture = ShowEditorAfterCapture;
+                    settings.ScreenshotMode = ScreenshotMode;
+                });
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Warning("PersistScreenshotBehavior failed: {Msg}", ex.Message);
             }
         }
 
@@ -1999,6 +2187,7 @@ namespace MyTools.ViewModels
                         DisplayText = ScreenshotHotkeyText
                     };
                     settings.ShowEditorAfterCapture = ShowEditorAfterCapture;
+                    settings.ScreenshotMode = ScreenshotMode;
                 });
 
                 var registered = await TryRegisterHotkeyAsync(_pendingModifiers, _pendingKey, true);
@@ -3391,6 +3580,8 @@ namespace MyTools.ViewModels
         public ICommand ShowBenchmarkCommand { get; }
         public ICommand ShowScheduleCommand { get; }
         public ScheduleViewModel Schedule { get; }
+        public ICommand ShowSystemSettingsCommand { get; }
+        public SystemSettingsViewModel SystemSettings { get; }
         public ICommand RunAllBenchmarksCommand { get; }
         public ICommand RunSingleBenchmarkCommand { get; }
 
@@ -3480,13 +3671,28 @@ namespace MyTools.ViewModels
 
         private async Task VerifyFileAsync()
         {
-            // Reuse ComputeFileHashAsync logic but write detailed multi-line result with CRC32
             var dialog = new Microsoft.Win32.OpenFileDialog
             {
                 Title = "选择要校验的文件",
                 Filter = "所有文件|*.*"
             };
             if (dialog.ShowDialog() != true) return;
+            await VerifyFromPathAsync(dialog.FileName).ConfigureAwait(false);
+        }
+
+        /// <summary>校验指定路径的文件（供拖放等外部调用）。</summary>
+        public async Task VerifyFromPathAsync(string filePath)
+        {
+            if (string.IsNullOrWhiteSpace(filePath)) return;
+            if (_isFileHashBusy) return; // 计算中再来一个就忽略
+            if (!File.Exists(filePath))
+            {
+                FileHashStatusMessage = "文件不存在：" + filePath;
+                return;
+            }
+
+            // 进入文件验证模块（用户可能从其它页拖入）
+            CurrentModule = "FileVerify";
 
             IsFileHashBusy = true;
             FileHashStatusMessage = "正在计算…";
@@ -3494,7 +3700,7 @@ namespace MyTools.ViewModels
             try
             {
                 var progress = new Progress<string>(msg => FileHashStatusMessage = msg);
-                var r = await FileHashService.ComputeAsync(dialog.FileName, progress, CancellationToken.None);
+                var r = await FileHashService.ComputeAsync(filePath, progress, CancellationToken.None);
 
                 var sizeText = r.FileSize >= 1_073_741_824
                     ? $"{r.FileSize / 1_073_741_824.0:0.##} GB"

@@ -89,6 +89,7 @@
                                  MaxLength="4" ToolTip="一次添加的人数（0-2000）"
                                  PreviewTextInput="AddCountBox_PreviewTextInput"
                                  Margin="0,0,8,0" />
+                        <Button Content="导出Excel" Style="{StaticResource ToolbarButton}" Command="{Binding ExportExcelCommand}" />
                         <Button Content="保存" Style="{StaticResource ToolbarButton}" Command="{Binding SaveCommand}"
                                 Background="#5e72e4" Foreground="White" BorderBrush="#5e72e4" />
                     </StackPanel>

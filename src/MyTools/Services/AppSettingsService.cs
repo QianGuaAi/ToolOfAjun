@@ -107,6 +107,8 @@ namespace MyTools.Services
             DisplayText = "Ctrl+Shift+Z"
         };
         public bool ShowEditorAfterCapture { get; set; } = true;
+        /// <summary>截图模式：FullScreen / Region / Window。</summary>
+        public string ScreenshotMode { get; set; } = "FullScreen";
         public List<CodexProfileSettings> CodexProfiles { get; set; } = new List<CodexProfileSettings>();
         public string RecordingOutputFolder { get; set; } = string.Empty;
         public string AudioOutputFolder { get; set; } = string.Empty;

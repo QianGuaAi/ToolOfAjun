@@ -590,6 +590,22 @@
                         </StackPanel>
                     </Button>
 
+                    <Button Command="{Binding ShowSystemSettingsCommand}">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource NavItemStyle}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding CurrentModule}" Value="SystemSettings">
+                                        <Setter Property="Tag" Value="ActiveNetwork" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                        <StackPanel Orientation="Horizontal">
+                            <materialDesign:PackIcon Kind="CogOutline" Width="20" Height="20" Margin="0,0,12,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentBlue}" />
+                            <TextBlock Text="系统设置" VerticalAlignment="Center" FontSize="13" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                        </StackPanel>
+                    </Button>
+
                 </StackPanel>
                 <Border Grid.Row="2" Margin="14,0,14,10"
                         Background="#0AFFFFFF" CornerRadius="6"
@@ -2278,6 +2294,18 @@
                             <StackPanel>
                                 <TextBlock Text="截图行为" Style="{StaticResource TextSubtitle}" FontWeight="Bold" Margin="0,0,0,12"/>
 
+                                <TextBlock Text="截图范围" FontWeight="Medium" Margin="0,0,0,6" />
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                    <RadioButton GroupName="ScreenshotMode" Content="全屏" Margin="0,0,18,0"
+                                                 IsChecked="{Binding IsScreenshotModeFullScreen}" />
+                                    <RadioButton GroupName="ScreenshotMode" Content="划区域" Margin="0,0,18,0"
+                                                 IsChecked="{Binding IsScreenshotModeRegion}" />
+                                    <RadioButton GroupName="ScreenshotMode" Content="当前窗口"
+                                                 IsChecked="{Binding IsScreenshotModeWindow}" />
+                                </StackPanel>
+                                <TextBlock Style="{StaticResource TextCaption}" Opacity="0.6" Margin="0,0,0,14" TextWrapping="Wrap"
+                                           Text="全屏：直接截整个虚拟屏幕；划区域：弹出半透明蒙层让你拖动选区，Esc 取消；当前窗口：截按下快捷键时位于最前的那个窗口。" />
+
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>
@@ -2294,10 +2322,10 @@
                                         <TextBlock Margin="0,4,20,0" Opacity="0.6" TextWrapping="Wrap">
                                             <TextBlock.Style>
                                                 <Style TargetType="TextBlock" BasedOn="{StaticResource TextCaption}">
-                                                    <Setter Property="Text" Value="\u622a\u56fe\u540e\u81ea\u52a8\u6253\u5f00\u7f16\u8f91\u5668\u7a97\u53e3\uff0c\u53ef\u7528\u5212\u7b14\u6807\u6ce8\u5e76\u4fdd\u5b58\u3002"/>
+                                                    <Setter Property="Text" Value="截图后弹出编辑器进行标注；关闭编辑器时自动把编辑后的图写入剪贴板。"/>
                                                     <Style.Triggers>
                                                         <DataTrigger Binding="{Binding ShowEditorAfterCapture}" Value="False">
-                                                            <Setter Property="Text" Value="\u622a\u56fe\u540e\u76f4\u63a5\u5c06\u56fe\u7247\u590d\u5236\u5230\u526a\u8d34\u677f\uff0c\u4e0d\u6253\u5f00\u7f16\u8f91\u5668\u3002"/>
+                                                            <Setter Property="Text" Value="截图后直接写入剪贴板，不弹编辑器。"/>
                                                         </DataTrigger>
                                                     </Style.Triggers>
                                                 </Style>
@@ -2494,6 +2522,30 @@
                                                              Height="18"
                                                              Margin="0,0,8,0"
                                                              Visibility="{Binding IsApplying, Converter={StaticResource BoolToVis}}" />
+                                                <Button Style="{StaticResource GhostActionButton}"
+                                                        Height="32"
+                                                        Padding="8,0"
+                                                        Margin="0,0,6,0"
+                                                        ToolTip="查看 / 编辑 config.toml"
+                                                        Command="{Binding DataContext.EditCodexConfigTomlCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                        CommandParameter="{Binding}">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <materialDesign:PackIcon Kind="FileDocumentEditOutline" Width="14" Height="14" Margin="0,0,5,0"/>
+                                                        <TextBlock Text="config.toml"/>
+                                                    </StackPanel>
+                                                </Button>
+                                                <Button Style="{StaticResource GhostActionButton}"
+                                                        Height="32"
+                                                        Padding="8,0"
+                                                        Margin="0,0,6,0"
+                                                        ToolTip="查看 / 编辑 auth.json"
+                                                        Command="{Binding DataContext.EditCodexAuthJsonCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                        CommandParameter="{Binding}">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <materialDesign:PackIcon Kind="KeyOutline" Width="14" Height="14" Margin="0,0,5,0"/>
+                                                        <TextBlock Text="auth.json"/>
+                                                    </StackPanel>
+                                                </Button>
                                                 <Button Height="32"
                                                         Padding="10,0"
                                                         Margin="0,0,6,0"
@@ -2836,7 +2888,12 @@
             </Grid>
 
             <!-- File Verify module -->
-            <Grid Margin="16">
+            <Grid Margin="16"
+                  Background="Transparent"
+                  AllowDrop="True"
+                  DragEnter="FileVerify_OnDragOver"
+                  DragOver="FileVerify_OnDragOver"
+                  Drop="FileVerify_OnDrop">
                 <Grid.Style>
                     <Style TargetType="Grid">
                         <Setter Property="Visibility" Value="Collapsed" />
@@ -2888,6 +2945,18 @@
 
                 <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
                     <StackPanel>
+                        <Border Margin="0,0,0,12" Padding="20,18" CornerRadius="8"
+                                BorderThickness="2" BorderBrush="#5e72e4" Background="#F4F6FF">
+                            <StackPanel HorizontalAlignment="Center">
+                                <materialDesign:PackIcon Kind="FileUploadOutline" Width="32" Height="32"
+                                                         Foreground="#5e72e4" HorizontalAlignment="Center" />
+                                <TextBlock Text="拖入文件到此处即可校验"
+                                           FontSize="14" FontWeight="SemiBold" Margin="0,8,0,0"
+                                           HorizontalAlignment="Center" />
+                                <TextBlock Text="也可点击右上角【选择文件并校验】" FontSize="11" Opacity="0.6"
+                                           Margin="0,4,0,0" HorizontalAlignment="Center" />
+                            </StackPanel>
+                        </Border>
                         <materialDesign:Card Padding="14,12" Margin="0,0,0,12">
                             <StackPanel>
                                 <TextBlock Text="支持算法：MD5 / SHA-1 / SHA-256 / CRC32" Style="{StaticResource TextSubtitle}" />
@@ -3268,6 +3337,20 @@
                     </Style>
                 </views:SchedulePage.Style>
             </views:SchedulePage>
+
+            <!-- ============== System Settings module ============== -->
+            <views:SystemSettingsPage DataContext="{Binding SystemSettings}">
+                <views:SystemSettingsPage.Style>
+                    <Style TargetType="views:SystemSettingsPage">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding DataContext.CurrentModule, RelativeSource={RelativeSource AncestorType=mah:MetroWindow}}" Value="SystemSettings">
+                                <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </views:SystemSettingsPage.Style>
+            </views:SystemSettingsPage>
 
         </Grid>
     </Grid>

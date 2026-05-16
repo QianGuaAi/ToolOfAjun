@@ -35,6 +35,7 @@ namespace MyTools
         private bool _isSyncingZoomControl;
         private bool _isUserZoomCustomized;
         private BitmapSource _loadedScreenshot;
+        private bool _copiedToClipboard;
 
         private Point _shapeStart;
         private Shape _previewShape;
@@ -508,7 +509,8 @@ namespace MyTools
         {
             var img = FlattenToImage();
             if (img == null) return;
-            Clipboard.SetImage(img);
+            MyTools.Services.ScreenshotService.SetClipboardCompatible(img);
+            _copiedToClipboard = true; // 用户已显式复制，关闭时不必重复
             MessageBox.Show("已复制到剪贴板", "完成", MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
@@ -557,6 +559,22 @@ namespace MyTools
             else if (e.Key == Key.R) SetMode(DrawingMode.Rect);
             else if (e.Key == Key.L) SetMode(DrawingMode.Line);
             else if (e.Key == Key.E) SetMode(_mode == DrawingMode.Eraser ? DrawingMode.Pen : DrawingMode.Eraser);
+        }
+
+        protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+        {
+            // 必须在视觉树还活着时 FlattenToImage()，否则 OnClosed 时 ActualWidth=0 拿不到图
+            try
+            {
+                if (!_copiedToClipboard)
+                {
+                    var img = FlattenToImage();
+                    if (img != null) MyTools.Services.ScreenshotService.SetClipboardCompatible(img);
+                    _copiedToClipboard = true;
+                }
+            }
+            catch (Exception ex) { MyTools.Services.AppLogService.Warning("Editor auto-copy on closing failed: {Msg}", ex.Message); }
+            base.OnClosing(e);
         }
 
         protected override void OnClosed(EventArgs e)
