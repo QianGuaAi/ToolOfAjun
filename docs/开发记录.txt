@@ -350,6 +350,30 @@
 
 构建验证：0 errors，单 EXE 仍为 12.83 MB。
 
+## [2026-05-16] 新增"排班"模块
+新增侧边栏【排班】，按需求文档第六节"排班管理（目标机制）"落地。
+
+新增文件：
+- `Services/ScheduleModels.cs`：`ShiftCell` / `EmployeeRow` / `ScheduleVersion` / `ShiftCodes` 静态映射（白卡副感大小休公午）。
+- `Services/ScheduleService.cs`：版本 JSON 存储于 `%LOCALAPPDATA%\MyTools\Schedules\{YYYY-MM}\{ver}.json`；新建时复制最新版本人员名单；周一-五=6/周六=8/周日=9 默认每日总休。
+- `Services/HolidayService.cs`：周末 + 用户可在 `holidays.json` 自定义法定节假日。
+- `Services/ShiftAutoOptimizer.cs`：自动设置休息日。仅写白/休；硬约束 连续上班≤5；评分启发：周末配对(+12)、节假日(+5/+6) 、≥4 节假日休、≥8 总休、避免 3 连休(-8)；尊重 IsManual。
+- `ViewModels/ScheduleViewModel.cs`：版本列表/编辑模式/夜班联动(大1=小→大→休→休; 大2=小→大→休)/统计/命令。
+- `Views/NewScheduleDialog.xaml(.cs)`：新建对话框（年/月/版本名）。
+- `Views/SchedulePage.xaml(.cs)`：3 表头 + 人员行的动态 Grid（代码生成）；单击单元格弹出 Popup 选 11 项（9 班次 + 大1/大2 + 清空）；节假日列底色橙；超 5 天连上 / 不足 8 天总休行高亮红。
+
+集成：
+- `MainViewModel`：新增 `ShowScheduleCommand` / `Schedule` (ScheduleViewModel)；构造时立即创建并加载版本列表。
+- `MainWindow.xaml`：侧边栏【排班】按钮（CalendarMonth + Teal）；模块页通过 `<views:SchedulePage DataContext="{Binding Schedule}">` 绑定，按 `CurrentModule==Schedule` 显示。
+
+边界：
+- 编辑模式开关由 ViewModel.IsEditing 控制，查看状态下单元格按钮 IsEnabled=false。
+- 保存时若同名版本已存在，弹窗确认覆盖；删除版本前确认。
+- 自动优化只会写"白/休"两种，不会改 IsManual=true 的格子。
+- 法定节假日支持：用户在 `%LOCALAPPDATA%\MyTools\holidays.json` 写入日期数组 `["2026-01-01", ...]`。
+
+构建验证：0 errors，单 EXE 12.88 MB。
+
 ## [2026-05-12] 安装程序打包
 - 新增 `MyTools.Installer` 安装器工程，生成单个 `MyToolsSetup.exe`，内嵌 Release payload 与卸载器，不依赖第三方打包工具。
 - 新增 `MyTools.Uninstaller` 卸载器工程，卸载时删除程序文件、开始菜单快捷方式与卸载注册表项，默认保留同目录用户配置、日志和历史数据。

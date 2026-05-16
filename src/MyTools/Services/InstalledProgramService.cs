@@ -46,7 +46,7 @@ namespace MyTools.Services
                 .ToList();
         }
 
-        public static void StartUninstall(InstalledProgram program)
+        public static Process StartUninstall(InstalledProgram program)
         {
             if (program == null)
             {
@@ -65,10 +65,30 @@ namespace MyTools.Services
                 program.Publisher ?? string.Empty,
                 program.Source ?? string.Empty);
 
-            if (Process.Start(startInfo) == null)
+            var process = Process.Start(startInfo);
+            if (process == null)
             {
                 throw new InvalidOperationException("无法启动卸载程序。");
             }
+            return process;
+        }
+
+        /// <summary>
+        /// 重新扫描注册表，判断该程序是否仍存在。比较 DisplayName + UninstallString 双键。
+        /// </summary>
+        public static bool IsStillInstalled(InstalledProgram program)
+        {
+            if (program == null) return false;
+            var all = GetUninstallablePrograms();
+            foreach (var p in all)
+            {
+                if (string.Equals(p.DisplayName, program.DisplayName, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(p.UninstallString, program.UninstallString, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+            return false;
         }
 
         private static void AddProgramsFromKey(

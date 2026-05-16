@@ -4,6 +4,7 @@
                  xmlns:mah="http://metro.mahapps.com/winfx/xaml/controls"
                  xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
                  xmlns:viewModels="clr-namespace:MyTools.ViewModels"
+                 xmlns:views="clr-namespace:MyTools.Views"
                  xmlns:tb="clr-namespace:Hardcodet.Wpf.TaskbarNotification;assembly=Hardcodet.NotifyIcon.Wpf"
                  Title="阿君的工具"
                  Width="1180"
@@ -570,6 +571,22 @@
                         <StackPanel Orientation="Horizontal">
                             <materialDesign:PackIcon Kind="SpeedometerMedium" Width="20" Height="20" Margin="0,0,12,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentRose}" />
                             <TextBlock Text="性能测试" VerticalAlignment="Center" FontSize="13" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                        </StackPanel>
+                    </Button>
+
+                    <Button Command="{Binding ShowScheduleCommand}">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource NavItemStyle}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding CurrentModule}" Value="Schedule">
+                                        <Setter Property="Tag" Value="ActiveNetwork" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                        <StackPanel Orientation="Horizontal">
+                            <materialDesign:PackIcon Kind="CalendarMonth" Width="20" Height="20" Margin="0,0,12,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentTeal}" />
+                            <TextBlock Text="排班" VerticalAlignment="Center" FontSize="13" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                         </StackPanel>
                     </Button>
 
@@ -3237,6 +3254,20 @@
                     </StackPanel>
                 </ScrollViewer>
             </Grid>
+
+            <!-- ============== Schedule module ============== -->
+            <views:SchedulePage DataContext="{Binding Schedule}">
+                <views:SchedulePage.Style>
+                    <Style TargetType="views:SchedulePage">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding DataContext.CurrentModule, RelativeSource={RelativeSource AncestorType=mah:MetroWindow}}" Value="Schedule">
+                                <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </views:SchedulePage.Style>
+            </views:SchedulePage>
 
         </Grid>
     </Grid>

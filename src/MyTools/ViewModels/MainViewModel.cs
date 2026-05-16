@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Data;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -207,6 +208,8 @@ namespace MyTools.ViewModels
             ShowFileVerifyCommand = new RelayCommand(() => { CurrentModule = "FileVerify"; });
             ShowConvertCommand = new RelayCommand(() => { CurrentModule = "Convert"; DetectFfmpeg(); });
             ShowBenchmarkCommand = new RelayCommand(() => { CurrentModule = "Benchmark"; });
+            ShowScheduleCommand = new RelayCommand(() => { CurrentModule = "Schedule"; });
+            Schedule = new ScheduleViewModel();
             LoadSystemInfoCommand = new AsyncRelayCommand(LoadSystemInfoAsync, () => !_isSystemInfoBusy);
             ToggleHardwareSensorsCommand = new RelayCommand(ToggleHardwareSensors);
             RestartAsAdminCommand = new RelayCommand(RestartAsAdmin);
@@ -291,7 +294,7 @@ namespace MyTools.ViewModels
             TestSqlConnectionCommand = _testSqlConnectionCommand;
             ExportSqlTableCommand = _exportSqlTableCommand;
             _refreshInstalledProgramsCommand = new AsyncRelayCommand(LoadInstalledProgramsAsync, () => !IsInstalledProgramsBusy);
-            _uninstallProgramCommand = new AsyncRelayParameterCommand(UninstallProgramAsync, parameter => !IsInstalledProgramsBusy && parameter is InstalledProgram);
+            _uninstallProgramCommand = new AsyncRelayParameterCommand(UninstallProgramAsync, parameter => parameter is InstalledProgram);
             RefreshInstalledProgramsCommand = _refreshInstalledProgramsCommand;
             UninstallProgramCommand = _uninstallProgramCommand;
 
@@ -2861,6 +2864,18 @@ namespace MyTools.ViewModels
                 return;
             }
 
+            // 预检：若注册表已不存在该程序（可能此前已被卸载，列表未刷新），直接从列表移除
+            InstalledProgramsStatusMessage = $"正在校验「{program.DisplayName}」...";
+            var stillInstalledBefore = await Task.Run(() => InstalledProgramService.IsStillInstalled(program)).ConfigureAwait(true);
+            if (!stillInstalledBefore)
+            {
+                InstalledPrograms.Remove(program);
+                OnPropertyChanged(nameof(HasNoInstalledPrograms));
+                OnPropertyChanged(nameof(InstalledProgramsCountText));
+                InstalledProgramsStatusMessage = $"「{program.DisplayName}」已不在系统中，已从列表移除。";
+                return;
+            }
+
             var confirm = MessageBox.Show(
                 $"将启动「{program.DisplayName}」的卸载程序。\n\n卸载向导打开后，请按软件自身提示继续。是否现在启动？",
                 "确认卸载",
@@ -2868,20 +2883,50 @@ namespace MyTools.ViewModels
                 MessageBoxImage.Warning);
             if (confirm != MessageBoxResult.Yes)
             {
+                InstalledProgramsStatusMessage = "已取消卸载。";
                 return;
             }
 
+            Process process = null;
             try
             {
-                InstalledProgramService.StartUninstall(program);
-                InstalledProgramsStatusMessage = $"已启动「{program.DisplayName}」的卸载程序。完成后请刷新列表。";
-                await Task.CompletedTask;
+                process = InstalledProgramService.StartUninstall(program);
+                InstalledProgramsStatusMessage = $"卸载程序运行中，请在弹出的向导中完成「{program.DisplayName}」的卸载...";
             }
             catch (Exception ex)
             {
                 AppLogService.Error(ex, "Starting uninstall failed for {ProgramName}", program.DisplayName ?? string.Empty);
                 InstalledProgramsStatusMessage = "启动卸载失败：" + ex.Message;
                 MessageBox.Show(ex.Message, "卸载失败", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+
+            // 等待卸载进程退出（不阻塞 UI 线程）
+            try
+            {
+                await Task.Run(() =>
+                {
+                    try { process.WaitForExit(); }
+                    catch { /* ignore */ }
+                }).ConfigureAwait(true);
+            }
+            finally
+            {
+                try { process.Dispose(); } catch { }
+            }
+
+            // 复查注册表
+            var stillInstalledAfter = await Task.Run(() => InstalledProgramService.IsStillInstalled(program)).ConfigureAwait(true);
+            if (!stillInstalledAfter)
+            {
+                InstalledPrograms.Remove(program);
+                OnPropertyChanged(nameof(HasNoInstalledPrograms));
+                OnPropertyChanged(nameof(InstalledProgramsCountText));
+                InstalledProgramsStatusMessage = $"已成功卸载「{program.DisplayName}」，并从列表移除。";
+            }
+            else
+            {
+                InstalledProgramsStatusMessage = $"卸载进程已结束，但「{program.DisplayName}」仍存在于系统中，列表保留。";
             }
         }
 
@@ -3344,6 +3389,8 @@ namespace MyTools.ViewModels
         private string _benchmarkStatusMessage = "点击运行开始性能测试。";
 
         public ICommand ShowBenchmarkCommand { get; }
+        public ICommand ShowScheduleCommand { get; }
+        public ScheduleViewModel Schedule { get; }
         public ICommand RunAllBenchmarksCommand { get; }
         public ICommand RunSingleBenchmarkCommand { get; }
 
@@ -4641,11 +4688,15 @@ namespace MyTools.ViewModels
             _execute();
         }
 
-        public event EventHandler CanExecuteChanged;
+        public event EventHandler CanExecuteChanged
+        {
+            add { CommandManager.RequerySuggested += value; }
+            remove { CommandManager.RequerySuggested -= value; }
+        }
 
         public void RaiseCanExecuteChanged()
         {
-            CanExecuteChanged?.Invoke(this, EventArgs.Empty);
+            CommandManager.InvalidateRequerySuggested();
         }
     }
 
@@ -4670,11 +4721,15 @@ namespace MyTools.ViewModels
             _execute(parameter);
         }
 
-        public event EventHandler CanExecuteChanged;
+        public event EventHandler CanExecuteChanged
+        {
+            add { CommandManager.RequerySuggested += value; }
+            remove { CommandManager.RequerySuggested -= value; }
+        }
 
         public void RaiseCanExecuteChanged()
         {
-            CanExecuteChanged?.Invoke(this, EventArgs.Empty);
+            CommandManager.InvalidateRequerySuggested();
         }
     }
 
@@ -4720,11 +4775,15 @@ namespace MyTools.ViewModels
             }
         }
 
-        public event EventHandler CanExecuteChanged;
+        public event EventHandler CanExecuteChanged
+        {
+            add { CommandManager.RequerySuggested += value; }
+            remove { CommandManager.RequerySuggested -= value; }
+        }
 
         public void RaiseCanExecuteChanged()
         {
-            CanExecuteChanged?.Invoke(this, EventArgs.Empty);
+            CommandManager.InvalidateRequerySuggested();
         }
     }
 
@@ -4770,11 +4829,15 @@ namespace MyTools.ViewModels
             }
         }
 
-        public event EventHandler CanExecuteChanged;
+        public event EventHandler CanExecuteChanged
+        {
+            add { CommandManager.RequerySuggested += value; }
+            remove { CommandManager.RequerySuggested -= value; }
+        }
 
         public void RaiseCanExecuteChanged()
         {
-            CanExecuteChanged?.Invoke(this, EventArgs.Empty);
+            CommandManager.InvalidateRequerySuggested();
         }
     }
 }
