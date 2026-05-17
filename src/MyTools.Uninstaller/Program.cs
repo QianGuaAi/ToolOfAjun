@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Windows.Forms;
+using MyTools.Shared;
 
 namespace MyTools.Uninstaller
 {
@@ -46,6 +47,8 @@ namespace MyTools.Uninstaller
                 StopInstalledApplication(installDirectory);
                 RemoveShortcuts();
                 RemoveUninstallRegistry();
+                MediaFileAssociationCore.UnregisterForLocalMachine();
+                MediaFileAssociationCore.UnregisterForCurrentUser();
                 RemoveInstalledFiles(installDirectory, options.PurgeData);
 
                 if (!options.FromUpgrade)

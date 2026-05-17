@@ -20,6 +20,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="..\Shared\MediaFileAssociationCore.cs" Link="Shared\MediaFileAssociationCore.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <EmbeddedResource Include="$(PayloadZip)" LogicalName="MyToolsPayload.zip" Condition="Exists('$(PayloadZip)')" />
     <EmbeddedResource Include="$(UninstallerExe)" LogicalName="MyTools.Uninstaller.exe" Condition="Exists('$(UninstallerExe)')" />
   </ItemGroup>

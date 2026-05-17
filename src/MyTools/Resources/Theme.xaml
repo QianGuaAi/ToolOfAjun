@@ -25,6 +25,7 @@
     <Color x:Key="BrushWarningColor">#F59E0B</Color>
     <Color x:Key="BrushErrorColor">#EF4444</Color>
     <Color x:Key="BrushInfoColor">#0EA5E9</Color>
+    <Color x:Key="BrushInfoSoftColor">#EAF6FF</Color>
 
     <Color x:Key="BrushHeaderGradientStartColor">#F8FAFC</Color>
     <Color x:Key="BrushHeaderGradientEndColor">#EEF2F7</Color>
@@ -50,23 +51,24 @@
     <SolidColorBrush x:Key="BrushWarning" Color="{StaticResource BrushWarningColor}" />
     <SolidColorBrush x:Key="BrushError" Color="{StaticResource BrushErrorColor}" />
     <SolidColorBrush x:Key="BrushInfo" Color="{StaticResource BrushInfoColor}" />
+    <SolidColorBrush x:Key="BrushInfoSoft" Color="{StaticResource BrushInfoSoftColor}" />
 
     <SolidColorBrush x:Key="BrushHeaderGradientStart" Color="{StaticResource BrushHeaderGradientStartColor}" />
     <SolidColorBrush x:Key="BrushHeaderGradientEnd" Color="{StaticResource BrushHeaderGradientEndColor}" />
 
-    <CornerRadius x:Key="CornerRadiusCard">12</CornerRadius>
-    <CornerRadius x:Key="CornerRadiusButton">8</CornerRadius>
+    <CornerRadius x:Key="CornerRadiusCard">8</CornerRadius>
+    <CornerRadius x:Key="CornerRadiusButton">6</CornerRadius>
     <CornerRadius x:Key="CornerRadiusBadge">999</CornerRadius>
 
     <!-- ============================================================ -->
     <!-- 设计令牌：间距 (Spacing) -->
     <!-- ============================================================ -->
-    <Thickness x:Key="ThicknessCardPadding">16,14</Thickness>
-    <Thickness x:Key="ThicknessCardPaddingDense">14,12</Thickness>
-    <Thickness x:Key="ThicknessCardMargin">0,0,0,12</Thickness>
-    <Thickness x:Key="ThicknessCardMarginDense">0,0,0,8</Thickness>
-    <Thickness x:Key="ThicknessFieldRow">0,0,0,10</Thickness>
-    <Thickness x:Key="ThicknessFieldGap">0,0,12,0</Thickness>
+    <Thickness x:Key="ThicknessCardPadding">12,10</Thickness>
+    <Thickness x:Key="ThicknessCardPaddingDense">10,8</Thickness>
+    <Thickness x:Key="ThicknessCardMargin">0,0,0,8</Thickness>
+    <Thickness x:Key="ThicknessCardMarginDense">0,0,0,6</Thickness>
+    <Thickness x:Key="ThicknessFieldRow">0,0,0,8</Thickness>
+    <Thickness x:Key="ThicknessFieldGap">0,0,8,0</Thickness>
 
     <!-- ============================================================ -->
     <!-- 设计令牌：字号 (Typography) -->
@@ -74,9 +76,9 @@
     <system:Double x:Key="FontSizeCaption">11</system:Double>
     <system:Double x:Key="FontSizeBody">12</system:Double>
     <system:Double x:Key="FontSizeBodyLarge">13</system:Double>
-    <system:Double x:Key="FontSizeSubtitle">14</system:Double>
-    <system:Double x:Key="FontSizeTitle">16</system:Double>
-    <system:Double x:Key="FontSizeHeadline">20</system:Double>
+    <system:Double x:Key="FontSizeSubtitle">13</system:Double>
+    <system:Double x:Key="FontSizeTitle">15</system:Double>
+    <system:Double x:Key="FontSizeHeadline">18</system:Double>
 
     <!-- ============================================================ -->
     <!-- 强调渐变（用于 Hero / Header / 重点按钮） -->
@@ -160,14 +162,14 @@
     <!-- 卡片样式 -->
     <!-- ============================================================ -->
     <Style x:Key="SectionCard" TargetType="materialDesign:Card">
-        <Setter Property="UniformCornerRadius" Value="12" />
+        <Setter Property="UniformCornerRadius" Value="8" />
         <Setter Property="Padding" Value="{StaticResource ThicknessCardPadding}" />
         <Setter Property="Margin" Value="{StaticResource ThicknessCardMargin}" />
         <Setter Property="materialDesign:ShadowAssist.ShadowDepth" Value="Depth2" />
         <Setter Property="Background" Value="White" />
         <Style.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
-                <Setter Property="materialDesign:ShadowAssist.ShadowDepth" Value="Depth3" />
+                <Setter Property="materialDesign:ShadowAssist.ShadowDepth" Value="Depth2" />
             </Trigger>
         </Style.Triggers>
     </Style>
@@ -188,27 +190,27 @@
     <!-- ============================================================ -->
     <Style x:Key="SectionHeaderRow" TargetType="StackPanel">
         <Setter Property="Orientation" Value="Horizontal" />
-        <Setter Property="Margin" Value="0,0,0,10" />
+        <Setter Property="Margin" Value="0,0,0,6" />
     </Style>
 
     <!-- ============================================================ -->
     <!-- 按钮样式（基于 MaterialDesign） -->
     <!-- ============================================================ -->
     <Style x:Key="PrimaryActionButton" TargetType="Button" BasedOn="{StaticResource MaterialDesignRaisedButton}">
-        <Setter Property="Height" Value="34" />
-        <Setter Property="MinWidth" Value="96" />
-        <Setter Property="Padding" Value="14,0" />
+        <Setter Property="Height" Value="30" />
+        <Setter Property="MinWidth" Value="84" />
+        <Setter Property="Padding" Value="10,0" />
         <Setter Property="FontSize" Value="{StaticResource FontSizeBody}" />
         <Setter Property="FontWeight" Value="SemiBold" />
-        <Setter Property="materialDesign:ButtonAssist.CornerRadius" Value="8" />
+        <Setter Property="materialDesign:ButtonAssist.CornerRadius" Value="6" />
     </Style>
 
     <Style x:Key="GhostActionButton" TargetType="Button" BasedOn="{StaticResource MaterialDesignOutlinedButton}">
-        <Setter Property="Height" Value="32" />
-        <Setter Property="MinWidth" Value="80" />
-        <Setter Property="Padding" Value="12,0" />
+        <Setter Property="Height" Value="28" />
+        <Setter Property="MinWidth" Value="72" />
+        <Setter Property="Padding" Value="9,0" />
         <Setter Property="FontSize" Value="{StaticResource FontSizeBody}" />
-        <Setter Property="materialDesign:ButtonAssist.CornerRadius" Value="8" />
+        <Setter Property="materialDesign:ButtonAssist.CornerRadius" Value="6" />
     </Style>
 
     <Style x:Key="DangerActionButton" TargetType="Button" BasedOn="{StaticResource PrimaryActionButton}">
@@ -227,14 +229,14 @@
     <!-- 输入框样式 -->
     <!-- ============================================================ -->
     <Style x:Key="StandardTextBox" TargetType="TextBox" BasedOn="{StaticResource MaterialDesignOutlinedTextBox}">
-        <Setter Property="Height" Value="34" />
+        <Setter Property="Height" Value="30" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
         <Setter Property="FontSize" Value="{StaticResource FontSizeBody}" />
         <Setter Property="materialDesign:HintAssist.FloatingScale" Value="0.85" />
     </Style>
 
     <Style x:Key="StandardComboBox" TargetType="ComboBox" BasedOn="{StaticResource MaterialDesignOutlinedComboBox}">
-        <Setter Property="Height" Value="34" />
+        <Setter Property="Height" Value="30" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
         <Setter Property="FontSize" Value="{StaticResource FontSizeBody}" />
     </Style>
@@ -243,7 +245,7 @@
     <!-- Badge 样式 -->
     <!-- ============================================================ -->
     <Style x:Key="BadgeBase" TargetType="Border">
-        <Setter Property="Padding" Value="10,3" />
+        <Setter Property="Padding" Value="8,2" />
         <Setter Property="CornerRadius" Value="{StaticResource CornerRadiusBadge}" />
         <Setter Property="HorizontalAlignment" Value="Left" />
         <Setter Property="TextElement.Foreground" Value="White" />
@@ -271,13 +273,13 @@
     <!-- 默认 Card 样式（保留向后兼容） -->
     <!-- ============================================================ -->
     <Style TargetType="materialDesign:Card">
-        <Setter Property="UniformCornerRadius" Value="12" />
-        <Setter Property="Margin" Value="0,0,0,12" />
+        <Setter Property="UniformCornerRadius" Value="8" />
+        <Setter Property="Margin" Value="0,0,0,8" />
         <Setter Property="materialDesign:ShadowAssist.ShadowDepth" Value="Depth2" />
         <Setter Property="Background" Value="White" />
         <Style.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
-                <Setter Property="materialDesign:ShadowAssist.ShadowDepth" Value="Depth3" />
+                <Setter Property="materialDesign:ShadowAssist.ShadowDepth" Value="Depth2" />
             </Trigger>
         </Style.Triggers>
     </Style>
@@ -295,7 +297,7 @@
     <!-- 状态药丸 (StatusPill) -->
     <!-- ============================================================ -->
     <Style x:Key="StatusPill" TargetType="Border">
-        <Setter Property="Padding" Value="8,3" />
+        <Setter Property="Padding" Value="7,2" />
         <Setter Property="CornerRadius" Value="999" />
         <Setter Property="VerticalAlignment" Value="Center" />
         <Setter Property="HorizontalAlignment" Value="Left" />

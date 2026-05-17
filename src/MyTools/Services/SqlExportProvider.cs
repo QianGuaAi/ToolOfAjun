@@ -31,7 +31,8 @@ namespace MyTools.Services
             string databaseName,
             TableItem table,
             string filePath,
-            CancellationToken cancellationToken);
+            CancellationToken cancellationToken,
+            IProgress<SqlExportProgress> progress = null);
 
         Task<DataTable> ExecuteQueryAsync(
             SqlServerConnectionOptions options,

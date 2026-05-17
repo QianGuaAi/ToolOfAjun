@@ -120,6 +120,7 @@ namespace MyTools.Services
                     manifest.Entries.Add(new WeChatBackupManifestEntry
                     {
                         Rel = rel,
+                        Category = candidate.Category.ToString(),
                         Size = fileInfo.Length,
                         LastWriteTime = fileInfo.LastWriteTime,
                         Sha256 = sha256
@@ -228,6 +229,12 @@ namespace MyTools.Services
                 foreach (var item in manifest.Entries ?? Enumerable.Empty<WeChatBackupManifestEntry>())
                 {
                     ct.ThrowIfCancellationRequested();
+                    if (!ShouldRestoreEntry(item, options.Categories))
+                    {
+                        result.SkippedByCategory++;
+                        continue;
+                    }
+
                     progress?.Report("恢复中：" + (item.Rel ?? string.Empty));
 
                     if (ContainsZipSlip(item.Rel))
@@ -295,6 +302,78 @@ namespace MyTools.Services
             }
 
             return result;
+        }
+
+        private static bool ShouldRestoreEntry(WeChatBackupManifestEntry item, HashSet<WeChatDataCategory> categories)
+        {
+            if (categories == null || categories.Count == 0)
+            {
+                return true;
+            }
+
+            WeChatDataCategory category;
+            return TryResolveEntryCategory(item, out category) && categories.Contains(category);
+        }
+
+        private static bool TryResolveEntryCategory(WeChatBackupManifestEntry item, out WeChatDataCategory category)
+        {
+            category = WeChatDataCategory.File;
+            if (item == null)
+            {
+                return false;
+            }
+
+            if (!string.IsNullOrWhiteSpace(item.Category)
+                && Enum.TryParse(item.Category, true, out category))
+            {
+                return true;
+            }
+
+            var rel = (item.Rel ?? string.Empty).Replace('\\', '/');
+            if (ContainsPathSegment(rel, "Image") || ContainsPathSegment(rel, "attach"))
+            {
+                category = WeChatDataCategory.Image;
+                return true;
+            }
+
+            if (ContainsPathSegment(rel, "Video") || ContainsPathSegment(rel, "video"))
+            {
+                category = WeChatDataCategory.Video;
+                return true;
+            }
+
+            if (ContainsPathSegment(rel, "Voice2") || ContainsPathSegment(rel, "audio"))
+            {
+                category = WeChatDataCategory.Voice;
+                return true;
+            }
+
+            if (ContainsPathSegment(rel, "File") || ContainsPathSegment(rel, "file"))
+            {
+                category = WeChatDataCategory.File;
+                return true;
+            }
+
+            if (ContainsPathSegment(rel, "Cache") || ContainsPathSegment(rel, "temp"))
+            {
+                category = WeChatDataCategory.Cache;
+                return true;
+            }
+
+            if (ContainsPathSegment(rel, "CustomEmotion") || ContainsPathSegment(rel, "MsgTemp"))
+            {
+                category = WeChatDataCategory.Text;
+                return true;
+            }
+
+            return false;
+        }
+
+        private static bool ContainsPathSegment(string relativePath, string segment)
+        {
+            return (relativePath ?? string.Empty)
+                .Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries)
+                .Any(item => item.Equals(segment, StringComparison.OrdinalIgnoreCase));
         }
 
         private static string BuildDefaultZipPath(string outputDirectory, DateTime startDate, DateTime endDate)
@@ -427,6 +506,7 @@ namespace MyTools.Services
         public string ZipPath { get; set; }
         public bool RestoreToOriginal { get; set; } = true;
         public string CustomTargetRoot { get; set; }
+        public HashSet<WeChatDataCategory> Categories { get; set; } = new HashSet<WeChatDataCategory>();
     }
 
     public sealed class WeChatBackupProgress
@@ -447,6 +527,7 @@ namespace MyTools.Services
     {
         public int Success { get; set; }
         public int Failed { get; set; }
+        public int SkippedByCategory { get; set; }
         public List<string> Errors { get; } = new List<string>();
     }
 
@@ -493,6 +574,9 @@ namespace MyTools.Services
     {
         [JsonProperty("rel")]
         public string Rel { get; set; }
+
+        [JsonProperty("category")]
+        public string Category { get; set; }
 
         [JsonProperty("size")]
         public long Size { get; set; }

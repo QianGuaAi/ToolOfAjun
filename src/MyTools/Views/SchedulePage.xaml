@@ -9,15 +9,18 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006">
     <UserControl.Resources>
         <Style x:Key="ToolbarButton" TargetType="Button" BasedOn="{StaticResource MaterialDesignOutlinedButton}">
-            <Setter Property="Margin" Value="0,0,8,0" />
-            <Setter Property="MinWidth" Value="80" />
-            <Setter Property="Height" Value="32" />
+            <Setter Property="Margin" Value="0,0,6,0" />
+            <Setter Property="MinWidth" Value="64" />
+            <Setter Property="Height" Value="28" />
+            <Setter Property="Padding" Value="8,0" />
+            <Setter Property="FontSize" Value="12" />
         </Style>
     </UserControl.Resources>
     <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="220" />
+            <ColumnDefinition Width="188" />
             <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="226" />
         </Grid.ColumnDefinitions>
 
         <!-- ===== Left: version list ===== -->
@@ -29,9 +32,9 @@
                     <RowDefinition Height="*" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
-                <DockPanel Grid.Row="0" LastChildFill="False" Margin="12,10,8,8">
+                <DockPanel Grid.Row="0" LastChildFill="False" Margin="10,8,8,6">
                     <TextBlock DockPanel.Dock="Left" Text="排班版本" FontWeight="SemiBold" VerticalAlignment="Center" />
-                    <Button DockPanel.Dock="Right" Content="刷新" Style="{StaticResource ToolbarButton}"
+                    <Button DockPanel.Dock="Right" Content="刷新" Style="{StaticResource ToolbarButton}" MinWidth="48"
                             Command="{Binding RefreshVersionsCommand}" Margin="0" />
                 </DockPanel>
 
@@ -42,13 +45,13 @@
                          HorizontalContentAlignment="Stretch">
                     <ListBox.ItemTemplate>
                         <DataTemplate>
-                            <Grid Margin="6,4">
+                            <Grid Margin="5,3">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel>
-                                    <TextBlock Text="{Binding DisplayLabel}" FontWeight="SemiBold" />
+                                    <TextBlock Text="{Binding DisplayLabel}" FontWeight="SemiBold" FontSize="12" TextTrimming="CharacterEllipsis" />
                                     <TextBlock Text="{Binding DisplaySub}" FontSize="11" Opacity="0.7" />
                                 </StackPanel>
                                 <Button Grid.Column="1" Content="×" ToolTip="删除"
@@ -61,9 +64,9 @@
                     </ListBox.ItemTemplate>
                 </ListBox>
 
-                <TextBlock Grid.Row="2" Margin="12,8,12,12" FontSize="11" Opacity="0.7"
+                <TextBlock Grid.Row="2" Margin="10,6,10,10" FontSize="11" Opacity="0.7"
                            TextWrapping="Wrap"
-                           Text="提示：双击版本加载。加载后为只读，请点上方【编辑】修改。" />
+                           Text="双击加载；查看状态下点【编辑】修改。" />
             </Grid>
         </Border>
 
@@ -77,45 +80,201 @@
             </Grid.RowDefinitions>
 
             <!-- Header / toolbar -->
-            <Border Grid.Row="0" Padding="14,10" Background="{DynamicResource MaterialDesignCardBackground}">
+            <Border Grid.Row="0" Padding="10,7" Background="{DynamicResource MaterialDesignCardBackground}">
                 <DockPanel>
-                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                    <WrapPanel DockPanel.Dock="Right" Orientation="Horizontal">
                         <Button Content="新建" Style="{StaticResource ToolbarButton}" Command="{Binding NewCommand}" />
                         <Button Content="{Binding EditButtonLabel}" Style="{StaticResource ToolbarButton}" Command="{Binding EditCommand}" />
-                        <Button Content="开始设置休息日" Style="{StaticResource ToolbarButton}" Command="{Binding AutoOptimizeCommand}" />
+                        <Button Content="设置休息日" Style="{StaticResource ToolbarButton}" Command="{Binding AutoOptimizeCommand}" ToolTip="开始设置休息日" />
+                        <Button Content="-" Style="{StaticResource ToolbarButton}" MinWidth="34" Width="34" Padding="0" Click="ZoomOut_Click" ToolTip="缩小排班表" />
+                        <TextBlock x:Name="ZoomText" Text="100%" Width="42" Height="28" TextAlignment="Center" VerticalAlignment="Center" FontSize="12" />
+                        <Button Content="+" Style="{StaticResource ToolbarButton}" MinWidth="34" Width="34" Padding="0" Click="ZoomIn_Click" ToolTip="放大排班表" />
+                        <Button Content="100%" Style="{StaticResource ToolbarButton}" MinWidth="52" Click="ZoomReset_Click" ToolTip="恢复原始大小" />
                         <Button Content="添加人员" Style="{StaticResource ToolbarButton}" Click="AddEmployee_Click" />
-                        <TextBox x:Name="AddCountBox" Text="1" Width="56" Height="32"
+                        <TextBox x:Name="AddCountBox" Text="1" Width="48" Height="28"
                                  VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
                                  MaxLength="4" ToolTip="一次添加的人数（0-2000）"
                                  PreviewTextInput="AddCountBox_PreviewTextInput"
-                                 Margin="0,0,8,0" />
-                        <Button Content="导出Excel" Style="{StaticResource ToolbarButton}" Command="{Binding ExportExcelCommand}" />
+                                 Margin="0,0,6,0" />
+                        <Button Content="导入人员" Style="{StaticResource ToolbarButton}" Command="{Binding ImportEmployeeTemplateCommand}" ToolTip="导入 CSV/TXT 人员名单" />
+                        <Button Content="人员模板" Style="{StaticResource ToolbarButton}" Command="{Binding ExportEmployeeTemplateCommand}" ToolTip="导出当前人员名单 CSV" />
+                        <Button Content="复制上月" Style="{StaticResource ToolbarButton}" Command="{Binding CopyPreviousMonthEmployeesCommand}" ToolTip="复制上月最新版本人员名单" />
+                        <Button Content="导出" Style="{StaticResource ToolbarButton}" Command="{Binding ExportExcelCommand}" ToolTip="导出 Excel" />
                         <Button Content="保存" Style="{StaticResource ToolbarButton}" Command="{Binding SaveCommand}"
                                 Background="#5e72e4" Foreground="White" BorderBrush="#5e72e4" />
-                    </StackPanel>
+                    </WrapPanel>
                     <StackPanel Orientation="Horizontal">
-                        <materialDesign:PackIcon Kind="CalendarMonth" Width="20" Height="20" Margin="0,0,8,0" VerticalAlignment="Center" />
-                        <TextBlock Text="{Binding HeaderTitle}" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        <materialDesign:PackIcon Kind="CalendarMonth" Width="17" Height="17" Margin="0,0,6,0" VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding HeaderTitle}" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                     </StackPanel>
                 </DockPanel>
             </Border>
 
             <!-- Status -->
-            <Border Grid.Row="1" Padding="14,6" Background="{DynamicResource MaterialDesignChipBackground}">
-                <TextBlock Text="{Binding StatusMessage}" FontSize="12" />
+            <Border Grid.Row="1" Padding="10,4" Background="{DynamicResource MaterialDesignChipBackground}">
+                <TextBlock Text="{Binding StatusMessage}" FontSize="11" TextTrimming="CharacterEllipsis" />
             </Border>
 
             <!-- Schedule grid -->
-            <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
-                <Grid x:Name="ScheduleHost" Margin="14,12" />
+            <ScrollViewer x:Name="ScheduleScroll" Grid.Row="2" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
+                          PreviewMouseWheel="ScheduleScroll_PreviewMouseWheel">
+                <Grid x:Name="ScheduleHost" Margin="10,8">
+                    <Grid.LayoutTransform>
+                        <ScaleTransform x:Name="ScheduleScale" ScaleX="1" ScaleY="1" />
+                    </Grid.LayoutTransform>
+                </Grid>
             </ScrollViewer>
 
             <!-- Legend -->
-            <Border Grid.Row="3" Padding="14,8" Background="{DynamicResource MaterialDesignCardBackground}"
+            <Border Grid.Row="3" Padding="10,6" Background="{DynamicResource MaterialDesignCardBackground}"
                     BorderBrush="{DynamicResource MaterialDesignDivider}" BorderThickness="0,1,0,0">
-                <TextBlock FontSize="11" Opacity="0.85" TextWrapping="Wrap"
-                           Text="班次：白(白班)  卡(卡班)  副(副小)  感(感染科)  大(大夜=1天上班)  小(小夜=1天上班)  休(休息)  公(公休)  午(下午休0.5)  ｜ 大1=小→大→休→休  大2=小→大→休  ｜ 单击单元格弹出选项；右键编辑姓名/删除人员。" />
+                <WrapPanel>
+                    <TextBlock Text="图例" FontSize="11" FontWeight="SemiBold" Margin="0,0,8,0" VerticalAlignment="Center" />
+                    <Border Background="#E3F2FD" CornerRadius="3" Padding="5,1" Margin="0,0,4,0"><TextBlock Text="白" FontSize="11" /></Border>
+                    <Border Background="#E8EAF6" CornerRadius="3" Padding="5,1" Margin="0,0,4,0"><TextBlock Text="卡" FontSize="11" /></Border>
+                    <Border Background="#E0F7FA" CornerRadius="3" Padding="5,1" Margin="0,0,4,0"><TextBlock Text="副" FontSize="11" /></Border>
+                    <Border Background="#FFEBEE" CornerRadius="3" Padding="5,1" Margin="0,0,4,0"><TextBlock Text="感" FontSize="11" /></Border>
+                    <Border Background="#37474F" CornerRadius="3" Padding="5,1" Margin="0,0,4,0"><TextBlock Text="大" FontSize="11" Foreground="White" /></Border>
+                    <Border Background="#78909C" CornerRadius="3" Padding="5,1" Margin="0,0,4,0"><TextBlock Text="小" FontSize="11" Foreground="White" /></Border>
+                    <Border Background="#C8E6C9" CornerRadius="3" Padding="5,1" Margin="0,0,4,0"><TextBlock Text="休" FontSize="11" /></Border>
+                    <Border Background="#A5D6A7" CornerRadius="3" Padding="5,1" Margin="0,0,4,0"><TextBlock Text="公" FontSize="11" /></Border>
+                    <Border Background="#FFF9C4" CornerRadius="3" Padding="5,1" Margin="0,0,8,0"><TextBlock Text="午" FontSize="11" /></Border>
+                    <TextBlock FontSize="11" Opacity="0.78" TextWrapping="Wrap" Text="大1=小→大→休→休；大2=小→大→休。单击格子选班次。" />
+                </WrapPanel>
             </Border>
         </Grid>
+
+        <Border Grid.Column="2"
+                Background="{DynamicResource MaterialDesignCardBackground}"
+                BorderBrush="{DynamicResource MaterialDesignDivider}"
+                BorderThickness="1,0,0,0"
+                Padding="10,8">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <StackPanel Grid.Row="0">
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                        <materialDesign:PackIcon Kind="AlertCircleOutline" Width="15" Height="15"
+                                                 Margin="0,0,6,0"
+                                                 VerticalAlignment="Center"
+                                                 Foreground="{DynamicResource BrushAccentAmber}" />
+                        <TextBlock Text="冲突检查" FontWeight="SemiBold" FontSize="12" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <Border CornerRadius="4" Background="{DynamicResource MaterialDesignChipBackground}" Padding="7,4">
+                        <TextBlock Text="{Binding ScheduleConflictSummary}" FontSize="11" TextTrimming="CharacterEllipsis" />
+                    </Border>
+                </StackPanel>
+
+                <StackPanel Grid.Row="1" Margin="0,10,0,10">
+                    <TextBlock Text="整月复制" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,6" />
+                    <ComboBox Height="30"
+                              Margin="0,0,0,6"
+                              ItemsSource="{Binding Current.Employees}"
+                              SelectedItem="{Binding CopySourceEmployee}"
+                              DisplayMemberPath="Name"
+                              Style="{StaticResource MaterialDesignFilledComboBox}"
+                              materialDesign:HintAssist.Hint="来源人员" />
+                    <ComboBox Height="30"
+                              Margin="0,0,0,6"
+                              ItemsSource="{Binding Current.Employees}"
+                              SelectedItem="{Binding CopyTargetEmployee}"
+                              DisplayMemberPath="Name"
+                              Style="{StaticResource MaterialDesignFilledComboBox}"
+                              materialDesign:HintAssist.Hint="目标人员" />
+                    <Button Content="复制整月班次"
+                            Height="30"
+                            Command="{Binding CopyEmployeeMonthCommand}"
+                            Style="{StaticResource ToolbarButton}"
+                            HorizontalAlignment="Stretch" />
+                </StackPanel>
+
+                <StackPanel Grid.Row="2" Margin="0,0,0,10">
+                    <TextBlock Text="周休均衡" FontWeight="SemiBold" FontSize="12" Margin="0,0,0,6" />
+                    <ItemsControl ItemsSource="{Binding WeeklyRestStats}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Margin="0,0,0,5" Padding="7,5" CornerRadius="4"
+                                        BorderBrush="{DynamicResource MaterialDesignDivider}" BorderThickness="1">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding WeekText}" FontSize="11" FontWeight="SemiBold" />
+                                            <TextBlock Text="{Binding DateRangeText}" FontSize="10.5" Opacity="0.7" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" HorizontalAlignment="Right">
+                                            <TextBlock Text="{Binding TotalRestText}" FontSize="11" FontWeight="SemiBold" HorizontalAlignment="Right" />
+                                            <TextBlock Text="{Binding BalanceText}" FontSize="10.5" Opacity="0.72" HorizontalAlignment="Right" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+
+                <ListBox Grid.Row="3"
+                         ItemsSource="{Binding ScheduleConflicts}"
+                         BorderThickness="0"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox.Style>
+                        <Style TargetType="ListBox">
+                            <Setter Property="Visibility" Value="Visible" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding HasScheduleConflicts}" Value="False">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ListBox.Style>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Border Margin="0,0,0,6"
+                                    Padding="7,6"
+                                    CornerRadius="4"
+                                    BorderBrush="{DynamicResource MaterialDesignDivider}"
+                                    BorderThickness="1">
+                                <StackPanel>
+                                    <DockPanel Margin="0,0,0,2">
+                                        <TextBlock DockPanel.Dock="Right"
+                                                   Text="{Binding Level}"
+                                                   FontSize="10"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource BrushAccentRed}" />
+                                        <TextBlock Text="{Binding Category}"
+                                                   FontSize="10"
+                                                   Opacity="0.68"
+                                                   TextTrimming="CharacterEllipsis" />
+                                    </DockPanel>
+                                    <TextBlock Text="{Binding Title}"
+                                               FontWeight="SemiBold"
+                                               FontSize="11"
+                                               TextWrapping="Wrap" />
+                                     <TextBlock Text="{Binding Detail}"
+                                               FontSize="10.5"
+                                               Opacity="0.75"
+                                               TextWrapping="Wrap"
+                                               Margin="0,2,0,0" />
+                                    <Button Content="定位"
+                                            Height="24"
+                                            Margin="0,5,0,0"
+                                            HorizontalAlignment="Left"
+                                            Style="{StaticResource ToolbarButton}"
+                                            Command="{Binding DataContext.LocateScheduleConflictCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            CommandParameter="{Binding}" />
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Grid>
+        </Border>
     </Grid>
 </UserControl>

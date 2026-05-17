@@ -16,7 +16,7 @@ namespace MyTools.Services
     /// </summary>
     public static class OcrService
     {
-        public static bool IsSupported => OsVersionService.IsWindows10OrGreater;
+        public static bool IsSupported => OsVersionService.IsWindows10Version1903OrGreater;
 
         public static async Task<string> RecognizeAsync(BitmapSource bitmap)
         {

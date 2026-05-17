@@ -7,6 +7,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Security;
 using System.Text;
+using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Xml;
@@ -165,7 +166,8 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME;";
             string databaseName,
             TableItem table,
             string filePath,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            IProgress<SqlExportProgress> progress = null)
         {
             ValidateConnectionOptions(options);
             ValidateDatabaseName(databaseName);
@@ -176,11 +178,10 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME;";
                 throw new ArgumentException("导出文件路径不能为空。", nameof(filePath));
             }
 
+            var stopwatch = Stopwatch.StartNew();
+            ReportProgress(progress, "正在统计行数", 0, null, stopwatch, filePath);
             var rowCount = await GetTableRowCountAsync(options, databaseName, table, cancellationToken).ConfigureAwait(false);
-            if (rowCount > ExcelWorksheetRowLimit)
-            {
-                throw new InvalidOperationException("该表数据量超过 Excel 单工作表上限，当前版本暂不支持自动分片导出，请改为筛选后导出或后续扩展 CSV/多 Sheet 功能。");
-            }
+            ReportProgress(progress, "正在读取并写入", 0, rowCount, stopwatch, filePath);
 
             Directory.CreateDirectory(Path.GetDirectoryName(filePath) ?? AppDomain.CurrentDomain.BaseDirectory);
 
@@ -200,21 +201,36 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME;";
 
                 using (var reader = await command.ExecuteReaderAsync(CommandBehavior.SequentialAccess | CommandBehavior.CloseConnection, cancellationToken).ConfigureAwait(false))
                 {
-                    await XlsxStreamWriter.WriteAsync(filePath, table.DisplayName, reader, cancellationToken).ConfigureAwait(false);
+                    await XlsxStreamWriter.WriteAsync(
+                            filePath,
+                            table.DisplayName,
+                            reader,
+                            cancellationToken,
+                            rowCount,
+                            progress,
+                            stopwatch)
+                        .ConfigureAwait(false);
                 }
             }
 
+            stopwatch.Stop();
+            var fileSizeBytes = GetFileSize(filePath);
+            ReportProgress(progress, "导出完成", rowCount, rowCount, stopwatch, filePath);
             AppLogService.Information(
-                "SQL export completed for {DatabaseName}.{SchemaName}.{TableName} with {RowCount} rows",
+                "SQL export completed for {DatabaseName}.{SchemaName}.{TableName} with {RowCount} rows in {ElapsedMs} ms, file size {FileSizeBytes} bytes",
                 databaseName,
                 table.SchemaName,
                 table.TableName,
-                rowCount);
+                rowCount,
+                stopwatch.ElapsedMilliseconds,
+                fileSizeBytes);
 
             return new ExportResult
             {
                 FilePath = filePath,
-                RowCount = rowCount
+                RowCount = rowCount,
+                FileSizeBytes = fileSizeBytes,
+                Duration = stopwatch.Elapsed
             };
         }
 
@@ -266,25 +282,166 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME;";
             DataTable dataTable,
             string sheetName,
             string filePath,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            IProgress<SqlExportProgress> progress = null)
         {
             if (dataTable == null) throw new ArgumentNullException(nameof(dataTable));
             if (string.IsNullOrWhiteSpace(filePath))
                 throw new ArgumentException("导出文件路径不能为空。", nameof(filePath));
 
+            var stopwatch = Stopwatch.StartNew();
             Directory.CreateDirectory(
                 Path.GetDirectoryName(filePath) ?? AppDomain.CurrentDomain.BaseDirectory);
+            ReportProgress(progress, "正在写入 Excel", 0, dataTable.Rows.Count, stopwatch, filePath);
 
             await XlsxStreamWriter
-                .WriteFromDataTableAsync(filePath, sheetName, dataTable, cancellationToken)
+                .WriteFromDataTableAsync(filePath, sheetName, dataTable, cancellationToken, progress, stopwatch)
                 .ConfigureAwait(false);
 
+            stopwatch.Stop();
+            var fileSizeBytes = GetFileSize(filePath);
+            ReportProgress(progress, "导出完成", dataTable.Rows.Count, dataTable.Rows.Count, stopwatch, filePath);
             AppLogService.Information(
-                "DataTable exported to {FilePath} with {RowCount} rows",
+                "DataTable exported to {FilePath} with {RowCount} rows in {ElapsedMs} ms, file size {FileSizeBytes} bytes",
                 filePath,
-                dataTable.Rows.Count);
+                dataTable.Rows.Count,
+                stopwatch.ElapsedMilliseconds,
+                fileSizeBytes);
 
-            return new ExportResult { FilePath = filePath, RowCount = dataTable.Rows.Count };
+            return new ExportResult
+            {
+                FilePath = filePath,
+                RowCount = dataTable.Rows.Count,
+                FileSizeBytes = fileSizeBytes,
+                Duration = stopwatch.Elapsed
+            };
+        }
+
+        public static async Task<ExportResult> ExportDataTableToCsvAsync(
+            DataTable dataTable,
+            string filePath,
+            CancellationToken cancellationToken,
+            IProgress<SqlExportProgress> progress = null)
+        {
+            if (dataTable == null) throw new ArgumentNullException(nameof(dataTable));
+            if (string.IsNullOrWhiteSpace(filePath))
+                throw new ArgumentException("导出文件路径不能为空。", nameof(filePath));
+
+            var stopwatch = Stopwatch.StartNew();
+            Directory.CreateDirectory(
+                Path.GetDirectoryName(filePath) ?? AppDomain.CurrentDomain.BaseDirectory);
+            ReportProgress(progress, "正在写入 CSV", 0, dataTable.Rows.Count, stopwatch, filePath);
+
+            using (var stream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true))
+            using (var writer = new StreamWriter(stream, new UTF8Encoding(false)))
+            {
+                for (var columnIndex = 0; columnIndex < dataTable.Columns.Count; columnIndex++)
+                {
+                    if (columnIndex > 0) await writer.WriteAsync(",").ConfigureAwait(false);
+                    await writer.WriteAsync(EscapeCsvValue(dataTable.Columns[columnIndex].ColumnName)).ConfigureAwait(false);
+                }
+
+                await writer.WriteLineAsync().ConfigureAwait(false);
+
+                long processedRows = 0;
+                foreach (DataRow row in dataTable.Rows)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    processedRows++;
+                    for (var columnIndex = 0; columnIndex < dataTable.Columns.Count; columnIndex++)
+                    {
+                        if (columnIndex > 0) await writer.WriteAsync(",").ConfigureAwait(false);
+                        await writer.WriteAsync(EscapeCsvValue(FormatCsvValue(row[columnIndex]))).ConfigureAwait(false);
+                    }
+
+                    await writer.WriteLineAsync().ConfigureAwait(false);
+                    if (processedRows == 1 || processedRows % 1000 == 0)
+                    {
+                        ReportProgress(progress, "正在写入 CSV", processedRows, dataTable.Rows.Count, stopwatch, filePath);
+                    }
+                }
+            }
+
+            stopwatch.Stop();
+            var fileSizeBytes = GetFileSize(filePath);
+            ReportProgress(progress, "CSV 导出完成", dataTable.Rows.Count, dataTable.Rows.Count, stopwatch, filePath);
+            AppLogService.Information(
+                "DataTable exported to CSV {FilePath} with {RowCount} rows in {ElapsedMs} ms, file size {FileSizeBytes} bytes",
+                filePath,
+                dataTable.Rows.Count,
+                stopwatch.ElapsedMilliseconds,
+                fileSizeBytes);
+
+            return new ExportResult
+            {
+                FilePath = filePath,
+                RowCount = dataTable.Rows.Count,
+                FileSizeBytes = fileSizeBytes,
+                Duration = stopwatch.Elapsed
+            };
+        }
+
+        public static void ReportProgress(
+            IProgress<SqlExportProgress> progress,
+            string stage,
+            long processedRows,
+            long? totalRows,
+            Stopwatch stopwatch,
+            string filePath)
+        {
+            if (progress == null)
+            {
+                return;
+            }
+
+            progress.Report(new SqlExportProgress
+            {
+                Stage = stage,
+                ProcessedRows = processedRows,
+                TotalRows = totalRows,
+                Elapsed = stopwatch?.Elapsed ?? TimeSpan.Zero,
+                FileSizeBytes = GetFileSize(filePath)
+            });
+        }
+
+        private static long GetFileSize(string filePath)
+        {
+            try
+            {
+                return string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath)
+                    ? 0
+                    : new FileInfo(filePath).Length;
+            }
+            catch
+            {
+                return 0;
+            }
+        }
+
+        private static string FormatCsvValue(object value)
+        {
+            if (value == null || value == DBNull.Value)
+            {
+                return string.Empty;
+            }
+
+            if (value is IFormattable formattable)
+            {
+                return formattable.ToString(null, CultureInfo.CurrentCulture);
+            }
+
+            return Convert.ToString(value, CultureInfo.CurrentCulture) ?? string.Empty;
+        }
+
+        private static string EscapeCsvValue(string value)
+        {
+            value = value ?? string.Empty;
+            if (value.IndexOfAny(new[] { ',', '"', '\r', '\n' }) < 0)
+            {
+                return value;
+            }
+
+            return "\"" + value.Replace("\"", "\"\"") + "\"";
         }
 
         private static void ValidateConnectionOptions(SqlServerConnectionOptions options)
@@ -398,31 +555,31 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME;";
         {
             private const int DateStyleIndex = 1;
             private const int DateTimeStyleIndex = 2;
+            private const int MaxDataRowsPerWorksheet = ExcelWorksheetRowLimit - 1;
 
-            public static async Task WriteAsync(string filePath, string sheetName, SqlDataReader reader, CancellationToken cancellationToken)
+            public static async Task WriteAsync(
+                string filePath,
+                string sheetName,
+                SqlDataReader reader,
+                CancellationToken cancellationToken,
+                long? totalRows = null,
+                IProgress<SqlExportProgress> progress = null,
+                Stopwatch stopwatch = null)
             {
                 using (var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.ReadWrite, FileShare.None))
                 using (var archive = new ZipArchive(fileStream, ZipArchiveMode.Create, leaveOpen: false))
                 {
-                    WriteEntry(archive, "[Content_Types].xml", BuildContentTypesXml());
+                    var sheetCount = GetWorksheetCount(totalRows);
+                    WriteEntry(archive, "[Content_Types].xml", BuildContentTypesXml(sheetCount));
                     WriteEntry(archive, "_rels/.rels", BuildRootRelsXml());
                     WriteEntry(archive, "docProps/app.xml", BuildAppXml());
                     WriteEntry(archive, "docProps/core.xml", BuildCoreXml());
-                    WriteEntry(archive, "xl/workbook.xml", BuildWorkbookXml(sheetName));
-                    WriteEntry(archive, "xl/_rels/workbook.xml.rels", BuildWorkbookRelsXml());
+                    WriteEntry(archive, "xl/workbook.xml", BuildWorkbookXml(sheetName, sheetCount));
+                    WriteEntry(archive, "xl/_rels/workbook.xml.rels", BuildWorkbookRelsXml(sheetCount));
                     WriteEntry(archive, "xl/styles.xml", BuildStylesXml());
 
-                    var worksheetEntry = archive.CreateEntry("xl/worksheets/sheet1.xml", CompressionLevel.Fastest);
-                    using (var stream = worksheetEntry.Open())
-                    using (var writer = XmlWriter.Create(stream, new XmlWriterSettings
-                    {
-                        Async = true,
-                        Encoding = new UTF8Encoding(false),
-                        CloseOutput = false
-                    }))
-                    {
-                        await WriteWorksheetAsync(writer, reader, cancellationToken).ConfigureAwait(false);
-                    }
+                    await WriteWorksheetsAsync(archive, reader, cancellationToken, totalRows, progress, stopwatch, filePath, sheetCount)
+                        .ConfigureAwait(false);
                 }
             }
 
@@ -436,7 +593,66 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME;";
                 }
             }
 
-            private static async Task WriteWorksheetAsync(XmlWriter writer, SqlDataReader reader, CancellationToken cancellationToken)
+            private static int GetWorksheetCount(long? totalRows)
+            {
+                if (!totalRows.HasValue || totalRows.Value <= 0)
+                {
+                    return 1;
+                }
+
+                return (int)Math.Max(1, (totalRows.Value + MaxDataRowsPerWorksheet - 1) / MaxDataRowsPerWorksheet);
+            }
+
+            private static async Task WriteWorksheetsAsync(
+                ZipArchive archive,
+                SqlDataReader reader,
+                CancellationToken cancellationToken,
+                long? totalRows,
+                IProgress<SqlExportProgress> progress,
+                Stopwatch stopwatch,
+                string filePath,
+                int sheetCount)
+            {
+                long processedRows = 0;
+                for (var sheetIndex = 1; sheetIndex <= sheetCount; sheetIndex++)
+                {
+                    var worksheetEntry = archive.CreateEntry($"xl/worksheets/sheet{sheetIndex}.xml", CompressionLevel.Fastest);
+                    using (var stream = worksheetEntry.Open())
+                    using (var writer = XmlWriter.Create(stream, new XmlWriterSettings
+                    {
+                        Async = true,
+                        Encoding = new UTF8Encoding(false),
+                        CloseOutput = false
+                    }))
+                    {
+                        var writtenRows = await WriteWorksheetPartAsync(
+                                writer,
+                                reader,
+                                cancellationToken,
+                                totalRows,
+                                progress,
+                                stopwatch,
+                                filePath,
+                                sheetIndex,
+                                processedRows)
+                            .ConfigureAwait(false);
+                        processedRows += writtenRows;
+                        if (writtenRows < MaxDataRowsPerWorksheet)
+                        {
+                            break;
+                        }
+                    }
+                }
+            }
+
+            private static async Task WriteWorksheetAsync(
+                XmlWriter writer,
+                SqlDataReader reader,
+                CancellationToken cancellationToken,
+                long? totalRows,
+                IProgress<SqlExportProgress> progress,
+                Stopwatch stopwatch,
+                string filePath)
             {
                 writer.WriteStartDocument(true);
                 writer.WriteStartElement("worksheet", "http://schemas.openxmlformats.org/spreadsheetml/2006/main");
@@ -453,10 +669,12 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME;";
                 writer.WriteEndElement();
 
                 var rowIndex = 1;
+                long processedRows = 0;
                 while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     rowIndex++;
+                    processedRows++;
 
                     writer.WriteStartElement("row");
                     writer.WriteAttributeString("r", rowIndex.ToString(CultureInfo.InvariantCulture));
@@ -466,12 +684,71 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME;";
                     }
 
                     writer.WriteEndElement();
+                    if (processedRows == 1 || processedRows % 1000 == 0)
+                    {
+                        SqlExportService.ReportProgress(progress, "正在读取并写入", processedRows, totalRows, stopwatch, filePath);
+                    }
                 }
 
                 writer.WriteEndElement();
                 writer.WriteEndElement();
                 writer.WriteEndDocument();
                 await writer.FlushAsync().ConfigureAwait(false);
+            }
+
+            private static async Task<long> WriteWorksheetPartAsync(
+                XmlWriter writer,
+                SqlDataReader reader,
+                CancellationToken cancellationToken,
+                long? totalRows,
+                IProgress<SqlExportProgress> progress,
+                Stopwatch stopwatch,
+                string filePath,
+                int sheetIndex,
+                long baseProcessedRows)
+            {
+                writer.WriteStartDocument(true);
+                writer.WriteStartElement("worksheet", "http://schemas.openxmlformats.org/spreadsheetml/2006/main");
+                writer.WriteAttributeString("xmlns", "r", null, "http://schemas.openxmlformats.org/officeDocument/2006/relationships");
+                writer.WriteStartElement("sheetData");
+
+                writer.WriteStartElement("row");
+                writer.WriteAttributeString("r", "1");
+                for (var columnIndex = 0; columnIndex < reader.FieldCount; columnIndex++)
+                {
+                    WriteInlineStringCell(writer, GetCellReference(columnIndex, 1), reader.GetName(columnIndex));
+                }
+
+                writer.WriteEndElement();
+
+                var rowIndex = 1;
+                long processedRows = 0;
+                while (processedRows < MaxDataRowsPerWorksheet && await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    rowIndex++;
+                    processedRows++;
+
+                    writer.WriteStartElement("row");
+                    writer.WriteAttributeString("r", rowIndex.ToString(CultureInfo.InvariantCulture));
+                    for (var columnIndex = 0; columnIndex < reader.FieldCount; columnIndex++)
+                    {
+                        WriteCell(writer, reader, columnIndex, rowIndex);
+                    }
+
+                    writer.WriteEndElement();
+                    if (processedRows == 1 || processedRows % 1000 == 0)
+                    {
+                        var stage = sheetIndex > 1 ? $"正在写入 Sheet {sheetIndex}" : "正在读取并写入";
+                        SqlExportService.ReportProgress(progress, stage, baseProcessedRows + processedRows, totalRows, stopwatch, filePath);
+                    }
+                }
+
+                writer.WriteEndElement();
+                writer.WriteEndElement();
+                writer.WriteEndDocument();
+                await writer.FlushAsync().ConfigureAwait(false);
+                return processedRows;
             }
 
             private static void WriteCell(XmlWriter writer, IDataRecord record, int columnIndex, int rowIndex)
@@ -542,7 +819,9 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME;";
                 string filePath,
                 string sheetName,
                 DataTable dataTable,
-                CancellationToken cancellationToken)
+                CancellationToken cancellationToken,
+                IProgress<SqlExportProgress> progress = null,
+                Stopwatch stopwatch = null)
             {
                 using (var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.ReadWrite, FileShare.None))
                 using (var archive = new ZipArchive(fileStream, ZipArchiveMode.Create, leaveOpen: false))
@@ -564,7 +843,7 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME;";
                         CloseOutput = false
                     }))
                     {
-                        await WriteWorksheetFromDataTableAsync(writer, dataTable, cancellationToken)
+                        await WriteWorksheetFromDataTableAsync(writer, dataTable, cancellationToken, progress, stopwatch, filePath)
                             .ConfigureAwait(false);
                     }
                 }
@@ -573,7 +852,10 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME;";
             private static async Task WriteWorksheetFromDataTableAsync(
                 XmlWriter writer,
                 DataTable dataTable,
-                CancellationToken cancellationToken)
+                CancellationToken cancellationToken,
+                IProgress<SqlExportProgress> progress,
+                Stopwatch stopwatch,
+                string filePath)
             {
                 writer.WriteStartDocument(true);
                 writer.WriteStartElement("worksheet", "http://schemas.openxmlformats.org/spreadsheetml/2006/main");
@@ -589,10 +871,12 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME;";
                 writer.WriteEndElement();
 
                 var rowIndex = 1;
+                long processedRows = 0;
                 foreach (DataRow row in dataTable.Rows)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     rowIndex++;
+                    processedRows++;
                     writer.WriteStartElement("row");
                     writer.WriteAttributeString("r", rowIndex.ToString(CultureInfo.InvariantCulture));
                     for (var colIdx = 0; colIdx < dataTable.Columns.Count; colIdx++)
@@ -603,6 +887,10 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME;";
                             row.IsNull(colIdx) ? null : row[colIdx]);
                     }
                     writer.WriteEndElement();
+                    if (processedRows == 1 || processedRows % 1000 == 0)
+                    {
+                        SqlExportService.ReportProgress(progress, "正在写入 Excel", processedRows, dataTable.Rows.Count, stopwatch, filePath);
+                    }
                 }
 
                 writer.WriteEndElement();
@@ -681,12 +969,25 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME;";
 
             private static string BuildContentTypesXml()
             {
-                return @"<?xml version=""1.0"" encoding=""utf-8""?>
+                return BuildContentTypesXml(1);
+            }
+
+            private static string BuildContentTypesXml(int sheetCount)
+            {
+                var worksheetOverrides = new StringBuilder();
+                for (var i = 1; i <= Math.Max(1, sheetCount); i++)
+                {
+                    worksheetOverrides.Append("  <Override PartName=\"/xl/worksheets/sheet")
+                        .Append(i.ToString(CultureInfo.InvariantCulture))
+                        .AppendLine(".xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\" />");
+                }
+
+                return $@"<?xml version=""1.0"" encoding=""utf-8""?>
 <Types xmlns=""http://schemas.openxmlformats.org/package/2006/content-types"">
   <Default Extension=""rels"" ContentType=""application/vnd.openxmlformats-package.relationships+xml"" />
   <Default Extension=""xml"" ContentType=""application/xml"" />
   <Override PartName=""/xl/workbook.xml"" ContentType=""application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"" />
-  <Override PartName=""/xl/worksheets/sheet1.xml"" ContentType=""application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"" />
+{worksheetOverrides.ToString().TrimEnd()}
   <Override PartName=""/xl/styles.xml"" ContentType=""application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"" />
   <Override PartName=""/docProps/core.xml"" ContentType=""application/vnd.openxmlformats-package.core-properties+xml"" />
   <Override PartName=""/docProps/app.xml"" ContentType=""application/vnd.openxmlformats-officedocument.extended-properties+xml"" />
@@ -730,21 +1031,56 @@ ORDER BY TABLE_SCHEMA, TABLE_NAME;";
 
             private static string BuildWorkbookXml(string sheetName)
             {
+                return BuildWorkbookXml(sheetName, 1);
+            }
+
+            private static string BuildWorkbookXml(string sheetName, int sheetCount)
+            {
+                var sheets = new StringBuilder();
+                var baseName = NormalizeSheetName(sheetName);
+                for (var i = 1; i <= Math.Max(1, sheetCount); i++)
+                {
+                    var name = Math.Max(1, sheetCount) == 1 ? baseName : NormalizeSheetName(baseName + " " + i.ToString(CultureInfo.InvariantCulture));
+                    sheets.Append("    <sheet name=\"")
+                        .Append(SecurityElement.Escape(name))
+                        .Append("\" sheetId=\"")
+                        .Append(i.ToString(CultureInfo.InvariantCulture))
+                        .Append("\" r:id=\"rId")
+                        .Append(i.ToString(CultureInfo.InvariantCulture))
+                        .AppendLine("\" />");
+                }
+
                 return $@"<?xml version=""1.0"" encoding=""utf-8""?>
 <workbook xmlns=""http://schemas.openxmlformats.org/spreadsheetml/2006/main""
           xmlns:r=""http://schemas.openxmlformats.org/officeDocument/2006/relationships"">
   <sheets>
-    <sheet name=""{SecurityElement.Escape(NormalizeSheetName(sheetName))}"" sheetId=""1"" r:id=""rId1"" />
+{sheets.ToString().TrimEnd()}
   </sheets>
 </workbook>";
             }
 
             private static string BuildWorkbookRelsXml()
             {
-                return @"<?xml version=""1.0"" encoding=""utf-8""?>
+                return BuildWorkbookRelsXml(1);
+            }
+
+            private static string BuildWorkbookRelsXml(int sheetCount)
+            {
+                var relationships = new StringBuilder();
+                for (var i = 1; i <= Math.Max(1, sheetCount); i++)
+                {
+                    relationships.Append("  <Relationship Id=\"rId")
+                        .Append(i.ToString(CultureInfo.InvariantCulture))
+                        .Append("\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet")
+                        .Append(i.ToString(CultureInfo.InvariantCulture))
+                        .AppendLine(".xml\" />");
+                }
+
+                var styleRelId = Math.Max(1, sheetCount) + 1;
+                return $@"<?xml version=""1.0"" encoding=""utf-8""?>
 <Relationships xmlns=""http://schemas.openxmlformats.org/package/2006/relationships"">
-  <Relationship Id=""rId1"" Type=""http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet"" Target=""worksheets/sheet1.xml"" />
-  <Relationship Id=""rId2"" Type=""http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles"" Target=""styles.xml"" />
+{relationships.ToString().TrimEnd()}
+  <Relationship Id=""rId{styleRelId.ToString(CultureInfo.InvariantCulture)}"" Type=""http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles"" Target=""styles.xml"" />
 </Relationships>";
             }
 

@@ -1,3 +1,5 @@
+using System;
+
 namespace MyTools.Services
 {
     public class SqlServerConnectionOptions
@@ -39,5 +41,16 @@ namespace MyTools.Services
     {
         public long RowCount { get; set; }
         public string FilePath { get; set; }
+        public long FileSizeBytes { get; set; }
+        public TimeSpan Duration { get; set; }
+    }
+
+    public class SqlExportProgress
+    {
+        public string Stage { get; set; }
+        public long ProcessedRows { get; set; }
+        public long? TotalRows { get; set; }
+        public TimeSpan Elapsed { get; set; }
+        public long FileSizeBytes { get; set; }
     }
 }

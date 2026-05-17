@@ -89,7 +89,8 @@ ORDER BY 1,2;";
             string databaseName,
             TableItem table,
             string filePath,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            IProgress<SqlExportProgress> progress = null)
         {
             ValidateConnectionOptions(options);
             ValidateDatabaseName(databaseName);
@@ -99,11 +100,14 @@ ORDER BY 1,2;";
                 throw new ArgumentException("导出文件路径不能为空。", nameof(filePath));
             }
 
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            SqlExportService.ReportProgress(progress, "正在统计行数", 0, null, stopwatch, filePath);
             var rowCount = await GetRowCountAsync(options, databaseName, table, cancellationToken).ConfigureAwait(false);
             if (rowCount > SqlExportService.ExcelWorksheetRowLimit)
             {
                 throw new InvalidOperationException("该表数据量超过 Excel 单工作表上限，当前版本暂不支持自动分片导出，请改为筛选后导出或后续扩展 CSV/多 Sheet 功能。");
             }
+            SqlExportService.ReportProgress(progress, "正在读取数据", 0, rowCount, stopwatch, filePath);
 
             Directory.CreateDirectory(Path.GetDirectoryName(filePath) ?? AppDomain.CurrentDomain.BaseDirectory);
             var selectSql = $"SELECT * FROM {GetQualifiedTableName(table)};";
@@ -118,6 +122,7 @@ ORDER BY 1,2;";
                     dataTable.Load(reader);
                 }
             }
+            SqlExportService.ReportProgress(progress, "正在写入 Excel", dataTable.Rows.Count, rowCount, stopwatch, filePath);
 
             AppLogService.Information(
                 "PostgreSQL export completed for {DatabaseName}.{SchemaName}.{TableName} with {RowCount} rows",
@@ -125,7 +130,12 @@ ORDER BY 1,2;";
                 table.SchemaName,
                 table.TableName,
                 rowCount);
-            return await SqlExportService.ExportDataTableAsync(dataTable, table.DisplayName, filePath, cancellationToken).ConfigureAwait(false);
+            var exportResult = await SqlExportService.ExportDataTableAsync(dataTable, table.DisplayName, filePath, cancellationToken, progress).ConfigureAwait(false);
+            stopwatch.Stop();
+            exportResult.Duration = stopwatch.Elapsed;
+            exportResult.RowCount = rowCount;
+            SqlExportService.ReportProgress(progress, "导出完成", exportResult.RowCount, rowCount, stopwatch, filePath);
+            return exportResult;
         }
 
         public async Task<DataTable> ExecuteQueryAsync(

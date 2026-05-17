@@ -2,8 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
@@ -24,6 +26,7 @@ namespace MyTools.ViewModels
 
         /// <summary>当统计需要刷新时触发（不重建结构）。</summary>
         public event EventHandler ScheduleDataChanged;
+        public event EventHandler<ScheduleCellFocusRequestedEventArgs> ScheduleCellFocusRequested;
 
         public ScheduleViewModel()
         {
@@ -35,6 +38,11 @@ namespace MyTools.ViewModels
             AutoOptimizeCommand = new RelayCommand(AutoOptimize, () => Current != null && IsEditing);
             LoadVersionCommand = new AsyncRelayParameterCommand(LoadVersionAsync);
             ExportExcelCommand = new AsyncRelayCommand(ExportExcelAsync, () => Current != null);
+            ImportEmployeeTemplateCommand = new AsyncRelayCommand(ImportEmployeeTemplateAsync, () => Current != null && IsEditing);
+            ExportEmployeeTemplateCommand = new AsyncRelayCommand(ExportEmployeeTemplateAsync, () => Current != null && Current.Employees.Count > 0);
+            CopyPreviousMonthEmployeesCommand = new AsyncRelayCommand(CopyPreviousMonthEmployeesAsync, () => Current != null && IsEditing);
+            CopyEmployeeMonthCommand = new RelayCommand(CopyEmployeeMonth, () => Current != null && IsEditing && CopySourceEmployee != null && CopyTargetEmployee != null && !ReferenceEquals(CopySourceEmployee, CopyTargetEmployee));
+            LocateScheduleConflictCommand = new RelayParameterCommand(LocateScheduleConflict, parameter => parameter is ScheduleConflictItem);
 
             LoadVersions();
         }
@@ -58,13 +66,18 @@ namespace MyTools.ViewModels
                 _current = value;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(HasCurrent));
+                OnPropertyChanged(nameof(HasEmployees));
                 OnPropertyChanged(nameof(HeaderTitle));
+                CopySourceEmployee = null;
+                CopyTargetEmployee = null;
+                RefreshScheduleConflicts();
                 ScheduleStructureChanged?.Invoke(this, EventArgs.Empty);
                 CommandManager.InvalidateRequerySuggested();
             }
         }
 
         public bool HasCurrent => _current != null;
+        public bool HasEmployees => _current != null && _current.Employees.Count > 0;
 
         public string HeaderTitle => _current == null
             ? "排班"
@@ -77,10 +90,13 @@ namespace MyTools.ViewModels
             get => _isEditing;
             private set
             {
+                if (_isEditing == value) return;
                 _isEditing = value;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(HeaderTitle));
                 OnPropertyChanged(nameof(EditButtonLabel));
+                // The schedule grid is generated in code-behind; rebuild it so read-only cells become editable.
+                ScheduleStructureChanged?.Invoke(this, EventArgs.Empty);
                 CommandManager.InvalidateRequerySuggested();
             }
         }
@@ -94,6 +110,41 @@ namespace MyTools.ViewModels
             set { _statusMessage = value; OnPropertyChanged(); }
         }
 
+        public ObservableCollection<ScheduleConflictItem> ScheduleConflicts { get; } = new ObservableCollection<ScheduleConflictItem>();
+        public ObservableCollection<ScheduleWeekRestItem> WeeklyRestStats { get; } = new ObservableCollection<ScheduleWeekRestItem>();
+        public bool HasScheduleConflicts => ScheduleConflicts.Count > 0;
+        public bool HasWeeklyRestStats => WeeklyRestStats.Count > 0;
+        public string ScheduleConflictSummary => Current == null
+            ? "未加载排班"
+            : HasScheduleConflicts ? $"{ScheduleConflicts.Count} 项需处理" : "未发现明显冲突";
+
+        public int SelectedConflictEmployeeIndex { get; private set; } = -1;
+        public int SelectedConflictDayIndex { get; private set; } = -1;
+
+        private EmployeeRow _copySourceEmployee;
+        public EmployeeRow CopySourceEmployee
+        {
+            get => _copySourceEmployee;
+            set
+            {
+                _copySourceEmployee = value;
+                OnPropertyChanged();
+                CommandManager.InvalidateRequerySuggested();
+            }
+        }
+
+        private EmployeeRow _copyTargetEmployee;
+        public EmployeeRow CopyTargetEmployee
+        {
+            get => _copyTargetEmployee;
+            set
+            {
+                _copyTargetEmployee = value;
+                OnPropertyChanged();
+                CommandManager.InvalidateRequerySuggested();
+            }
+        }
+
         // ============================ Commands ============================
         public ICommand NewCommand { get; }
         public ICommand EditCommand { get; }
@@ -103,6 +154,11 @@ namespace MyTools.ViewModels
         public ICommand AutoOptimizeCommand { get; }
         public ICommand LoadVersionCommand { get; }
         public ICommand ExportExcelCommand { get; }
+        public ICommand ImportEmployeeTemplateCommand { get; }
+        public ICommand ExportEmployeeTemplateCommand { get; }
+        public ICommand CopyPreviousMonthEmployeesCommand { get; }
+        public ICommand CopyEmployeeMonthCommand { get; }
+        public ICommand LocateScheduleConflictCommand { get; }
 
         private async System.Threading.Tasks.Task ExportExcelAsync()
         {
@@ -112,7 +168,10 @@ namespace MyTools.ViewModels
                 var dlg = new Microsoft.Win32.SaveFileDialog
                 {
                     Filter = "Excel 文件 (*.xlsx)|*.xlsx",
-                    FileName = $"排班_{Current.Year}-{Current.Month:00}_{Current.VersionName}_{DateTime.Now:yyyyMMddHHmmss}.xlsx",
+                    DefaultExt = ".xlsx",
+                    AddExtension = true,
+                    OverwritePrompt = true,
+                    FileName = BuildExportFileName(Current),
                     Title = "导出排班表"
                 };
                 if (dlg.ShowDialog() != true) return;
@@ -135,6 +194,213 @@ namespace MyTools.ViewModels
                 StatusMessage = "导出失败：" + ex.Message;
                 System.Windows.MessageBox.Show(ex.Message, "导出失败", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
             }
+        }
+
+        private static string BuildExportFileName(ScheduleVersion schedule)
+        {
+            var versionName = SanitizeFileName(schedule?.VersionName);
+            if (string.IsNullOrWhiteSpace(versionName))
+            {
+                versionName = "v1";
+            }
+
+            if (versionName.Length > 60)
+            {
+                versionName = versionName.Substring(0, 60).Trim();
+            }
+
+            var year = schedule?.Year ?? DateTime.Now.Year;
+            var month = schedule?.Month ?? DateTime.Now.Month;
+            return $"排班_{year}-{month:00}_{versionName}_{DateTime.Now:yyyyMMddHHmmss}.xlsx";
+        }
+
+        private static string SanitizeFileName(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return string.Empty;
+            }
+
+            var invalidChars = System.IO.Path.GetInvalidFileNameChars();
+            var chars = value.Trim().Select(ch => invalidChars.Contains(ch) || char.IsControl(ch) ? '_' : ch).ToArray();
+            return new string(chars).Trim().Trim('.');
+        }
+
+        private async Task ImportEmployeeTemplateAsync()
+        {
+            if (Current == null || !IsEditing) return;
+            var dialog = new Microsoft.Win32.OpenFileDialog
+            {
+                Title = "导入人员模板",
+                Filter = "CSV / 文本 (*.csv;*.txt)|*.csv;*.txt|所有文件 (*.*)|*.*"
+            };
+            if (dialog.ShowDialog() != true) return;
+
+            try
+            {
+                var text = await ReadAllTextAsync(dialog.FileName).ConfigureAwait(true);
+                var names = ParseEmployeeNames(text)
+                    .Where(name => !Current.Employees.Any(emp => string.Equals(emp.Name, name, StringComparison.OrdinalIgnoreCase)))
+                    .ToList();
+                AddEmployees(names);
+                StatusMessage = names.Count > 0
+                    ? $"已导入 {names.Count} 位人员。"
+                    : "未导入新人员：文件为空或人员已存在。";
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Warning("Import schedule employee template failed: {Msg}", ex.Message);
+                StatusMessage = "导入人员模板失败：" + ex.Message;
+                MessageBox.Show(ex.Message, "导入人员模板失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private async Task ExportEmployeeTemplateAsync()
+        {
+            if (Current == null) return;
+            var dialog = new Microsoft.Win32.SaveFileDialog
+            {
+                Title = "导出人员模板",
+                Filter = "CSV 文件 (*.csv)|*.csv",
+                DefaultExt = ".csv",
+                AddExtension = true,
+                OverwritePrompt = true,
+                FileName = $"排班人员_{Current.Year}-{Current.Month:00}_{DateTime.Now:yyyyMMddHHmmss}.csv"
+            };
+            if (dialog.ShowDialog() != true) return;
+
+            try
+            {
+                var lines = new List<string> { "姓名" };
+                lines.AddRange(Current.Employees.Select(emp => EscapeCsv(emp.Name)));
+                await WriteAllTextAsync(dialog.FileName, string.Join(Environment.NewLine, lines)).ConfigureAwait(true);
+                StatusMessage = $"已导出人员模板：{dialog.FileName}";
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Warning("Export schedule employee template failed: {Msg}", ex.Message);
+                StatusMessage = "导出人员模板失败：" + ex.Message;
+                MessageBox.Show(ex.Message, "导出人员模板失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private async Task CopyPreviousMonthEmployeesAsync()
+        {
+            if (Current == null || !IsEditing) return;
+            try
+            {
+                var previous = await FindPreviousMonthScheduleAsync(Current.Year, Current.Month).ConfigureAwait(true);
+                if (previous == null || previous.Employees.Count == 0)
+                {
+                    StatusMessage = "未找到上月人员名单。";
+                    return;
+                }
+
+                var existing = new HashSet<string>(Current.Employees.Select(emp => emp.Name), StringComparer.OrdinalIgnoreCase);
+                var names = previous.Employees
+                    .Select(emp => emp.Name)
+                    .Where(name => !string.IsNullOrWhiteSpace(name) && !existing.Contains(name.Trim()))
+                    .ToList();
+                AddEmployees(names);
+                StatusMessage = names.Count > 0
+                    ? $"已从上月复制 {names.Count} 位人员。"
+                    : "上月人员已全部在当前排班中。";
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Warning("Copy previous month employees failed: {Msg}", ex.Message);
+                StatusMessage = "复制上月人员失败：" + ex.Message;
+            }
+        }
+
+        private void CopyEmployeeMonth()
+        {
+            if (Current == null || !IsEditing || CopySourceEmployee == null || CopyTargetEmployee == null)
+            {
+                return;
+            }
+
+            if (ReferenceEquals(CopySourceEmployee, CopyTargetEmployee))
+            {
+                StatusMessage = "来源和目标人员不能相同。";
+                return;
+            }
+
+            EnsureEmployeeCellCount(CopySourceEmployee, Current.DayCount);
+            EnsureEmployeeCellCount(CopyTargetEmployee, Current.DayCount);
+            for (var day = 0; day < Current.DayCount; day++)
+            {
+                CopyTargetEmployee.Cells[day].Code = CopySourceEmployee.Cells[day].Code;
+                CopyTargetEmployee.Cells[day].IsManual = CopySourceEmployee.Cells[day].IsManual;
+            }
+
+            StatusMessage = $"已将 {CopySourceEmployee.Name} 的整月班次复制给 {CopyTargetEmployee.Name}。";
+            NotifyScheduleStructureChanged();
+        }
+
+        private static async Task<string> ReadAllTextAsync(string filePath)
+        {
+            byte[] bytes;
+            using (var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true))
+            {
+                bytes = new byte[stream.Length];
+                var offset = 0;
+                while (offset < bytes.Length)
+                {
+                    var read = await stream.ReadAsync(bytes, offset, bytes.Length - offset).ConfigureAwait(false);
+                    if (read <= 0)
+                    {
+                        break;
+                    }
+
+                    offset += read;
+                }
+            }
+
+            try
+            {
+                return new UTF8Encoding(false, true).GetString(bytes);
+            }
+            catch (DecoderFallbackException)
+            {
+                return Encoding.Default.GetString(bytes);
+            }
+        }
+
+        private static async Task WriteAllTextAsync(string filePath, string text)
+        {
+            using (var writer = new StreamWriter(filePath, false, new UTF8Encoding(true)))
+            {
+                await writer.WriteAsync(text ?? string.Empty).ConfigureAwait(false);
+            }
+        }
+
+        private static IEnumerable<string> ParseEmployeeNames(string text)
+        {
+            return (text ?? string.Empty)
+                .Split(new[] { '\r', '\n', ',', ';', '\t', '，', '；' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(item => item.Trim().Trim('"'))
+                .Where(item => item.Length > 0 && !string.Equals(item, "姓名", StringComparison.OrdinalIgnoreCase))
+                .Distinct(StringComparer.OrdinalIgnoreCase);
+        }
+
+        private static string EscapeCsv(string value)
+        {
+            value = value ?? string.Empty;
+            return value.IndexOfAny(new[] { ',', '"', '\r', '\n' }) >= 0
+                ? "\"" + value.Replace("\"", "\"\"") + "\""
+                : value;
+        }
+
+        private static async Task<ScheduleVersion> FindPreviousMonthScheduleAsync(int year, int month)
+        {
+            var previousMonth = month == 1 ? 12 : month - 1;
+            var previousYear = month == 1 ? year - 1 : year;
+            var info = ScheduleService.ListVersions()
+                .Where(item => item.Year == previousYear && item.Month == previousMonth)
+                .OrderByDescending(item => item.UpdatedAt)
+                .FirstOrDefault();
+            return info == null ? null : await ScheduleService.LoadAsync(info.FilePath).ConfigureAwait(false);
         }
 
         // ============================ New ============================
@@ -180,6 +446,7 @@ namespace MyTools.ViewModels
             try
             {
                 var sched = await ScheduleService.LoadAsync(info.FilePath).ConfigureAwait(true);
+                NormalizeScheduleRows(sched);
                 if (sched == null)
                 {
                     StatusMessage = "加载失败：文件读取错误。";
@@ -201,7 +468,7 @@ namespace MyTools.ViewModels
         {
             if (Current == null) return;
             IsEditing = true;
-            StatusMessage = "已进入编辑模式。";
+            StatusMessage = "已进入编辑模式：可单击班次格子选择班次，也可修改姓名和每日需休人数。";
         }
 
         // ============================ Save ============================
@@ -210,9 +477,28 @@ namespace MyTools.ViewModels
             if (Current == null) return;
             try
             {
+                var hardIssues = BuildHardConstraintIssues(Current).ToList();
+                if (hardIssues.Count > 0)
+                {
+                    var detail = string.Join(Environment.NewLine, hardIssues.Take(12).Select(item => "· " + item));
+                    if (hardIssues.Count > 12)
+                    {
+                        detail += Environment.NewLine + $"· 另有 {hardIssues.Count - 12} 项未显示";
+                    }
+
+                    StatusMessage = $"保存被阻止：{hardIssues.Count} 项硬约束未满足。";
+                    MessageBox.Show(
+                        "排班未满足硬性规则，不能保存：\n\n" + detail,
+                        "排班规则不满足",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                    return;
+                }
+
                 var path = await ScheduleService.SaveAsync(Current).ConfigureAwait(true);
                 StatusMessage = $"已保存：{path}";
                 LoadVersions();
+                RefreshScheduleConflicts();
             }
             catch (Exception ex)
             {
@@ -239,7 +525,19 @@ namespace MyTools.ViewModels
         {
             if (Current == null || !IsEditing) return;
             var r = ShiftAutoOptimizer.Optimize(Current);
-            ScheduleDataChanged?.Invoke(this, EventArgs.Empty);
+            NotifyScheduleDataChanged();
+            var hardIssues = BuildHardConstraintIssues(Current).Take(6).ToList();
+            if (hardIssues.Count > 0)
+            {
+                foreach (var issue in hardIssues)
+                {
+                    AppLogService.Warning("Schedule hard rule after optimize: {Issue}", issue);
+                }
+
+                StatusMessage = $"自动休息后仍有硬约束未满足：{hardIssues[0]}。请按冲突侧栏调整。";
+                return;
+            }
+
             if (r.Success)
             {
                 StatusMessage = r.Message + (r.Warnings.Count > 0 ? "（详情见日志）" : "");
@@ -265,7 +563,7 @@ namespace MyTools.ViewModels
             var cell = Current.Employees[empIdx].Cells[dayIdx];
             cell.Code = code ?? string.Empty;
             cell.IsManual = !string.IsNullOrEmpty(cell.Code);
-            ScheduleDataChanged?.Invoke(this, EventArgs.Empty);
+            NotifyScheduleDataChanged();
         }
 
         /// <summary>大1：当天=大，前一天=小，后两天=休（小→大→休→休）。</summary>
@@ -303,7 +601,7 @@ namespace MyTools.ViewModels
                 emp.Cells[idx].IsManual = true;
             }
 
-            ScheduleDataChanged?.Invoke(this, EventArgs.Empty);
+            NotifyScheduleDataChanged();
         }
 
         // ============================ Employee management ============================
@@ -315,7 +613,7 @@ namespace MyTools.ViewModels
             var row = new EmployeeRow { Name = name };
             for (int i = 0; i < Current.DayCount; i++) row.Cells.Add(new ShiftCell());
             Current.Employees.Add(row);
-            ScheduleStructureChanged?.Invoke(this, EventArgs.Empty);
+            NotifyScheduleStructureChanged();
         }
 
         public void AddEmployees(System.Collections.Generic.IEnumerable<string> names)
@@ -331,15 +629,26 @@ namespace MyTools.ViewModels
                 Current.Employees.Add(row);
                 added++;
             }
-            if (added > 0) ScheduleStructureChanged?.Invoke(this, EventArgs.Empty);
+            if (added > 0) NotifyScheduleStructureChanged();
         }
 
         public void RemoveEmployee(int empIdx)
         {
             if (Current == null || !IsEditing) return;
             if (empIdx < 0 || empIdx >= Current.Employees.Count) return;
+            var removed = Current.Employees[empIdx];
             Current.Employees.RemoveAt(empIdx);
-            ScheduleStructureChanged?.Invoke(this, EventArgs.Empty);
+            if (ReferenceEquals(CopySourceEmployee, removed))
+            {
+                CopySourceEmployee = null;
+            }
+
+            if (ReferenceEquals(CopyTargetEmployee, removed))
+            {
+                CopyTargetEmployee = null;
+            }
+
+            NotifyScheduleStructureChanged();
         }
 
         public void UpdateEmployeeName(int empIdx, string newName)
@@ -347,15 +656,15 @@ namespace MyTools.ViewModels
             if (Current == null || !IsEditing) return;
             if (empIdx < 0 || empIdx >= Current.Employees.Count) return;
             Current.Employees[empIdx].Name = (newName ?? string.Empty).Trim();
-            ScheduleDataChanged?.Invoke(this, EventArgs.Empty);
+            NotifyScheduleDataChanged();
         }
 
-        public void UpdateDailyQuota(int dayIdx, int quota)
+        public void UpdateDailyQuota(int dayIdx, double quota)
         {
             if (Current == null || !IsEditing) return;
             if (dayIdx < 0 || dayIdx >= Current.DailyRestQuotas.Count) return;
             Current.DailyRestQuotas[dayIdx] = Math.Max(0, quota);
-            ScheduleDataChanged?.Invoke(this, EventArgs.Empty);
+            NotifyScheduleDataChanged();
         }
 
         // ============================ Statistics ============================
@@ -374,7 +683,7 @@ namespace MyTools.ViewModels
             return (work, rest, maxRun);
         }
 
-        public int ComputeColumnRestCount(int dayIdx)
+        public double ComputeColumnRestCount(int dayIdx)
         {
             if (Current == null) return 0;
             double sum = 0;
@@ -382,13 +691,357 @@ namespace MyTools.ViewModels
             {
                 if (dayIdx < emp.Cells.Count) sum += ShiftCodes.RestDays(emp.Cells[dayIdx].Code);
             }
-            // 总休按 0.5 精度求和后向最近整数下取（午半天计 0.5 也允许显示）
-            return (int)Math.Round(sum);
+            return sum;
+        }
+
+        private void NotifyScheduleStructureChanged()
+        {
+            RefreshScheduleConflicts();
+            OnPropertyChanged(nameof(Current));
+            OnPropertyChanged(nameof(HasEmployees));
+            CommandManager.InvalidateRequerySuggested();
+            ScheduleStructureChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        private void NotifyScheduleDataChanged()
+        {
+            RefreshScheduleConflicts();
+            OnPropertyChanged(nameof(Current));
+            CommandManager.InvalidateRequerySuggested();
+            ScheduleDataChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        private static IEnumerable<string> BuildHardConstraintIssues(ScheduleVersion schedule)
+        {
+            if (schedule == null)
+            {
+                yield break;
+            }
+
+            NormalizeScheduleRows(schedule);
+            for (var day = 0; day < schedule.DayCount; day++)
+            {
+                var actual = ComputeColumnRestCount(schedule, day);
+                var quota = day < schedule.DailyRestQuotas.Count ? schedule.DailyRestQuotas[day] : 0;
+                var delta = actual - quota;
+                if (Math.Abs(delta) > 0.001)
+                {
+                    yield return $"{day + 1} 日实际休息 {FormatNumber(actual)} / 总休目标 {FormatNumber(quota)}，{(delta > 0 ? "多" : "差")} {FormatNumber(Math.Abs(delta))}";
+                }
+            }
+
+            for (var empIndex = 0; empIndex < schedule.Employees.Count; empIndex++)
+            {
+                var employee = schedule.Employees[empIndex];
+                var maxRun = ComputeMaxConsecutiveWork(employee);
+                if (maxRun > 5)
+                {
+                    yield return $"{employee.Name} 连续上班 {maxRun} 天，超过 5 天上限";
+                }
+            }
+        }
+
+        private static double ComputeColumnRestCount(ScheduleVersion schedule, int dayIdx)
+        {
+            if (schedule == null || dayIdx < 0)
+            {
+                return 0;
+            }
+
+            double sum = 0;
+            foreach (var emp in schedule.Employees)
+            {
+                if (emp.Cells != null && dayIdx < emp.Cells.Count)
+                {
+                    sum += ShiftCodes.RestDays(emp.Cells[dayIdx].Code);
+                }
+            }
+
+            return sum;
+        }
+
+        private static int ComputeMaxConsecutiveWork(EmployeeRow employee)
+        {
+            if (employee == null || employee.Cells == null)
+            {
+                return 0;
+            }
+
+            var maxRun = 0;
+            var run = 0;
+            foreach (var cell in employee.Cells)
+            {
+                if (ShiftCodes.IsWork(cell.Code))
+                {
+                    run++;
+                    if (run > maxRun)
+                    {
+                        maxRun = run;
+                    }
+                }
+                else
+                {
+                    run = 0;
+                }
+            }
+
+            return maxRun;
+        }
+
+        private void RefreshScheduleConflicts()
+        {
+            ScheduleConflicts.Clear();
+            WeeklyRestStats.Clear();
+            if (Current == null)
+            {
+                OnPropertyChanged(nameof(HasScheduleConflicts));
+                OnPropertyChanged(nameof(ScheduleConflictSummary));
+                OnPropertyChanged(nameof(HasWeeklyRestStats));
+                return;
+            }
+
+            NormalizeScheduleRows(Current);
+            RefreshWeeklyRestStats();
+            for (var day = 0; day < Current.DayCount; day++)
+            {
+                var actual = ComputeColumnRestCount(day);
+                var quota = day < Current.DailyRestQuotas.Count ? Current.DailyRestQuotas[day] : 0;
+                var delta = actual - quota;
+                if (Math.Abs(delta) > 0.001)
+                {
+                    ScheduleConflicts.Add(new ScheduleConflictItem
+                    {
+                        Level = "高",
+                        Title = $"{day + 1} 日总休{(delta > 0 ? "超额" : "不足")}",
+                        Detail = $"实际 {FormatNumber(actual)} / 目标 {FormatNumber(quota)}，{(delta > 0 ? "多" : "差")} {FormatNumber(Math.Abs(delta))}。",
+                        Category = "每日总休",
+                        DayIndex = day
+                    });
+                }
+            }
+
+            for (var empIndex = 0; empIndex < Current.Employees.Count; empIndex++)
+            {
+                var employee = Current.Employees[empIndex];
+                var stats = ComputeRowStats(empIndex);
+                if (stats.maxRun > 5)
+                {
+                    ScheduleConflicts.Add(new ScheduleConflictItem
+                    {
+                        Level = "高",
+                        Title = $"{employee.Name} 连续上班 {stats.maxRun} 天",
+                        Detail = "建议控制在 5 天以内。",
+                        Category = "连续上班",
+                        EmployeeIndex = empIndex
+                    });
+                }
+
+                if (stats.rest < 8)
+                {
+                    ScheduleConflicts.Add(new ScheduleConflictItem
+                    {
+                        Level = "中",
+                        Title = $"{employee.Name} 休息不足",
+                        Detail = $"本月休息 {FormatNumber(stats.rest)} 天，低于 8 天。",
+                        Category = "人员休息"
+                    });
+                }
+            }
+
+            OnPropertyChanged(nameof(HasScheduleConflicts));
+            OnPropertyChanged(nameof(ScheduleConflictSummary));
+            OnPropertyChanged(nameof(HasWeeklyRestStats));
+        }
+
+        private void RefreshWeeklyRestStats()
+        {
+            if (Current == null)
+            {
+                return;
+            }
+
+            var weekIndex = 1;
+            for (var start = 0; start < Current.DayCount; start += 7)
+            {
+                var end = Math.Min(Current.DayCount - 1, start + 6);
+                var employeeRests = Current.Employees
+                    .Select(employee => ComputeEmployeeRestRange(employee, start, end))
+                    .ToList();
+                var totalRest = employeeRests.Sum();
+                var minRest = employeeRests.Count == 0 ? 0 : employeeRests.Min();
+                var maxRest = employeeRests.Count == 0 ? 0 : employeeRests.Max();
+                WeeklyRestStats.Add(new ScheduleWeekRestItem
+                {
+                    WeekText = $"第 {weekIndex} 周",
+                    DateRangeText = $"{start + 1}-{end + 1} 日",
+                    TotalRestText = FormatNumber(totalRest),
+                    BalanceText = $"人均 {FormatNumber(employeeRests.Count == 0 ? 0 : totalRest / employeeRests.Count)} / 差 {FormatNumber(maxRest - minRest)}"
+                });
+                weekIndex++;
+            }
+        }
+
+        private static double ComputeEmployeeRestRange(EmployeeRow employee, int startDay, int endDay)
+        {
+            if (employee == null || employee.Cells == null)
+            {
+                return 0;
+            }
+
+            double total = 0;
+            for (var day = Math.Max(0, startDay); day <= endDay && day < employee.Cells.Count; day++)
+            {
+                total += ShiftCodes.RestDays(employee.Cells[day].Code);
+            }
+
+            return total;
+        }
+
+        private void LocateScheduleConflict(object parameter)
+        {
+            var item = parameter as ScheduleConflictItem;
+            if (item == null)
+            {
+                return;
+            }
+
+            ResolveConflictLocation(item);
+            SelectedConflictEmployeeIndex = item.EmployeeIndex;
+            SelectedConflictDayIndex = item.DayIndex;
+            OnPropertyChanged(nameof(SelectedConflictEmployeeIndex));
+            OnPropertyChanged(nameof(SelectedConflictDayIndex));
+            ScheduleCellFocusRequested?.Invoke(this, new ScheduleCellFocusRequestedEventArgs(item.EmployeeIndex, item.DayIndex));
+        }
+
+        private void ResolveConflictLocation(ScheduleConflictItem item)
+        {
+            if (item == null || Current == null)
+            {
+                return;
+            }
+
+            if (item.DayIndex < 0)
+            {
+                item.DayIndex = ExtractFirstNumber(item.Title) - 1;
+                if (item.DayIndex < 0 || item.DayIndex >= Current.DayCount)
+                {
+                    item.DayIndex = -1;
+                }
+            }
+
+            if (item.EmployeeIndex < 0)
+            {
+                item.EmployeeIndex = Current.Employees
+                    .Select((employee, index) => new { employee, index })
+                    .FirstOrDefault(pair => !string.IsNullOrWhiteSpace(pair.employee.Name) &&
+                                            (item.Title ?? string.Empty).IndexOf(pair.employee.Name, StringComparison.OrdinalIgnoreCase) >= 0)
+                    ?.index ?? -1;
+            }
+        }
+
+        private static int ExtractFirstNumber(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return 0;
+            }
+
+            var digits = new StringBuilder();
+            foreach (var ch in value)
+            {
+                if (char.IsDigit(ch))
+                {
+                    digits.Append(ch);
+                }
+                else if (digits.Length > 0)
+                {
+                    break;
+                }
+            }
+
+            return int.TryParse(digits.ToString(), out var number) ? number : 0;
+        }
+
+        private static string FormatNumber(double value)
+        {
+            return value % 1 == 0 ? ((int)value).ToString() : value.ToString("0.#");
+        }
+
+        private static void NormalizeScheduleRows(ScheduleVersion schedule)
+        {
+            if (schedule == null)
+            {
+                return;
+            }
+
+            while (schedule.DailyRestQuotas.Count < schedule.DayCount)
+            {
+                schedule.DailyRestQuotas.Add(0);
+            }
+
+            foreach (var employee in schedule.Employees)
+            {
+                EnsureEmployeeCellCount(employee, schedule.DayCount);
+            }
+        }
+
+        private static void EnsureEmployeeCellCount(EmployeeRow employee, int dayCount)
+        {
+            if (employee == null)
+            {
+                return;
+            }
+
+            if (employee.Cells == null)
+            {
+                employee.Cells = new List<ShiftCell>();
+            }
+
+            while (employee.Cells.Count < dayCount)
+            {
+                employee.Cells.Add(new ShiftCell());
+            }
+
+            while (employee.Cells.Count > dayCount)
+            {
+                employee.Cells.RemoveAt(employee.Cells.Count - 1);
+            }
         }
 
         protected void OnPropertyChanged([CallerMemberName] string name = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
         }
+    }
+
+    public sealed class ScheduleConflictItem
+    {
+        public string Level { get; set; }
+        public string Category { get; set; }
+        public string Title { get; set; }
+        public string Detail { get; set; }
+        public int EmployeeIndex { get; set; } = -1;
+        public int DayIndex { get; set; } = -1;
+        public bool CanLocate => EmployeeIndex >= 0 || DayIndex >= 0;
+    }
+
+    public sealed class ScheduleWeekRestItem
+    {
+        public string WeekText { get; set; }
+        public string DateRangeText { get; set; }
+        public string TotalRestText { get; set; }
+        public string BalanceText { get; set; }
+    }
+
+    public sealed class ScheduleCellFocusRequestedEventArgs : EventArgs
+    {
+        public ScheduleCellFocusRequestedEventArgs(int employeeIndex, int dayIndex)
+        {
+            EmployeeIndex = employeeIndex;
+            DayIndex = dayIndex;
+        }
+
+        public int EmployeeIndex { get; }
+        public int DayIndex { get; }
     }
 }

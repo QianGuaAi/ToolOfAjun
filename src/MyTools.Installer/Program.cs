@@ -8,6 +8,7 @@ using System.Linq;
 using System.Reflection;
 using System.Threading;
 using System.Windows.Forms;
+using MyTools.Shared;
 
 namespace MyTools.Installer
 {
@@ -59,6 +60,10 @@ namespace MyTools.Installer
                 WriteUninstaller(installDirectory);
                 CreateShortcuts(installDirectory);
                 WriteUninstallRegistry(installDirectory);
+                if (options.AssociateMediaFiles || ShouldAssociateMediaFiles(options))
+                {
+                    MediaFileAssociationCore.RegisterForLocalMachine(Path.Combine(installDirectory, AppExeName), options.MediaAssociationKind);
+                }
 
                 if (!options.Silent)
                 {
@@ -89,6 +94,23 @@ namespace MyTools.Installer
 
                 return 1;
             }
+        }
+
+        private static bool ShouldAssociateMediaFiles(Options options)
+        {
+            if (options.Silent)
+            {
+                return options.AssociateMediaFiles;
+            }
+
+            var result = MessageBox.Show(
+                "是否将常见视频和音频文件关联到阿君的工具？\r\n\r\n"
+                + "关联后，双击 MP4、MP3、WAV、MKV 等文件会优先用本程序打开。后续也可以在“系统设置”里重新关联。",
+                ProductName,
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question,
+                MessageBoxDefaultButton.Button1);
+            return result == DialogResult.Yes;
         }
 
         private static string GetDefaultInstallDirectory()
@@ -720,6 +742,8 @@ namespace MyTools.Installer
         {
             public bool Silent { get; private set; }
             public bool LaunchAfterInstall { get; private set; }
+            public bool AssociateMediaFiles { get; private set; }
+            public MediaAssociationKind MediaAssociationKind { get; private set; } = MediaAssociationKind.All;
             public string InstallDirectory { get; private set; }
             public string ExtractDirectory { get; private set; }
 
@@ -737,6 +761,21 @@ namespace MyTools.Installer
                     else if (EqualsArg(arg, "/launch") || EqualsArg(arg, "--launch"))
                     {
                         options.LaunchAfterInstall = true;
+                    }
+                    else if (EqualsArg(arg, "/associate-media") || EqualsArg(arg, "--associate-media"))
+                    {
+                        options.AssociateMediaFiles = true;
+                        options.MediaAssociationKind = MediaAssociationKind.All;
+                    }
+                    else if (EqualsArg(arg, "/associate-video") || EqualsArg(arg, "--associate-video"))
+                    {
+                        options.AssociateMediaFiles = true;
+                        options.MediaAssociationKind = MediaAssociationKind.Video;
+                    }
+                    else if (EqualsArg(arg, "/associate-audio") || EqualsArg(arg, "--associate-audio"))
+                    {
+                        options.AssociateMediaFiles = true;
+                        options.MediaAssociationKind = MediaAssociationKind.Audio;
                     }
                     else if (StartsWithArg(arg, "/install-dir:") || StartsWithArg(arg, "--install-dir="))
                     {

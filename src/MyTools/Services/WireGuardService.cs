@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -32,6 +33,98 @@ namespace MyTools.Services
                 return File.Exists(configPath) ? File.ReadAllText(configPath) : null;
             }
             catch { return null; }
+        }
+
+        public static List<WireGuardTunnelInfo> GetSavedTunnels()
+        {
+            try
+            {
+                if (!Directory.Exists(ConfigDir))
+                {
+                    return new List<WireGuardTunnelInfo>();
+                }
+
+                return Directory.GetFiles(ConfigDir, "*.conf")
+                    .Select(path => new FileInfo(path))
+                    .OrderByDescending(info => info.LastWriteTime)
+                    .Select(info => new WireGuardTunnelInfo
+                    {
+                        InterfaceName = Path.GetFileNameWithoutExtension(info.Name),
+                        FilePath = info.FullName,
+                        LastModified = info.LastWriteTime,
+                        SizeBytes = info.Length
+                    })
+                    .ToList();
+            }
+            catch
+            {
+                return new List<WireGuardTunnelInfo>();
+            }
+        }
+
+        public static void RenameSavedTunnel(string interfaceName, string newInterfaceName)
+        {
+            var sourceName = NormalizeInterfaceName(interfaceName);
+            var targetName = NormalizeInterfaceName(newInterfaceName);
+            if (string.IsNullOrWhiteSpace(sourceName))
+            {
+                throw new InvalidOperationException("原隧道名称不能为空。");
+            }
+
+            if (string.IsNullOrWhiteSpace(targetName))
+            {
+                throw new InvalidOperationException("新隧道名称不能为空。");
+            }
+
+            if (string.Equals(sourceName, targetName, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            var sourcePath = Path.Combine(ConfigDir, sourceName + ".conf");
+            var targetPath = Path.Combine(ConfigDir, targetName + ".conf");
+            if (!File.Exists(sourcePath))
+            {
+                throw new FileNotFoundException("原隧道配置不存在。", sourcePath);
+            }
+
+            if (File.Exists(targetPath))
+            {
+                throw new IOException("已存在同名隧道配置。");
+            }
+
+            File.Move(sourcePath, targetPath);
+        }
+
+        public static void DeleteSavedTunnel(string interfaceName)
+        {
+            var name = NormalizeInterfaceName(interfaceName);
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                throw new InvalidOperationException("隧道名称不能为空。");
+            }
+
+            var path = Path.Combine(ConfigDir, name + ".conf");
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+
+        private static string NormalizeInterfaceName(string interfaceName)
+        {
+            var value = (interfaceName ?? string.Empty).Trim();
+            if (value.EndsWith(".conf", StringComparison.OrdinalIgnoreCase))
+            {
+                value = Path.GetFileNameWithoutExtension(value);
+            }
+
+            foreach (var ch in Path.GetInvalidFileNameChars())
+            {
+                value = value.Replace(ch, '_');
+            }
+
+            return value;
         }
 
         private static string GetWireGuardPath()
@@ -147,5 +240,13 @@ namespace MyTools.Services
 
             return new WireGuardStatus { IsConnected = false };
         }
+    }
+
+    public sealed class WireGuardTunnelInfo
+    {
+        public string InterfaceName { get; set; }
+        public string FilePath { get; set; }
+        public DateTime LastModified { get; set; }
+        public long SizeBytes { get; set; }
     }
 }

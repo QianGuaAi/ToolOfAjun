@@ -436,8 +436,56 @@ namespace MyTools.Services
         }
 
         public string BytesDisplay => FileSizeFormatter.Format(Bytes);
+        public string CategoryDisplay => GetCategoryDisplay(Category);
+        public string RiskDisplay => GetRiskDisplay(Category);
+        public string AdviceDisplay => GetAdviceDisplay(Category);
 
         public event System.ComponentModel.PropertyChangedEventHandler PropertyChanged;
+
+        private static string GetCategoryDisplay(WeChatDataCategory category)
+        {
+            switch (category)
+            {
+                case WeChatDataCategory.Text: return "文字";
+                case WeChatDataCategory.Image: return "图像";
+                case WeChatDataCategory.Video: return "视频";
+                case WeChatDataCategory.Voice: return "语音";
+                case WeChatDataCategory.File: return "文件";
+                case WeChatDataCategory.Cache: return "缓存";
+                default: return category.ToString();
+            }
+        }
+
+        private static string GetRiskDisplay(WeChatDataCategory category)
+        {
+            switch (category)
+            {
+                case WeChatDataCategory.Cache:
+                    return "低";
+                case WeChatDataCategory.Text:
+                    return "高";
+                default:
+                    return "中";
+            }
+        }
+
+        private static string GetAdviceDisplay(WeChatDataCategory category)
+        {
+            switch (category)
+            {
+                case WeChatDataCategory.Cache:
+                    return "可优先清理";
+                case WeChatDataCategory.Text:
+                    return "先备份再清理";
+                case WeChatDataCategory.Image:
+                case WeChatDataCategory.Video:
+                case WeChatDataCategory.Voice:
+                case WeChatDataCategory.File:
+                    return "按日期确认，建议先备份";
+                default:
+                    return "确认后清理";
+            }
+        }
     }
 
     public enum WeChatDataCategory

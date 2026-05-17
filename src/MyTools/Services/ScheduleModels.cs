@@ -30,8 +30,8 @@ namespace MyTools.Services
         public int Month { get; set; }
         public string VersionName { get; set; } = "v1";
 
-        /// <summary>第 3 行：每日总休息人数硬性要求。长度 = 当月天数。</summary>
-        public List<int> DailyRestQuotas { get; set; } = new List<int>();
+        /// <summary>第 3 行：每日总休息人数硬性要求。长度 = 当月天数，支持 0.5 天精度。</summary>
+        public List<double> DailyRestQuotas { get; set; } = new List<double>();
 
         public List<EmployeeRow> Employees { get; set; } = new List<EmployeeRow>();
 

@@ -9,106 +9,247 @@
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
     </UserControl.Resources>
-    <Grid Margin="16">
+
+    <Grid Margin="12">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- Header -->
         <Border Grid.Row="0"
-                Margin="0,0,0,12"
-                CornerRadius="8"
-                Padding="16,12"
+                Margin="0,0,0,8"
+                Padding="12,9"
+                CornerRadius="{StaticResource CornerRadiusCard}"
                 Background="{DynamicResource MaterialDesignCardBackground}">
-            <StackPanel Orientation="Horizontal">
-                <Border Width="40" Height="40" CornerRadius="10" Background="#5e72e4" Margin="0,0,12,0" VerticalAlignment="Center">
-                    <materialDesign:PackIcon Kind="CogOutline" Width="22" Height="22" Foreground="White"
-                                             VerticalAlignment="Center" HorizontalAlignment="Center" />
-                </Border>
-                <StackPanel VerticalAlignment="Center">
-                    <TextBlock Text="系统设置" FontSize="18" FontWeight="SemiBold" />
-                    <TextBlock Text="备份 / 迁移程序数据与依赖文件" FontSize="12" Opacity="0.7" Margin="0,2,0,0" />
-                </StackPanel>
-                <ProgressBar Style="{StaticResource MaterialDesignCircularProgressBar}"
-                             IsIndeterminate="True" Width="22" Height="22"
-                             Margin="16,0,0,0" VerticalAlignment="Center"
+            <DockPanel>
+                <ProgressBar DockPanel.Dock="Right"
+                             Style="{StaticResource MaterialDesignCircularProgressBar}"
+                             IsIndeterminate="True"
+                             Width="20"
+                             Height="20"
+                             Margin="10,0,0,0"
+                             VerticalAlignment="Center"
                              Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" />
-            </StackPanel>
+                <StackPanel Orientation="Horizontal">
+                    <Border Width="28" Height="28" CornerRadius="7" Background="{DynamicResource BrushAccentBlue}" Margin="0,0,8,0">
+                        <materialDesign:PackIcon Kind="CogOutline" Width="16" Height="16" Foreground="White"
+                                                 VerticalAlignment="Center" HorizontalAlignment="Center" />
+                    </Border>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="系统设置" Style="{StaticResource TextSubtitle}" />
+                        <TextBlock Text="数据迁移、备份恢复、文件关联" Style="{StaticResource TextHint}" Margin="0,1,0,0" />
+                    </StackPanel>
+                </StackPanel>
+            </DockPanel>
         </Border>
 
-        <!-- Status -->
         <Border Grid.Row="1"
-                Margin="0,0,0,12"
-                Padding="14,10"
+                Margin="0,0,0,8"
+                Padding="10,6"
                 CornerRadius="6"
                 Background="{DynamicResource MaterialDesignChipBackground}">
-            <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" FontSize="12" />
+            <TextBlock Text="{Binding StatusMessage}" FontSize="11" TextWrapping="Wrap" />
         </Border>
 
-        <!-- Cards -->
         <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="16" />
+                <ColumnDefinition Width="8" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition Height="8" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
 
-            <!-- Export -->
-            <materialDesign:Card Grid.Column="0" Padding="20" VerticalAlignment="Top">
-                <StackPanel>
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
-                        <materialDesign:PackIcon Kind="Export" Width="22" Height="22" Foreground="#5e72e4" VerticalAlignment="Center" />
-                        <TextBlock Text="导出" FontSize="16" FontWeight="SemiBold" Margin="8,0,0,0" VerticalAlignment="Center" />
+            <materialDesign:Card Grid.Row="0" Grid.Column="0" Style="{StaticResource SectionCardDense}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                        <materialDesign:PackIcon Kind="FolderUpload" Width="18" Height="18" Foreground="{DynamicResource BrushAccentBlue}" VerticalAlignment="Center" />
+                        <TextBlock Text="导出备份" Style="{StaticResource TextSubtitle}" Margin="7,0,0,0" VerticalAlignment="Center" />
                     </StackPanel>
-                    <TextBlock TextWrapping="Wrap" FontSize="12" Opacity="0.85" Margin="0,0,0,10"
-                               Text="将以下内容打包到所选文件夹下的时间戳子目录：" />
-                    <StackPanel Margin="6,0,0,12">
-                        <TextBlock FontSize="12" Margin="0,1" Text="• 程序设置（MyTools.settings.json）" />
-                        <TextBlock FontSize="12" Margin="0,1" Text="• SQL 连接历史（MyTools.sqlhistory.json）" />
-                        <TextBlock FontSize="12" Margin="0,1" Text="• Codex 配置（~\.codex\config.toml + auth.json）" />
-                        <TextBlock FontSize="12" Margin="0,1" Text="• 排班数据 / 节假日（%LOCALAPPDATA%\MyTools）" />
-                        <TextBlock FontSize="12" Margin="0,1" Text="• WireGuard 配置（Configs\）" />
-                        <TextBlock FontSize="12" Margin="0,1" Text="• 录像解码依赖（NativeBinaries\ffmpeg\ffmpeg.exe 等）" />
+
+                    <StackPanel Grid.Row="1">
+                        <TextBlock Text="打包当前程序数据，适合换电脑前保存。"
+                                   Style="{StaticResource TextCaption}" TextWrapping="Wrap" Margin="0,0,0,6" />
+                        <TextBlock Text="导出范围" Style="{StaticResource TextHint}" Margin="0,0,0,4" />
+                        <WrapPanel>
+                            <CheckBox Content="设置与历史" IsChecked="{Binding BackupSettings}" Margin="0,0,10,4" />
+                            <CheckBox Content="排班本地数据" IsChecked="{Binding BackupLocalData}" Margin="0,0,10,4" />
+                            <CheckBox Content="Codex" IsChecked="{Binding BackupCodex}" Margin="0,0,10,4" />
+                            <CheckBox Content="WireGuard" IsChecked="{Binding BackupWireGuard}" Margin="0,0,10,4" />
+                            <CheckBox Content="FFmpeg" IsChecked="{Binding BackupNativeBinaries}" Margin="0,0,10,4" />
+                        </WrapPanel>
                     </StackPanel>
-                    <Button Style="{StaticResource MaterialDesignRaisedButton}"
-                            Background="#5e72e4" BorderBrush="#5e72e4"
-                            HorizontalAlignment="Left"
-                            MinWidth="140" Height="36"
-                            Command="{Binding ExportCommand}">
-                        <StackPanel Orientation="Horizontal">
-                            <materialDesign:PackIcon Kind="FolderUpload" Width="18" Height="18" Margin="0,0,8,0" VerticalAlignment="Center" />
-                            <TextBlock Text="选择文件夹并导出" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Button>
-                </StackPanel>
+
+                    <StackPanel Grid.Row="2" Orientation="Horizontal">
+                        <Button Style="{StaticResource GhostActionButton}"
+                                Margin="0,0,8,0"
+                                Command="{Binding PreviewExportCommand}">
+                            <StackPanel Orientation="Horizontal">
+                                <materialDesign:PackIcon Kind="TextBoxSearchOutline" Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center" />
+                                <TextBlock Text="预检" />
+                            </StackPanel>
+                        </Button>
+                        <Button Style="{StaticResource PrimaryActionButton}"
+                                Command="{Binding ExportCommand}">
+                            <StackPanel Orientation="Horizontal">
+                                <materialDesign:PackIcon Kind="Export" Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center" />
+                                <TextBlock Text="选择文件夹导出" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </Grid>
             </materialDesign:Card>
 
-            <!-- Import -->
-            <materialDesign:Card Grid.Column="2" Padding="20" VerticalAlignment="Top">
-                <StackPanel>
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
-                        <materialDesign:PackIcon Kind="Import" Width="22" Height="22" Foreground="#11cdef" VerticalAlignment="Center" />
-                        <TextBlock Text="导入" FontSize="16" FontWeight="SemiBold" Margin="8,0,0,0" VerticalAlignment="Center" />
+            <materialDesign:Card Grid.Row="0" Grid.Column="2" Style="{StaticResource SectionCardDense}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                        <materialDesign:PackIcon Kind="FolderDownload" Width="18" Height="18" Foreground="{DynamicResource BrushAccentTeal}" VerticalAlignment="Center" />
+                        <TextBlock Text="导入恢复" Style="{StaticResource TextSubtitle}" Margin="7,0,0,0" VerticalAlignment="Center" />
                     </StackPanel>
-                    <TextBlock TextWrapping="Wrap" FontSize="12" Opacity="0.85" Margin="0,0,0,10"
-                               Text="选择之前导出的备份文件夹（含 manifest.json）。导入后会覆盖当前同名文件，建议导入完成后重启程序。" />
-                    <Border Background="#FFF8E1" Padding="10" CornerRadius="6" Margin="0,0,0,12">
-                        <TextBlock FontSize="11" TextWrapping="Wrap"
-                                   Text="MyTools.settings.json / MyTools.sqlhistory.json 使用 Windows DPAPI（当前用户）加密，仅在同一 Windows 账户上能解密；跨账户导入时密码 / Codex 凭据将失效。" />
+
+                    <StackPanel Grid.Row="1">
+                        <TextBlock Text="选择带 manifest.json 的备份文件夹，导入会覆盖当前同名数据。"
+                                   Style="{StaticResource TextCaption}" TextWrapping="Wrap" Margin="0,0,0,6" />
+                        <Border Background="#FFF8E1" Padding="8,6" CornerRadius="6">
+                            <TextBlock FontSize="11" TextWrapping="Wrap" Foreground="#7A5200"
+                                       Text="密码和 Codex 凭据使用当前 Windows 账户加密；跨账户导入时需要重新登录或重新保存密码。" />
+                        </Border>
+                        <TextBlock Text="恢复范围" Style="{StaticResource TextHint}" Margin="0,8,0,4" />
+                        <WrapPanel>
+                            <CheckBox Content="设置与历史" IsChecked="{Binding RestoreSettings}" Margin="0,0,10,4" />
+                            <CheckBox Content="排班本地数据" IsChecked="{Binding RestoreLocalData}" Margin="0,0,10,4" />
+                            <CheckBox Content="Codex" IsChecked="{Binding RestoreCodex}" Margin="0,0,10,4" />
+                            <CheckBox Content="WireGuard" IsChecked="{Binding RestoreWireGuard}" Margin="0,0,10,4" />
+                            <CheckBox Content="FFmpeg" IsChecked="{Binding RestoreNativeBinaries}" Margin="0,0,10,4" />
+                        </WrapPanel>
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="2" Orientation="Horizontal">
+                        <Button Style="{StaticResource GhostActionButton}"
+                                Margin="0,0,8,0"
+                                Command="{Binding PreviewImportCommand}">
+                            <StackPanel Orientation="Horizontal">
+                                <materialDesign:PackIcon Kind="TextBoxSearchOutline" Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center" />
+                                <TextBlock Text="预览" />
+                            </StackPanel>
+                        </Button>
+                        <Button Style="{StaticResource GhostActionButton}"
+                                Margin="0,0,8,0"
+                                Command="{Binding VerifyBackupCommand}">
+                            <StackPanel Orientation="Horizontal">
+                                <materialDesign:PackIcon Kind="ShieldCheckOutline" Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center" />
+                                <TextBlock Text="校验" />
+                            </StackPanel>
+                        </Button>
+                        <Button Style="{StaticResource PrimaryActionButton}"
+                                Background="{DynamicResource BrushAccentTeal}"
+                                BorderBrush="{DynamicResource BrushAccentTeal}"
+                                Command="{Binding ImportCommand}">
+                            <StackPanel Orientation="Horizontal">
+                                <materialDesign:PackIcon Kind="Import" Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center" />
+                                <TextBlock Text="选择备份导入" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </materialDesign:Card>
+
+            <materialDesign:Card Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" Style="{StaticResource SectionCardDense}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <Border Width="30" Height="30" CornerRadius="7" Background="{DynamicResource BrushAccentAmber}" Margin="0,0,10,0">
+                        <materialDesign:PackIcon Kind="FileVideoOutline" Width="16" Height="16" Foreground="White"
+                                                 VerticalAlignment="Center" HorizontalAlignment="Center" />
                     </Border>
-                    <Button Style="{StaticResource MaterialDesignRaisedButton}"
-                            Background="#11cdef" BorderBrush="#11cdef"
-                            HorizontalAlignment="Left"
-                            MinWidth="140" Height="36"
-                            Command="{Binding ImportCommand}">
-                        <StackPanel Orientation="Horizontal">
-                            <materialDesign:PackIcon Kind="FolderDownload" Width="18" Height="18" Margin="0,0,8,0" VerticalAlignment="Center" />
-                            <TextBlock Text="选择备份并导入" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Button>
-                </StackPanel>
+
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock Text="音视频文件关联" Style="{StaticResource TextSubtitle}" />
+                        <TextBlock Text="关联 MP4、MKV、MOV、AVI、MP3、WAV、FLAC、M4A 等常见格式，双击直接进入内置播放器。"
+                                   Style="{StaticResource TextCaption}" TextWrapping="Wrap" Margin="0,1,0,0" />
+                        <TextBlock Text="{Binding MediaAssociationStatusMessage}"
+                                   Style="{StaticResource TextHint}"
+                                   TextWrapping="Wrap"
+                                   Margin="0,3,0,0" />
+                    </StackPanel>
+
+                    <WrapPanel Grid.Column="2"
+                               Margin="12,0,0,0"
+                               VerticalAlignment="Center"
+                               HorizontalAlignment="Right">
+                        <Button Style="{StaticResource GhostActionButton}"
+                                Margin="0,0,6,4"
+                                Command="{Binding RefreshMediaAssociationStatusCommand}">
+                            <StackPanel Orientation="Horizontal">
+                                <materialDesign:PackIcon Kind="Refresh" Width="14" Height="14" Margin="0,0,5,0" VerticalAlignment="Center" />
+                                <TextBlock Text="刷新" />
+                            </StackPanel>
+                        </Button>
+                        <Button Style="{StaticResource GhostActionButton}"
+                                Margin="0,0,6,4"
+                                Command="{Binding AssociateVideoFilesCommand}">
+                            <StackPanel Orientation="Horizontal">
+                                <materialDesign:PackIcon Kind="VideoOutline" Width="14" Height="14" Margin="0,0,5,0" VerticalAlignment="Center" />
+                                <TextBlock Text="视频" />
+                            </StackPanel>
+                        </Button>
+                        <Button Style="{StaticResource GhostActionButton}"
+                                Margin="0,0,6,4"
+                                Command="{Binding AssociateAudioFilesCommand}">
+                            <StackPanel Orientation="Horizontal">
+                                <materialDesign:PackIcon Kind="Music" Width="14" Height="14" Margin="0,0,5,0" VerticalAlignment="Center" />
+                                <TextBlock Text="音频" />
+                            </StackPanel>
+                        </Button>
+                        <Button Style="{StaticResource PrimaryActionButton}"
+                                Background="{DynamicResource BrushAccentAmber}"
+                                BorderBrush="{DynamicResource BrushAccentAmber}"
+                                Foreground="White"
+                                Margin="0,0,6,4"
+                                Command="{Binding AssociateMediaFilesCommand}">
+                            <StackPanel Orientation="Horizontal">
+                                <materialDesign:PackIcon Kind="LinkVariant" Width="14" Height="14" Margin="0,0,5,0" VerticalAlignment="Center" />
+                                <TextBlock Text="全部" />
+                            </StackPanel>
+                        </Button>
+                        <Button Style="{StaticResource GhostActionButton}"
+                                Margin="0,0,0,4"
+                                Command="{Binding RestoreMediaAssociationCommand}">
+                            <StackPanel Orientation="Horizontal">
+                                <materialDesign:PackIcon Kind="Restore" Width="14" Height="14" Margin="0,0,5,0" VerticalAlignment="Center" />
+                                <TextBlock Text="恢复默认" />
+                            </StackPanel>
+                        </Button>
+                        <Button Style="{StaticResource GhostActionButton}"
+                                Margin="6,0,0,4"
+                                Command="{Binding OpenDefaultAppsSettingsCommand}">
+                            <StackPanel Orientation="Horizontal">
+                                <materialDesign:PackIcon Kind="CogOutline" Width="14" Height="14" Margin="0,0,5,0" VerticalAlignment="Center" />
+                                <TextBlock Text="默认应用" />
+                            </StackPanel>
+                        </Button>
+                    </WrapPanel>
+                </Grid>
             </materialDesign:Card>
         </Grid>
     </Grid>

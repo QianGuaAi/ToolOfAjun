@@ -1,22 +1,31 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using Microsoft.Win32;
 
 namespace MyTools.Services
 {
-    public sealed class InstalledProgram
+    public sealed class InstalledProgram : INotifyPropertyChanged
     {
+        private bool _isSelected;
+
         public string DisplayName { get; set; }
         public string DisplayVersion { get; set; }
         public string Publisher { get; set; }
         public string InstallLocation { get; set; }
+        public DateTime? InstallDate { get; set; }
         public string InstallDateDisplay { get; set; }
+        public int EstimatedSizeKb { get; set; }
         public string EstimatedSizeDisplay { get; set; }
         public string UninstallString { get; set; }
+        public string QuietUninstallString { get; set; }
+        public bool IsSilentUninstallCandidate { get; set; }
+        public string SilentUninstallReason { get; set; }
         public bool RequiresAdmin { get; set; }
         public string Source { get; set; }
 
@@ -24,6 +33,32 @@ namespace MyTools.Services
         public string VersionDisplay => string.IsNullOrWhiteSpace(DisplayVersion) ? "-" : DisplayVersion;
         public string InstallLocationDisplay => string.IsNullOrWhiteSpace(InstallLocation) ? "-" : InstallLocation;
         public string RequiresAdminDisplay => RequiresAdmin ? "可能需要管理员权限" : "当前用户可卸载";
+        public string SilentUninstallDisplay => IsSilentUninstallCandidate ? "可静默候选" : "需交互卸载";
+        public string SilentUninstallDetail => IsSilentUninstallCandidate
+            ? (string.IsNullOrWhiteSpace(SilentUninstallReason) ? "检测到可能可静默卸载的命令。" : SilentUninstallReason)
+            : "未发现可靠静默卸载参数；MyTools 默认只启动交互卸载向导。";
+
+        public bool IsSelected
+        {
+            get => _isSelected;
+            set
+            {
+                if (_isSelected == value)
+                {
+                    return;
+                }
+
+                _isSelected = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public event PropertyChangedEventHandler PropertyChanged;
+
+        private void OnPropertyChanged([CallerMemberName] string propertyName = null)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
     }
 
     public static class InstalledProgramService
@@ -147,15 +182,25 @@ namespace MyTools.Services
                 return null;
             }
 
+            var installDateRaw = ReadString(key, "InstallDate");
+            var estimatedSizeKb = ReadDword(key, "EstimatedSize");
+            var quietUninstallString = ReadString(key, "QuietUninstallString");
+            var silentInfo = DetectSilentUninstallCandidate(uninstallString, quietUninstallString);
+
             return new InstalledProgram
             {
                 DisplayName = displayName.Trim(),
                 DisplayVersion = ReadString(key, "DisplayVersion"),
                 Publisher = ReadString(key, "Publisher"),
                 InstallLocation = ReadString(key, "InstallLocation"),
-                InstallDateDisplay = FormatInstallDate(ReadString(key, "InstallDate")),
-                EstimatedSizeDisplay = FormatEstimatedSize(ReadDword(key, "EstimatedSize")),
+                InstallDate = ParseInstallDate(installDateRaw),
+                InstallDateDisplay = FormatInstallDate(installDateRaw),
+                EstimatedSizeKb = estimatedSizeKb,
+                EstimatedSizeDisplay = FormatEstimatedSize(estimatedSizeKb),
                 UninstallString = uninstallString.Trim(),
+                QuietUninstallString = quietUninstallString.Trim(),
+                IsSilentUninstallCandidate = silentInfo.IsCandidate,
+                SilentUninstallReason = silentInfo.Reason,
                 RequiresAdmin = requiresAdmin,
                 Source = source
             };
@@ -175,6 +220,31 @@ namespace MyTools.Services
             }
 
             return 0;
+        }
+
+        private static DateTime? ParseInstallDate(string rawValue)
+        {
+            if (string.IsNullOrWhiteSpace(rawValue))
+            {
+                return null;
+            }
+
+            if (DateTime.TryParseExact(
+                rawValue,
+                "yyyyMMdd",
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out var exactDate))
+            {
+                return exactDate.Date;
+            }
+
+            if (DateTime.TryParse(rawValue, CultureInfo.CurrentCulture, DateTimeStyles.None, out var looseDate))
+            {
+                return looseDate.Date;
+            }
+
+            return null;
         }
 
         private static string FormatInstallDate(string rawValue)
@@ -218,6 +288,57 @@ namespace MyTools.Services
                 item.DisplayVersion ?? string.Empty,
                 item.Publisher ?? string.Empty,
                 item.UninstallString ?? string.Empty);
+        }
+
+        private static SilentUninstallInfo DetectSilentUninstallCandidate(string uninstallString, string quietUninstallString)
+        {
+            if (!string.IsNullOrWhiteSpace(quietUninstallString))
+            {
+                return new SilentUninstallInfo
+                {
+                    IsCandidate = true,
+                    Reason = "注册表提供 QuietUninstallString，适合人工确认后静默执行。"
+                };
+            }
+
+            var command = uninstallString ?? string.Empty;
+            if (command.IndexOf("msiexec", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return new SilentUninstallInfo
+                {
+                    IsCandidate = true,
+                    Reason = "MSI 卸载命令可追加 /qn /norestart 作为静默候选。"
+                };
+            }
+
+            if (ContainsSilentToken(command))
+            {
+                return new SilentUninstallInfo
+                {
+                    IsCandidate = true,
+                    Reason = "卸载命令已包含常见静默参数，仍需人工确认。"
+                };
+            }
+
+            return SilentUninstallInfo.None;
+        }
+
+        private static bool ContainsSilentToken(string command)
+        {
+            if (string.IsNullOrWhiteSpace(command))
+            {
+                return false;
+            }
+
+            var normalized = " " + command.Replace('\t', ' ').Trim().ToLowerInvariant() + " ";
+            return normalized.Contains(" /quiet ")
+                || normalized.Contains(" /qn ")
+                || normalized.Contains(" /s ")
+                || normalized.Contains(" /silent ")
+                || normalized.Contains(" /verysilent ")
+                || normalized.Contains(" -quiet ")
+                || normalized.Contains(" -silent ")
+                || normalized.Contains(" --silent ");
         }
 
         private static ProcessStartInfo BuildStartInfo(string commandLine)
@@ -347,6 +468,14 @@ namespace MyTools.Services
             {
                 return string.Empty;
             }
+        }
+
+        private sealed class SilentUninstallInfo
+        {
+            public static readonly SilentUninstallInfo None = new SilentUninstallInfo();
+
+            public bool IsCandidate { get; set; }
+            public string Reason { get; set; } = string.Empty;
         }
     }
 }

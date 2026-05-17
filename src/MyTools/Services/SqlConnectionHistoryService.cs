@@ -55,7 +55,18 @@ namespace MyTools.Services
                 LastPassword = Protect(options.Password),
                 ServerAddresses = MoveToTop(current.ServerAddresses, options.ServerAddress),
                 Usernames = MoveToTop(current.Usernames, options.Username),
-                Passwords = MoveToTop(current.Passwords, options.Password).Select(Protect).ToList()
+                Passwords = MoveToTop(current.Passwords, options.Password).Select(Protect).ToList(),
+                RecentConnections = MoveRecentConnectionToTop(
+                        current.RecentConnections,
+                        new SqlConnectionHistoryItem
+                        {
+                            ServerAddress = options.ServerAddress?.Trim(),
+                            Port = options.Port?.Trim(),
+                            Username = options.Username?.Trim(),
+                            Password = options.Password
+                        })
+                    .Select(ProtectRecentConnection)
+                    .ToList()
             };
 
             await SaveStorageAsync(storage).ConfigureAwait(false);
@@ -122,9 +133,9 @@ namespace MyTools.Services
                     LastPassword = storage.LastPassword,
                     ServerAddresses = storage.ServerAddresses ?? new List<string>(),
                     Usernames = storage.Usernames ?? new List<string>(),
-                    Passwords = storage.Passwords ?? new List<string>()
-                };
-            }
+                Passwords = storage.Passwords ?? new List<string>()
+            };
+        }
         }
 
         private static SqlConnectionHistoryData GetOrCreateProviderData(SqlConnectionHistoryStorage storage, SqlProviderKind providerKind)
@@ -144,11 +155,27 @@ namespace MyTools.Services
             data.ServerAddresses = data.ServerAddresses ?? new List<string>();
             data.Usernames = data.Usernames ?? new List<string>();
             data.Passwords = data.Passwords ?? new List<string>();
+            data.RecentConnections = data.RecentConnections ?? new List<SqlConnectionHistoryItem>();
             return data;
         }
 
         private static SqlConnectionHistory BuildHistory(SqlConnectionHistoryData data)
         {
+            var recentConnections = CleanRecentConnections(data?.RecentConnections)
+                .Select(UnprotectRecentConnection)
+                .Where(item => !string.IsNullOrWhiteSpace(item.ServerAddress))
+                .ToList();
+            if (recentConnections.Count == 0 && !string.IsNullOrWhiteSpace(data?.LastServerAddress))
+            {
+                recentConnections.Add(new SqlConnectionHistoryItem
+                {
+                    ServerAddress = data.LastServerAddress,
+                    Port = data.LastPort,
+                    Username = data.LastUsername,
+                    Password = Unprotect(data.LastPassword)
+                });
+            }
+
             return new SqlConnectionHistory
             {
                 LastServerAddress = data?.LastServerAddress,
@@ -157,7 +184,8 @@ namespace MyTools.Services
                 LastPassword = Unprotect(data?.LastPassword),
                 ServerAddresses = Clean(data?.ServerAddresses),
                 Usernames = Clean(data?.Usernames),
-                Passwords = Clean((data?.Passwords ?? new List<string>()).Select(Unprotect))
+                Passwords = Clean((data?.Passwords ?? new List<string>()).Select(Unprotect)),
+                RecentConnections = recentConnections
             };
         }
 
@@ -176,6 +204,66 @@ namespace MyTools.Services
             }
 
             return result;
+        }
+
+        private static List<SqlConnectionHistoryItem> MoveRecentConnectionToTop(
+            IEnumerable<SqlConnectionHistoryItem> values,
+            SqlConnectionHistoryItem value)
+        {
+            var result = new List<SqlConnectionHistoryItem>();
+            AddRecentIfValid(result, value);
+
+            foreach (var item in values ?? Enumerable.Empty<SqlConnectionHistoryItem>())
+            {
+                AddRecentIfValid(result, item);
+                if (result.Count >= MaxHistoryItems)
+                {
+                    break;
+                }
+            }
+
+            return result;
+        }
+
+        private static List<SqlConnectionHistoryItem> CleanRecentConnections(IEnumerable<SqlConnectionHistoryItem> values)
+        {
+            var result = new List<SqlConnectionHistoryItem>();
+            foreach (var item in values ?? Enumerable.Empty<SqlConnectionHistoryItem>())
+            {
+                AddRecentIfValid(result, item);
+                if (result.Count >= MaxHistoryItems)
+                {
+                    break;
+                }
+            }
+
+            return result;
+        }
+
+        private static void AddRecentIfValid(ICollection<SqlConnectionHistoryItem> values, SqlConnectionHistoryItem value)
+        {
+            if (value == null || string.IsNullOrWhiteSpace(value.ServerAddress))
+            {
+                return;
+            }
+
+            var normalized = new SqlConnectionHistoryItem
+            {
+                ServerAddress = value.ServerAddress?.Trim(),
+                Port = value.Port?.Trim(),
+                Username = value.Username?.Trim(),
+                Password = value.Password
+            };
+
+            if (values.Any(item =>
+                    string.Equals(item.ServerAddress, normalized.ServerAddress, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(item.Port ?? string.Empty, normalized.Port ?? string.Empty, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(item.Username ?? string.Empty, normalized.Username ?? string.Empty, StringComparison.OrdinalIgnoreCase)))
+            {
+                return;
+            }
+
+            values.Add(normalized);
         }
 
         private static List<string> Clean(IEnumerable<string> values)
@@ -215,6 +303,38 @@ namespace MyTools.Services
             return Convert.ToBase64String(ProtectedData.Protect(bytes, null, DataProtectionScope.CurrentUser));
         }
 
+        private static SqlConnectionHistoryItem ProtectRecentConnection(SqlConnectionHistoryItem value)
+        {
+            if (value == null)
+            {
+                return null;
+            }
+
+            return new SqlConnectionHistoryItem
+            {
+                ServerAddress = value.ServerAddress,
+                Port = value.Port,
+                Username = value.Username,
+                Password = Protect(value.Password)
+            };
+        }
+
+        private static SqlConnectionHistoryItem UnprotectRecentConnection(SqlConnectionHistoryItem value)
+        {
+            if (value == null)
+            {
+                return null;
+            }
+
+            return new SqlConnectionHistoryItem
+            {
+                ServerAddress = value.ServerAddress,
+                Port = value.Port,
+                Username = value.Username,
+                Password = Unprotect(value.Password)
+            };
+        }
+
         private static string Unprotect(string value)
         {
             if (string.IsNullOrEmpty(value))
@@ -246,6 +366,7 @@ namespace MyTools.Services
             public List<string> ServerAddresses { get; set; }
             public List<string> Usernames { get; set; }
             public List<string> Passwords { get; set; }
+            public List<SqlConnectionHistoryItem> RecentConnections { get; set; }
         }
 
         private sealed class SqlConnectionHistoryData
@@ -257,7 +378,19 @@ namespace MyTools.Services
             public List<string> ServerAddresses { get; set; } = new List<string>();
             public List<string> Usernames { get; set; } = new List<string>();
             public List<string> Passwords { get; set; } = new List<string>();
+            public List<SqlConnectionHistoryItem> RecentConnections { get; set; } = new List<SqlConnectionHistoryItem>();
         }
+    }
+
+    public class SqlConnectionHistoryItem
+    {
+        public string ServerAddress { get; set; }
+        public string Port { get; set; }
+        public string Username { get; set; }
+        public string Password { get; set; }
+
+        public string ServerDisplay => string.IsNullOrWhiteSpace(Port) ? ServerAddress : $"{ServerAddress}:{Port}";
+        public string UsernameDisplay => string.IsNullOrWhiteSpace(Username) ? "未填写用户名" : Username;
     }
 
     public class SqlConnectionHistory
@@ -269,5 +402,6 @@ namespace MyTools.Services
         public List<string> ServerAddresses { get; set; } = new List<string>();
         public List<string> Usernames { get; set; } = new List<string>();
         public List<string> Passwords { get; set; } = new List<string>();
+        public List<SqlConnectionHistoryItem> RecentConnections { get; set; } = new List<SqlConnectionHistoryItem>();
     }
 }

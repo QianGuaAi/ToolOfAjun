@@ -18,14 +18,26 @@ $payloadZip = Join-Path $artifactsRoot "MyToolsPayload.zip"
 $setupOutput = Join-Path $repoRoot "src\MyTools.Installer\bin\$Configuration\net48\MyToolsSetup.exe"
 $setupArtifact = Join-Path $artifactsRoot "MyToolsSetup.exe"
 
+function Invoke-CheckedDotnetBuild {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string[]]$Arguments
+    )
+
+    & dotnet @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "dotnet build failed: dotnet $($Arguments -join ' ')"
+    }
+}
+
 New-Item -ItemType Directory -Force -Path $artifactsRoot | Out-Null
 if (Test-Path $payloadRoot) {
     Remove-Item -LiteralPath $payloadRoot -Recurse -Force
 }
 New-Item -ItemType Directory -Force -Path $payloadRoot | Out-Null
 
-dotnet build $mainProject -c $Configuration
-dotnet build $uninstallerProject -c $Configuration /p:Version=$Version
+Invoke-CheckedDotnetBuild @("build", $mainProject, "-c", $Configuration)
+Invoke-CheckedDotnetBuild @("build", $uninstallerProject, "-c", $Configuration, "/p:Version=$Version")
 
 $requiredFiles = @(
     "MyTools.exe",
@@ -56,7 +68,7 @@ if (Test-Path $payloadZip) {
 
 Compress-Archive -Path (Join-Path $payloadRoot "*") -DestinationPath $payloadZip -CompressionLevel Optimal
 
-dotnet build $installerProject -c $Configuration /p:Version=$Version /p:PayloadZip="$payloadZip" /p:UninstallerExe="$uninstallerOutput"
+Invoke-CheckedDotnetBuild @("build", $installerProject, "-c", $Configuration, "/p:Version=$Version", "/p:PayloadZip=$payloadZip", "/p:UninstallerExe=$uninstallerOutput")
 
 Copy-Item -LiteralPath $setupOutput -Destination $setupArtifact -Force
 

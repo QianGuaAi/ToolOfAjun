@@ -120,13 +120,13 @@ namespace MyTools.Services
                 Year = year,
                 Month = month,
                 VersionName = string.IsNullOrWhiteSpace(versionName) ? "v1" : versionName,
-                DailyRestQuotas = new List<int>(days)
+                DailyRestQuotas = new List<double>(days)
             };
 
             for (int d = 1; d <= days; d++)
             {
                 var dow = new DateTime(year, month, d).DayOfWeek;
-                int q = 6;
+                double q = 6;
                 if (dow == DayOfWeek.Saturday) q = 8;
                 else if (dow == DayOfWeek.Sunday) q = 9;
                 sched.DailyRestQuotas.Add(q);

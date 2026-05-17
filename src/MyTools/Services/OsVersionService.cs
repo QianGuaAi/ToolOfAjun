@@ -61,6 +61,9 @@ namespace MyTools.Services
         /// <summary>Windows 10 / 11 真实主版本号为 10。</summary>
         public static bool IsWindows10OrGreater => MajorVersion >= 10;
 
+        /// <summary>Windows 10 1903 起始构建号 18362，WindowsOCR 从此版本开始可用。</summary>
+        public static bool IsWindows10Version1903OrGreater => IsWindows10OrGreater && BuildNumber >= 18362;
+
         /// <summary>Windows 11 起始构建号 22000。</summary>
         public static bool IsWindows11OrGreater => IsWindows10OrGreater && BuildNumber >= 22000;
 

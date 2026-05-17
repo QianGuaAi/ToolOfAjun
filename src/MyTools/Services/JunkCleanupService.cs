@@ -602,8 +602,66 @@ Start-Service -Name dosvc -ErrorAction SilentlyContinue";
         }
 
         public string BytesDisplay => FileSizeFormatter.Format(Bytes);
+        public string CategoryDisplay => GetCategoryDisplay(Category);
+        public string RiskDisplay => GetRiskDisplay(Category);
+        public string AdviceDisplay => GetAdviceDisplay(Category, Reason);
 
         public event System.ComponentModel.PropertyChangedEventHandler PropertyChanged;
+
+        private static string GetCategoryDisplay(JunkCategory category)
+        {
+            switch (category)
+            {
+                case JunkCategory.UserTemp: return "用户临时";
+                case JunkCategory.SystemTemp: return "系统临时";
+                case JunkCategory.RecycleBin: return "回收站";
+                case JunkCategory.BrowserCache: return "浏览器缓存";
+                case JunkCategory.ThumbnailCache: return "缩略图";
+                case JunkCategory.PrefetchAged: return "Prefetch";
+                case JunkCategory.WindowsUpdateCache: return "更新缓存";
+                case JunkCategory.DeliveryOptimization: return "传递优化";
+                case JunkCategory.InstallerLeftover: return "安装残留";
+                default: return category.ToString();
+            }
+        }
+
+        private static string GetRiskDisplay(JunkCategory category)
+        {
+            switch (category)
+            {
+                case JunkCategory.RecycleBin:
+                case JunkCategory.BrowserCache:
+                case JunkCategory.SystemTemp:
+                case JunkCategory.WindowsUpdateCache:
+                case JunkCategory.DeliveryOptimization:
+                    return "中";
+                default:
+                    return "低";
+            }
+        }
+
+        private static string GetAdviceDisplay(JunkCategory category, string reason)
+        {
+            switch (category)
+            {
+                case JunkCategory.RecycleBin:
+                    return "确认不再需要后清理";
+                case JunkCategory.BrowserCache:
+                    return "关闭浏览器后清理";
+                case JunkCategory.SystemTemp:
+                case JunkCategory.WindowsUpdateCache:
+                case JunkCategory.DeliveryOptimization:
+                    return "需管理员权限，按提示授权";
+                case JunkCategory.ThumbnailCache:
+                    return "会自动重建，可清理";
+                case JunkCategory.PrefetchAged:
+                    return "仅清理 30 天前缓存";
+                case JunkCategory.InstallerLeftover:
+                    return "仅删除空目录";
+                default:
+                    return string.IsNullOrWhiteSpace(reason) ? "可清理" : reason;
+            }
+        }
     }
 
     public enum JunkCategory

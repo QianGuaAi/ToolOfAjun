@@ -112,6 +112,9 @@ namespace MyTools.Services
         public List<CodexProfileSettings> CodexProfiles { get; set; } = new List<CodexProfileSettings>();
         public string RecordingOutputFolder { get; set; } = string.Empty;
         public string AudioOutputFolder { get; set; } = string.Empty;
+        public List<RecentPlaylistSettings> RecentPlaylists { get; set; } = new List<RecentPlaylistSettings>();
+        public List<FavoritePlaylistSettings> FavoritePlaylists { get; set; } = new List<FavoritePlaylistSettings>();
+        public List<RecentWeChatBackupSettings> RecentWeChatBackups { get; set; } = new List<RecentWeChatBackupSettings>();
     }
 
     public class HotkeySettings
@@ -125,8 +128,32 @@ namespace MyTools.Services
     {
         public string Name { get; set; }
         public string Remark { get; set; }
+        public string Tags { get; set; }
         public string FolderPath { get; set; }
         public string ConfigTomlContentProtected { get; set; }
         public string AuthJsonContentProtected { get; set; }
+        public DateTime? LastAppliedAt { get; set; }
+    }
+
+    public class RecentPlaylistSettings
+    {
+        public string FilePath { get; set; }
+        public DateTime LastUsedAt { get; set; }
+    }
+
+    public class RecentWeChatBackupSettings
+    {
+        public string FilePath { get; set; }
+        public DateTime LastUsedAt { get; set; }
+        public int FileCount { get; set; }
+        public long TotalBytes { get; set; }
+    }
+
+    public class FavoritePlaylistSettings
+    {
+        public string Name { get; set; }
+        public List<string> FilePaths { get; set; } = new List<string>();
+        public DateTime CreatedAt { get; set; }
+        public DateTime LastUsedAt { get; set; }
     }
 }

@@ -6,12 +6,17 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
 using MyTools.Services;
+using MyTools.Shared;
 
 namespace MyTools
 {
     public partial class App : Application
     {
         private static readonly string LogPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "MyTools.startup.log");
+        private static readonly string PendingOpenPathFile = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "MyTools",
+            "pending-open.txt");
 
         private static Mutex _singleInstanceMutex;
         private static EventWaitHandle _activationEvent;
@@ -33,6 +38,7 @@ namespace MyTools
                 {
                     try
                     {
+                        WritePendingOpenPath(e.Args);
                         using (var ev = EventWaitHandle.OpenExisting(@"Local\MyTools_Activate"))
                             ev.Set();
                     }
@@ -63,6 +69,10 @@ namespace MyTools
                                     win.WindowState = WindowState.Normal;
                                 win.Activate();
                                 win.Focus();
+                                if (win is MainWindow typedMainWindow)
+                                {
+                                    TryOpenPendingPath(typedMainWindow);
+                                }
                             });
                         }
                         catch { }
@@ -99,6 +109,7 @@ namespace MyTools
                 var mainWindow = new MainWindow();
                 MainWindow = mainWindow;
                 mainWindow.Show();
+                TryOpenStartupPath(mainWindow, e.Args);
             }
             catch (Exception ex)
             {
@@ -176,6 +187,73 @@ namespace MyTools
             catch
             {
             }
+        }
+
+        private static void TryOpenStartupPath(MainWindow mainWindow, string[] args)
+        {
+            var path = ResolveOpenPath(args);
+            if (path != null)
+            {
+                mainWindow.OpenMediaFile(path);
+            }
+        }
+
+        private static void TryOpenPendingPath(MainWindow mainWindow)
+        {
+            try
+            {
+                if (!File.Exists(PendingOpenPathFile))
+                {
+                    return;
+                }
+
+                var path = File.ReadAllText(PendingOpenPathFile, Encoding.UTF8).Trim();
+                try { File.Delete(PendingOpenPathFile); } catch { }
+                if (!string.IsNullOrWhiteSpace(path) && File.Exists(path))
+                {
+                    mainWindow.OpenMediaFile(path);
+                }
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Warning("Open pending media failed: {Msg}", ex.Message);
+            }
+        }
+
+        private static void WritePendingOpenPath(string[] args)
+        {
+            var path = ResolveOpenPath(args);
+            if (path == null)
+            {
+                return;
+            }
+
+            Directory.CreateDirectory(Path.GetDirectoryName(PendingOpenPathFile));
+            File.WriteAllText(PendingOpenPathFile, path, Encoding.UTF8);
+        }
+
+        private static string ResolveOpenPath(string[] args)
+        {
+            if (args == null)
+            {
+                return null;
+            }
+
+            foreach (var arg in args)
+            {
+                var path = (arg ?? string.Empty).Trim('"');
+                if (!File.Exists(path))
+                {
+                    continue;
+                }
+
+                if (MediaFileAssociationCore.IsSupportedMediaExtension(Path.GetExtension(path)))
+                {
+                    return Path.GetFullPath(path);
+                }
+            }
+
+            return null;
         }
     }
 }

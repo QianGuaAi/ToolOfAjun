@@ -84,17 +84,8 @@ namespace MyTools.Services
             w.WriteStartElement("worksheet", "http://schemas.openxmlformats.org/spreadsheetml/2006/main");
             w.WriteAttributeString("xmlns", "r", null, "http://schemas.openxmlformats.org/officeDocument/2006/relationships");
 
-            // ----- 列宽 -----
-            w.WriteStartElement("cols");
-            // 姓名列
-            WriteCol(w, 1, 1, 10.5);
-            // 日期列（按是否节假日，宽度都 4.2）
-            WriteCol(w, 2, 1 + days, 4.2);
-            // 统计列
-            WriteCol(w, 2 + days, totalCols, 7.5);
-            w.WriteEndElement();
-
             // ----- 冻结窗口 -----
+            // OpenXML 顺序要求 sheetViews 在 cols 之前，否则 Excel 会提示修复工作簿。
             w.WriteStartElement("sheetViews");
             w.WriteStartElement("sheetView");
             w.WriteAttributeString("workbookViewId", "0");
@@ -106,6 +97,16 @@ namespace MyTools.Services
             w.WriteAttributeString("state", "frozen");
             w.WriteEndElement();
             w.WriteEndElement();
+            w.WriteEndElement();
+
+            // ----- 列宽 -----
+            w.WriteStartElement("cols");
+            // 姓名列
+            WriteCol(w, 1, 1, 10.5);
+            // 日期列（按是否节假日，宽度都 4.2）
+            WriteCol(w, 2, 1 + days, 4.2);
+            // 统计列
+            WriteCol(w, 2 + days, totalCols, 7.5);
             w.WriteEndElement();
 
             w.WriteStartElement("sheetData");
@@ -144,14 +145,15 @@ namespace MyTools.Services
             WriteStr(w, Cell(4 + days, 2), "", styles.S("header"));
             w.WriteEndElement();
 
-            // ---------- 第3行：需休 ----------
+            // ---------- 第3行：总休目标 ----------
             w.WriteStartElement("row");
             w.WriteAttributeString("r", "3");
-            WriteStr(w, Cell(1, 3), "需休", styles.S("header"));
+            WriteStr(w, Cell(1, 3), "总休", styles.S("header"));
             for (int d = 0; d < days; d++)
             {
-                int quota = d < sched.DailyRestQuotas.Count ? sched.DailyRestQuotas[d] : 0;
-                WriteNum(w, Cell(2 + d, 3), quota.ToString(CultureInfo.InvariantCulture), styles.S("header"));
+                var actual = ComputeColumnRestCount(sched, d);
+                var quota = d < sched.DailyRestQuotas.Count ? sched.DailyRestQuotas[d] : 0;
+                WriteNum(w, Cell(2 + d, 3), FormatStat(quota), styles.S(Math.Abs(actual - quota) > 0.001 ? "statBad" : "statGood"));
             }
             WriteStr(w, Cell(2 + days, 3), "", styles.S("header"));
             WriteStr(w, Cell(3 + days, 3), "", styles.S("header"));
@@ -209,6 +211,25 @@ namespace MyTools.Services
         {
             return v % 1 == 0 ? ((int)v).ToString(CultureInfo.InvariantCulture)
                               : v.ToString("0.#", CultureInfo.InvariantCulture);
+        }
+
+        private static double ComputeColumnRestCount(ScheduleVersion sched, int dayIdx)
+        {
+            if (sched == null || dayIdx < 0)
+            {
+                return 0;
+            }
+
+            double sum = 0;
+            foreach (var emp in sched.Employees)
+            {
+                if (emp.Cells != null && dayIdx < emp.Cells.Count)
+                {
+                    sum += ShiftCodes.RestDays(emp.Cells[dayIdx].Code);
+                }
+            }
+
+            return sum;
         }
 
         // ============================ Cell helpers ============================
@@ -323,8 +344,8 @@ namespace MyTools.Services
                 }
                 int fillEmptyHoliday = FillSolid("FFF8F0");
 
-                // 边框：0=无, 1=四向细边
-                const int BORDER_NONE = 0, BORDER_THIN = 1;
+                // 边框：1=四向细边
+                const int BORDER_THIN = 1;
 
                 int RegisterXf(int fontId, int fillId, int borderId, string customAlign = null)
                 {
@@ -347,6 +368,7 @@ namespace MyTools.Services
                 t._keyToIndex["empty"] = RegisterXf(FONT_REG, 0, BORDER_THIN, CenterAlign);
                 t._keyToIndex["emptyHoliday"] = RegisterXf(FONT_REG, fillEmptyHoliday, BORDER_THIN, CenterAlign);
                 t._keyToIndex["stat"] = RegisterXf(FONT_BOLD, 0, BORDER_THIN, CenterAlign);
+                t._keyToIndex["statGood"] = RegisterXf(FONT_BOLD, fillEmptyHoliday, BORDER_THIN, CenterAlign);
                 t._keyToIndex["statBad"] = RegisterXf(FONT_BOLD_RED, 0, BORDER_THIN, CenterAlign);
 
                 foreach (var kv in ShiftColors)

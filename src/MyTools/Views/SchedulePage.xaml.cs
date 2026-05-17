@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using MyTools.Services;
 using MyTools.ViewModels;
 
@@ -13,11 +14,25 @@ namespace MyTools.Views
     public partial class SchedulePage : UserControl
     {
         private ScheduleViewModel _vm;
+        private readonly DispatcherTimer _rebuildTimer;
+        private int _focusedEmployeeIndex = -1;
+        private int _focusedDayIndex = -1;
+        private double _scheduleZoom = 1.0;
+        private const double MinScheduleZoom = 0.65;
+        private const double MaxScheduleZoom = 1.8;
+        private const double ScheduleZoomStep = 0.1;
         private static readonly string[] DowZh = { "日", "一", "二", "三", "四", "五", "六" };
 
         public SchedulePage()
         {
             InitializeComponent();
+            ApplyScheduleZoom();
+            _rebuildTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(45) };
+            _rebuildTimer.Tick += (s, e) =>
+            {
+                _rebuildTimer.Stop();
+                Rebuild();
+            };
             DataContextChanged += SchedulePage_DataContextChanged;
         }
 
@@ -27,18 +42,38 @@ namespace MyTools.Views
             {
                 _vm.ScheduleStructureChanged -= Vm_ScheduleStructureChanged;
                 _vm.ScheduleDataChanged -= Vm_ScheduleDataChanged;
+                _vm.ScheduleCellFocusRequested -= Vm_ScheduleCellFocusRequested;
             }
             _vm = e.NewValue as ScheduleViewModel;
             if (_vm != null)
             {
                 _vm.ScheduleStructureChanged += Vm_ScheduleStructureChanged;
                 _vm.ScheduleDataChanged += Vm_ScheduleDataChanged;
+                _vm.ScheduleCellFocusRequested += Vm_ScheduleCellFocusRequested;
                 Rebuild();
             }
         }
 
-        private void Vm_ScheduleStructureChanged(object sender, EventArgs e) => Rebuild();
-        private void Vm_ScheduleDataChanged(object sender, EventArgs e) => Rebuild();
+        private void Vm_ScheduleStructureChanged(object sender, EventArgs e) => QueueRebuild();
+        private void Vm_ScheduleDataChanged(object sender, EventArgs e) => QueueRebuild();
+        private void Vm_ScheduleCellFocusRequested(object sender, ScheduleCellFocusRequestedEventArgs e)
+        {
+            _focusedEmployeeIndex = e.EmployeeIndex;
+            _focusedDayIndex = e.DayIndex;
+            QueueRebuild();
+        }
+
+        private void QueueRebuild()
+        {
+            if (!Dispatcher.CheckAccess())
+            {
+                Dispatcher.BeginInvoke(new Action(QueueRebuild));
+                return;
+            }
+
+            _rebuildTimer.Stop();
+            _rebuildTimer.Start();
+        }
 
         private void VersionList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
@@ -109,6 +144,44 @@ namespace MyTools.Views
             }
         }
 
+        private void ZoomOut_Click(object sender, RoutedEventArgs e) => SetScheduleZoom(_scheduleZoom - ScheduleZoomStep);
+
+        private void ZoomIn_Click(object sender, RoutedEventArgs e) => SetScheduleZoom(_scheduleZoom + ScheduleZoomStep);
+
+        private void ZoomReset_Click(object sender, RoutedEventArgs e) => SetScheduleZoom(1.0);
+
+        private void ScheduleScroll_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+        {
+            if ((Keyboard.Modifiers & ModifierKeys.Control) != ModifierKeys.Control)
+            {
+                return;
+            }
+
+            SetScheduleZoom(_scheduleZoom + (e.Delta > 0 ? ScheduleZoomStep : -ScheduleZoomStep));
+            e.Handled = true;
+        }
+
+        private void SetScheduleZoom(double value)
+        {
+            _scheduleZoom = Math.Max(MinScheduleZoom, Math.Min(MaxScheduleZoom, value));
+            _scheduleZoom = Math.Round(_scheduleZoom / 0.05) * 0.05;
+            ApplyScheduleZoom();
+        }
+
+        private void ApplyScheduleZoom()
+        {
+            if (ScheduleScale != null)
+            {
+                ScheduleScale.ScaleX = _scheduleZoom;
+                ScheduleScale.ScaleY = _scheduleZoom;
+            }
+
+            if (ZoomText != null)
+            {
+                ZoomText.Text = Math.Round(_scheduleZoom * 100).ToString(CultureInfo.InvariantCulture) + "%";
+            }
+        }
+
         // ===================== Build =====================
         private void Rebuild()
         {
@@ -121,22 +194,22 @@ namespace MyTools.Views
             int days = sched.DayCount;
 
             // Columns: 0=姓名, 1..days=日期, days+1=上班, days+2=休息, days+3=连上, days+4=操作
-            ScheduleHost.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(80) });
-            for (int d = 0; d < days; d++) ScheduleHost.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(36) });
-            ScheduleHost.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(50) });  // 上班
-            ScheduleHost.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(50) });  // 休息
-            ScheduleHost.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(50) });  // 最长连上
-            ScheduleHost.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(40) });  // 操作
+            ScheduleHost.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(72) });
+            for (int d = 0; d < days; d++) ScheduleHost.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(30) });
+            ScheduleHost.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(42) });  // 上班
+            ScheduleHost.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(42) });  // 休息
+            ScheduleHost.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(42) });  // 最长连上
+            ScheduleHost.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(34) });  // 操作
 
-            // Rows: 0=星期, 1=日期, 2=已休, 3=需休, 4..=员工
-            ScheduleHost.RowDefinitions.Add(new RowDefinition { Height = new GridLength(28) });
-            ScheduleHost.RowDefinitions.Add(new RowDefinition { Height = new GridLength(28) });
+            // Rows: 0=星期, 1=日期, 2=每日总休目标, 3..=员工
             ScheduleHost.RowDefinitions.Add(new RowDefinition { Height = new GridLength(24) });
-            ScheduleHost.RowDefinitions.Add(new RowDefinition { Height = new GridLength(28) });
-            for (int i = 0; i < sched.Employees.Count; i++) ScheduleHost.RowDefinitions.Add(new RowDefinition { Height = new GridLength(32) });
+            ScheduleHost.RowDefinitions.Add(new RowDefinition { Height = new GridLength(24) });
+            ScheduleHost.RowDefinitions.Add(new RowDefinition { Height = new GridLength(24) });
+            for (int i = 0; i < sched.Employees.Count; i++) ScheduleHost.RowDefinitions.Add(new RowDefinition { Height = new GridLength(28) });
 
             var headerBg = new SolidColorBrush(Color.FromRgb(0xF1, 0xF3, 0xF6));
             var holidayBg = new SolidColorBrush(Color.FromRgb(0xFF, 0xF4, 0xE6));
+            var quotaMismatchBg = new SolidColorBrush(Color.FromRgb(0xFF, 0xEB, 0xEE));
 
             // Row 0 — 星期
             ScheduleHost.Children.Add(MakeHeaderCell("姓名", 0, 0, headerBg, true));
@@ -164,68 +237,52 @@ namespace MyTools.Views
             ScheduleHost.Children.Add(MakeHeaderCell("", 1, 3 + days, headerBg, false));
             ScheduleHost.Children.Add(MakeHeaderCell("", 1, 4 + days, headerBg, false));
 
-            // Row 2 — 当日实际已休（只读统计）
-            ScheduleHost.Children.Add(MakeHeaderCell("已休", 2, 0, headerBg, true));
+            // Row 2 — 当日总休目标（可编辑，实际不匹配时标红）
+            ScheduleHost.Children.Add(MakeHeaderCell("总休", 2, 0, headerBg, true));
             for (int d = 0; d < days; d++)
             {
-                int actual = _vm.ComputeColumnRestCount(d);
-                int quota = (d < sched.DailyRestQuotas.Count) ? sched.DailyRestQuotas[d] : 0;
-                var fg = (actual >= quota) ? Brushes.DarkGreen : Brushes.Crimson;
-                var tb = new TextBlock
+                int dayIdx = d;
+                double quota = (d < sched.DailyRestQuotas.Count) ? sched.DailyRestQuotas[d] : 0;
+                double actual = _vm.ComputeColumnRestCount(d);
+                var matched = IsQuotaMatched(actual, quota);
+                var quotaTextBox = new TextBox
                 {
-                    Text = actual.ToString(),
-                    Foreground = fg,
+                    Text = FormatStat(quota),
+                    BorderThickness = new Thickness(0),
+                    Background = Brushes.Transparent,
+                    Foreground = matched ? Brushes.DarkGreen : Brushes.Crimson,
+                    HorizontalContentAlignment = HorizontalAlignment.Center,
+                    VerticalContentAlignment = VerticalAlignment.Center,
                     FontSize = 11,
-                    HorizontalAlignment = HorizontalAlignment.Center,
-                    VerticalAlignment = VerticalAlignment.Center,
-                    FontWeight = FontWeights.SemiBold
+                    FontWeight = FontWeights.SemiBold,
+                    IsReadOnly = !_vm.IsEditing,
+                    Tag = d,
+                    ToolTip = matched
+                        ? $"实际休息 {FormatStat(actual)} / 目标 {FormatStat(quota)}"
+                        : $"实际休息 {FormatStat(actual)} / 目标 {FormatStat(quota)}，{(actual > quota ? "多" : "差")} {FormatStat(Math.Abs(actual - quota))}"
                 };
-                ScheduleHost.Children.Add(WrapBorder(tb, 2, 1 + d, headerBg));
+                quotaTextBox.LostFocus += (s, e) =>
+                {
+                    if (TryParseQuota(quotaTextBox.Text, out var q))
+                    {
+                        _vm.UpdateDailyQuota(dayIdx, q);
+                    }
+                    else
+                    {
+                        quotaTextBox.Text = FormatStat(sched.DailyRestQuotas[dayIdx]);
+                    }
+                };
+                ScheduleHost.Children.Add(WrapBorder(quotaTextBox, 2, 1 + d, matched ? headerBg : quotaMismatchBg));
             }
             ScheduleHost.Children.Add(MakeHeaderCell("", 2, 1 + days, headerBg, false));
             ScheduleHost.Children.Add(MakeHeaderCell("", 2, 2 + days, headerBg, false));
             ScheduleHost.Children.Add(MakeHeaderCell("", 2, 3 + days, headerBg, false));
             ScheduleHost.Children.Add(MakeHeaderCell("", 2, 4 + days, headerBg, false));
 
-            // Row 3 — 当日需休人数（可编辑）
-            ScheduleHost.Children.Add(MakeHeaderCell("需休", 3, 0, headerBg, true));
-            for (int d = 0; d < days; d++)
-            {
-                int dayIdx = d;
-                int quota = (d < sched.DailyRestQuotas.Count) ? sched.DailyRestQuotas[d] : 0;
-                var quotaTextBox = new TextBox
-                {
-                    Text = quota.ToString(),
-                    BorderThickness = new Thickness(0),
-                    Background = Brushes.Transparent,
-                    HorizontalContentAlignment = HorizontalAlignment.Center,
-                    VerticalContentAlignment = VerticalAlignment.Center,
-                    FontSize = 12,
-                    IsReadOnly = !_vm.IsEditing,
-                    Tag = d
-                };
-                quotaTextBox.LostFocus += (s, e) =>
-                {
-                    if (int.TryParse(quotaTextBox.Text, out var q) && q >= 0)
-                    {
-                        _vm.UpdateDailyQuota(dayIdx, q);
-                    }
-                    else
-                    {
-                        quotaTextBox.Text = sched.DailyRestQuotas[dayIdx].ToString();
-                    }
-                };
-                ScheduleHost.Children.Add(WrapBorder(quotaTextBox, 3, 1 + d, headerBg));
-            }
-            ScheduleHost.Children.Add(MakeHeaderCell("", 3, 1 + days, headerBg, false));
-            ScheduleHost.Children.Add(MakeHeaderCell("", 3, 2 + days, headerBg, false));
-            ScheduleHost.Children.Add(MakeHeaderCell("", 3, 3 + days, headerBg, false));
-            ScheduleHost.Children.Add(MakeHeaderCell("", 3, 4 + days, headerBg, false));
-
-            // Rows 4+ — 员工
+            // Rows 3+ — 员工
             for (int e = 0; e < sched.Employees.Count; e++)
             {
-                int row = 4 + e;
+                int row = 3 + e;
                 int empIdx = e;
 
                 // Name (editable in edit mode)
@@ -237,7 +294,7 @@ namespace MyTools.Views
                     HorizontalContentAlignment = HorizontalAlignment.Center,
                     VerticalContentAlignment = VerticalAlignment.Center,
                     IsReadOnly = !_vm.IsEditing,
-                    FontSize = 12,
+                    FontSize = 11,
                     FontWeight = FontWeights.SemiBold
                 };
                 nameBox.LostFocus += (s, ev) => _vm.UpdateEmployeeName(empIdx, nameBox.Text);
@@ -248,13 +305,17 @@ namespace MyTools.Views
                 {
                     int dayIdx = d;
                     var cell = sched.Employees[e].Cells[d];
+                    var isFocusedCell = dayIdx == _focusedDayIndex &&
+                                        (_focusedEmployeeIndex < 0 || empIdx == _focusedEmployeeIndex);
                     var btn = new Button
                     {
                         Content = string.IsNullOrEmpty(cell.Code) ? "·" : cell.Code,
-                        FontSize = 13,
+                        FontSize = 12,
                         Padding = new Thickness(0),
                         BorderThickness = new Thickness(0.5),
-                        BorderBrush = new SolidColorBrush(Color.FromRgb(0xE0, 0xE0, 0xE0)),
+                        BorderBrush = isFocusedCell
+                            ? Brushes.Crimson
+                            : new SolidColorBrush(Color.FromRgb(0xE0, 0xE0, 0xE0)),
                         Background = ResolveCellBg(cell, sched.DateOf(d)),
                         Foreground = ResolveCellFg(cell),
                         Cursor = _vm.IsEditing ? Cursors.Hand : Cursors.Arrow,
@@ -262,6 +323,11 @@ namespace MyTools.Views
                         Tag = (empIdx, dayIdx),
                         FontWeight = cell.IsManual ? FontWeights.Bold : FontWeights.Normal
                     };
+                    if (isFocusedCell)
+                    {
+                        btn.BorderThickness = new Thickness(2);
+                        btn.ToolTip = "冲突定位";
+                    }
                     btn.Click += CellButton_Click;
                     Grid.SetRow(btn, row);
                     Grid.SetColumn(btn, 1 + d);
@@ -283,8 +349,8 @@ namespace MyTools.Views
                 var delBtn = new Button
                 {
                     Content = "×",
-                    Width = 24,
-                    Height = 24,
+                    Width = 22,
+                    Height = 22,
                     Padding = new Thickness(0),
                     Margin = new Thickness(0),
                     Style = (Style)FindResource("MaterialDesignFlatButton"),
@@ -331,6 +397,41 @@ namespace MyTools.Views
                     return Brushes.White;
                 default: return Brushes.Black;
             }
+        }
+
+        private static string FormatStat(double value)
+        {
+            return value % 1 == 0
+                ? ((int)value).ToString(CultureInfo.InvariantCulture)
+                : value.ToString("0.#", CultureInfo.InvariantCulture);
+        }
+
+        private static bool IsQuotaMatched(double actual, double quota)
+        {
+            return Math.Abs(actual - quota) < 0.001;
+        }
+
+        private static bool TryParseQuota(string text, out double quota)
+        {
+            quota = 0;
+            text = (text ?? string.Empty).Trim();
+            if (text.Length == 0)
+            {
+                return false;
+            }
+
+            if (!double.TryParse(text, NumberStyles.AllowDecimalPoint, CultureInfo.CurrentCulture, out quota) &&
+                !double.TryParse(text.Replace(',', '.'), NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out quota))
+            {
+                return false;
+            }
+
+            if (quota < 0)
+            {
+                return false;
+            }
+
+            return Math.Abs(quota * 2 - Math.Round(quota * 2)) < 0.001;
         }
 
         private static Border MakeHeaderCell(string text, int row, int col, Brush bg, bool bold)

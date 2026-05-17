@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Threading;
@@ -23,8 +24,9 @@ namespace MyTools.Services
             string databaseName,
             TableItem table,
             string filePath,
-            CancellationToken cancellationToken)
-            => SqlExportService.ExportTableAsync(options, databaseName, table, filePath, cancellationToken);
+            CancellationToken cancellationToken,
+            IProgress<SqlExportProgress> progress = null)
+            => SqlExportService.ExportTableAsync(options, databaseName, table, filePath, cancellationToken, progress);
 
         public Task<DataTable> ExecuteQueryAsync(
             SqlServerConnectionOptions options,

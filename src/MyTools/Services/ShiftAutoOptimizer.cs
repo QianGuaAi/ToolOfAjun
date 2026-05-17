@@ -13,6 +13,8 @@ namespace MyTools.Services
     /// </summary>
     public static class ShiftAutoOptimizer
     {
+        private const double Epsilon = 0.001;
+
         public class OptimizeResult
         {
             public bool Success { get; set; }
@@ -50,18 +52,16 @@ namespace MyTools.Services
             // ============== 主循环：逐天分配 ==============
             for (int d = 0; d < days; d++)
             {
-                int quota = (d < sched.DailyRestQuotas.Count) ? sched.DailyRestQuotas[d] : 0;
+                double quota = (d < sched.DailyRestQuotas.Count) ? sched.DailyRestQuotas[d] : 0;
 
-                // 当天已有的手动休息计数
-                int manualRest = 0;
-                int manualWork = 0;
+                // 当天已有的手动休息计数，精确到 0.5。
+                double manualRest = 0;
                 foreach (var e in sched.Employees)
                 {
                     var c = e.Cells[d];
                     if (c.IsManual && !string.IsNullOrEmpty(c.Code))
                     {
-                        if (ShiftCodes.RestDays(c.Code) >= 1.0) manualRest++;
-                        else if (ShiftCodes.IsWork(c.Code)) manualWork++;
+                        manualRest += ShiftCodes.RestDays(c.Code);
                     }
                 }
 
@@ -72,8 +72,36 @@ namespace MyTools.Services
                     if (!sched.Employees[i].Cells[d].IsManual) candidates.Add(i);
                 }
 
-                int needRest = quota - manualRest;
-                if (needRest < 0) needRest = 0; // 手动已超额，不再加
+                double restNeed = quota - manualRest;
+                if (restNeed < -Epsilon)
+                {
+                    result.Warnings.Add($"{sched.Year}-{sched.Month:00}-{d + 1:00} 手动休息已超额：已休 {FormatNumber(manualRest)}，目标 {FormatNumber(quota)}。");
+                }
+
+                int restToPick;
+                if (restNeed <= Epsilon)
+                {
+                    restToPick = 0;
+                }
+                else
+                {
+                    var rounded = Math.Round(restNeed);
+                    if (Math.Abs(restNeed - rounded) > Epsilon)
+                    {
+                        result.Warnings.Add($"{sched.Year}-{sched.Month:00}-{d + 1:00} 需要再安排 {FormatNumber(restNeed)} 天休息；自动优化只填整天“休”，已按不超额原则安排 {Math.Floor(restNeed)} 天。");
+                        restToPick = (int)Math.Floor(restNeed);
+                    }
+                    else
+                    {
+                        restToPick = (int)rounded;
+                    }
+                }
+
+                if (restToPick > candidates.Count)
+                {
+                    result.Warnings.Add($"{sched.Year}-{sched.Month:00}-{d + 1:00} 可自动安排人员不足：需要 {restToPick} 人休息，仅有 {candidates.Count} 个可改格子。");
+                    restToPick = candidates.Count;
+                }
 
                 // ---- Step 1: 强制休息（连续上班即将达 6 天）----
                 var mustRest = new HashSet<int>();
@@ -86,8 +114,10 @@ namespace MyTools.Services
                 }
 
                 // ---- Step 2: 评分剩余候选 ----
-                var remaining = candidates.Where(i => !mustRest.Contains(i)).ToList();
-                int restToPick = Math.Max(0, needRest - mustRest.Count);
+                if (mustRest.Count > restToPick)
+                {
+                    result.Warnings.Add($"{sched.Year}-{sched.Month:00}-{d + 1:00} 为避免连续上班需要 {mustRest.Count} 人休息，但当日配额只允许 {restToPick} 人自动休息。");
+                }
 
                 // 总休天数（含手动 + 已分配的自动）
                 var totalRest = new double[empCount];
@@ -137,11 +167,13 @@ namespace MyTools.Services
                     int prevRest = CountConsecutiveRestBefore(sched, empIdx, d);
                     if (prevRest >= 2) s -= 8.0;
 
+                    if (mustRest.Contains(empIdx)) s += 10000.0;
+
                     return s;
                 }
 
                 var pickList = new HashSet<int>(
-                    remaining
+                    candidates
                         .Select(i => new { i, score = Score(i) })
                         .OrderByDescending(x => x.score)
                         .ThenBy(x => totalRest[x.i])
@@ -152,47 +184,225 @@ namespace MyTools.Services
                 foreach (var i in candidates)
                 {
                     var cell = sched.Employees[i].Cells[d];
-                    if (mustRest.Contains(i) || pickList.Contains(i))
+                    var nextCode = pickList.Contains(i) ? ShiftCodes.Rest : ShiftCodes.Day;
+                    if (cell.Code != nextCode)
                     {
-                        cell.Code = ShiftCodes.Rest;
-                        // 不标 Manual——保持自动可被再次优化
                         filled++;
+                    }
+                    cell.Code = nextCode;
+                    // 不标 Manual——保持自动可被再次优化
+                }
+            }
+
+            filled += RepairConsecutiveRuns(sched, result.Warnings);
+
+            // ============== 最终校验 ==============
+            var hardIssues = CollectHardConstraintIssues(sched).ToList();
+            foreach (var issue in hardIssues)
+            {
+                result.Warnings.Add(issue);
+            }
+
+            result.Success = hardIssues.Count == 0;
+            result.FilledCells = filled;
+            result.Message = result.Success
+                ? $"已优化 {filled} 个单元格。"
+                : $"已优化 {filled} 个单元格，但仍有 {hardIssues.Count} 项硬约束未满足。";
+            return result;
+        }
+
+        private static int RepairConsecutiveRuns(ScheduleVersion sched, List<string> warnings)
+        {
+            int repairs = 0;
+            int guard = Math.Max(1, sched.DayCount * Math.Max(1, sched.Employees.Count) * 4);
+            while (guard-- > 0)
+            {
+                if (!TryFindOverlongRun(sched, out var empIdx, out var startDay, out var endDay, out var length))
+                {
+                    return repairs;
+                }
+
+                var repaired = false;
+                foreach (var day in CandidateBreakDays(startDay, endDay))
+                {
+                    var cell = sched.Employees[empIdx].Cells[day];
+                    if (cell.IsManual || !ShiftCodes.IsWork(cell.Code))
+                    {
+                        continue;
+                    }
+
+                    if (TryBreakRunOnDay(sched, empIdx, day))
+                    {
+                        repairs++;
+                        repaired = true;
+                        break;
+                    }
+                }
+
+                if (!repaired)
+                {
+                    warnings.Add($"{sched.Employees[empIdx].Name} 连续上班 {length} 天，且连续区间内没有可自动调整的格子。");
+                    return repairs;
+                }
+            }
+
+            warnings.Add("连续上班修复达到迭代上限，请检查冲突侧栏。");
+            return repairs;
+        }
+
+        private static IEnumerable<int> CandidateBreakDays(int startDay, int endDay)
+        {
+            var middle = (startDay + endDay) / 2;
+            return Enumerable.Range(startDay, endDay - startDay + 1)
+                .OrderBy(day => Math.Abs(day - middle));
+        }
+
+        private static bool TryBreakRunOnDay(ScheduleVersion sched, int empIdx, int day)
+        {
+            var quota = day < sched.DailyRestQuotas.Count ? sched.DailyRestQuotas[day] : 0;
+            var actual = ComputeColumnRestCount(sched, day);
+            var offender = sched.Employees[empIdx].Cells[day];
+
+            if (actual + 1.0 <= quota + Epsilon)
+            {
+                offender.Code = ShiftCodes.Rest;
+                return true;
+            }
+
+            if (Math.Abs(actual - quota) > Epsilon)
+            {
+                return false;
+            }
+
+            var donorIndexes = Enumerable.Range(0, sched.Employees.Count)
+                .Where(i => i != empIdx)
+                .Where(i =>
+                {
+                    var cell = sched.Employees[i].Cells[day];
+                    return !cell.IsManual && cell.Code == ShiftCodes.Rest;
+                })
+                .OrderByDescending(i => ComputeTotalRest(sched.Employees[i]))
+                .ToList();
+
+            foreach (var donorIdx in donorIndexes)
+            {
+                var donor = sched.Employees[donorIdx].Cells[day];
+                var oldOffender = offender.Code;
+                var oldDonor = donor.Code;
+                offender.Code = ShiftCodes.Rest;
+                donor.Code = ShiftCodes.Day;
+
+                if (ComputeMaxConsecutiveWork(sched.Employees[empIdx]) <= 5 &&
+                    ComputeMaxConsecutiveWork(sched.Employees[donorIdx]) <= 5)
+                {
+                    return true;
+                }
+
+                offender.Code = oldOffender;
+                donor.Code = oldDonor;
+            }
+
+            return false;
+        }
+
+        private static bool TryFindOverlongRun(ScheduleVersion sched, out int employeeIndex, out int startDay, out int endDay, out int length)
+        {
+            for (int i = 0; i < sched.Employees.Count; i++)
+            {
+                var run = 0;
+                for (int d = 0; d < sched.DayCount; d++)
+                {
+                    if (ShiftCodes.IsWork(sched.Employees[i].Cells[d].Code))
+                    {
+                        run++;
+                        if (run > 5)
+                        {
+                            employeeIndex = i;
+                            startDay = d - run + 1;
+                            endDay = d;
+                            length = run;
+                            return true;
+                        }
                     }
                     else
                     {
-                        cell.Code = ShiftCodes.Day;
-                        filled++;
+                        run = 0;
                     }
                 }
+            }
 
-                // 配额未达成警告
-                int finalRest = manualRest + mustRest.Count + pickList.Count;
-                if (finalRest < quota)
+            employeeIndex = -1;
+            startDay = -1;
+            endDay = -1;
+            length = 0;
+            return false;
+        }
+
+        private static IEnumerable<string> CollectHardConstraintIssues(ScheduleVersion sched)
+        {
+            for (int d = 0; d < sched.DayCount; d++)
+            {
+                var actual = ComputeColumnRestCount(sched, d);
+                var quota = d < sched.DailyRestQuotas.Count ? sched.DailyRestQuotas[d] : 0;
+                var delta = actual - quota;
+                if (Math.Abs(delta) > Epsilon)
                 {
-                    result.Warnings.Add($"{sched.Year}-{sched.Month:00}-{d + 1:00} 休息人数不足：要求 {quota}，仅排到 {finalRest}");
+                    yield return $"{sched.Year}-{sched.Month:00}-{d + 1:00} 实际休息 {FormatNumber(actual)} / 总休目标 {FormatNumber(quota)}，{(delta > 0 ? "多" : "差")} {FormatNumber(Math.Abs(delta))}。";
                 }
             }
 
-            // ============== 最终校验 ==============
-            for (int i = 0; i < empCount; i++)
+            for (int i = 0; i < sched.Employees.Count; i++)
             {
-                int maxRun = 0, run = 0;
-                for (int d = 0; d < days; d++)
-                {
-                    if (ShiftCodes.IsWork(sched.Employees[i].Cells[d].Code)) { run++; if (run > maxRun) maxRun = run; }
-                    else run = 0;
-                }
+                var maxRun = ComputeMaxConsecutiveWork(sched.Employees[i]);
                 if (maxRun > 5)
                 {
-                    result.Warnings.Add($"{sched.Employees[i].Name} 连续上班 {maxRun} 天（应≤5）。");
+                    yield return $"{sched.Employees[i].Name} 连续上班 {maxRun} 天（应≤5）。";
+                }
+            }
+        }
+
+        private static double ComputeColumnRestCount(ScheduleVersion sched, int dayIdx)
+        {
+            double sum = 0;
+            foreach (var emp in sched.Employees)
+            {
+                if (emp.Cells != null && dayIdx < emp.Cells.Count)
+                {
+                    sum += ShiftCodes.RestDays(emp.Cells[dayIdx].Code);
                 }
             }
 
-            result.Success = true;
-            result.FilledCells = filled;
-            result.Message = $"已优化 {filled} 个单元格"
-                + (result.Warnings.Count == 0 ? "。" : $"，{result.Warnings.Count} 项告警。");
-            return result;
+            return sum;
+        }
+
+        private static double ComputeTotalRest(EmployeeRow employee)
+        {
+            return employee.Cells == null ? 0 : employee.Cells.Sum(cell => ShiftCodes.RestDays(cell.Code));
+        }
+
+        private static int ComputeMaxConsecutiveWork(EmployeeRow employee)
+        {
+            var maxRun = 0;
+            var run = 0;
+            foreach (var cell in employee.Cells)
+            {
+                if (ShiftCodes.IsWork(cell.Code))
+                {
+                    run++;
+                    if (run > maxRun) maxRun = run;
+                }
+                else
+                {
+                    run = 0;
+                }
+            }
+
+            return maxRun;
+        }
+
+        private static string FormatNumber(double value)
+        {
+            return Math.Abs(value % 1) < Epsilon ? ((int)Math.Round(value)).ToString() : value.ToString("0.#");
         }
 
         private static int CountConsecutiveWorkBefore(ScheduleVersion sched, int empIdx, int dayIdx)

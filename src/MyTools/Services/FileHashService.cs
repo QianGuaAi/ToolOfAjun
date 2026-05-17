@@ -1,13 +1,19 @@
 using System;
+using System.ComponentModel;
 using System.IO;
+using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace MyTools.Services
 {
-    public class FileHashResult
+    public class FileHashResult : INotifyPropertyChanged
     {
+        private string _expectedHashKind;
+        private string _expectedHash;
+        private string _compareStatus;
+
         public string FilePath { get; set; }
         public string FileName { get; set; }
         public long FileSize { get; set; }
@@ -15,6 +21,31 @@ namespace MyTools.Services
         public string Sha1 { get; set; }
         public string Sha256 { get; set; }
         public string Crc32 { get; set; }
+
+        public string ExpectedHashKind
+        {
+            get => _expectedHashKind;
+            set { _expectedHashKind = value ?? string.Empty; OnPropertyChanged(); }
+        }
+
+        public string ExpectedHash
+        {
+            get => _expectedHash;
+            set { _expectedHash = value ?? string.Empty; OnPropertyChanged(); }
+        }
+
+        public string CompareStatus
+        {
+            get => _compareStatus;
+            set { _compareStatus = value ?? string.Empty; OnPropertyChanged(); }
+        }
+
+        public event PropertyChangedEventHandler PropertyChanged;
+
+        private void OnPropertyChanged([CallerMemberName] string propertyName = null)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
     }
 
     public static class FileHashService
@@ -36,29 +67,28 @@ namespace MyTools.Services
                     FileSize = info.Length
                 };
 
-                progress?.Report("计算中（单遍扫描 MD5 / SHA-1 / SHA-256 / CRC32）…");
+                progress?.Report("计算中（单遍扫描 MD5 / SHA-1 / SHA-256 / CRC32）...");
 
-                // Single-pass: read file once, feed into 3 hash algorithms + CRC32 accumulator.
+                // Single pass: read file once, feed into 3 hash algorithms and CRC32.
                 using (var md5 = new MD5CryptoServiceProvider())
                 using (var sha1 = new SHA1CryptoServiceProvider())
                 using (var sha256 = new SHA256CryptoServiceProvider())
                 using (var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, 1024 * 1024, useAsync: false))
                 {
-                    var buffer = new byte[1024 * 1024]; // 1 MB buffer — better sequential throughput
+                    var buffer = new byte[1024 * 1024];
                     uint crc = 0xFFFFFFFFu;
                     long totalRead = 0;
                     long lastReport = 0;
                     int read;
+
                     while ((read = stream.Read(buffer, 0, buffer.Length)) > 0)
                     {
                         ct.ThrowIfCancellationRequested();
 
-                        // Feed hashes (TransformBlock: incremental update)
                         md5.TransformBlock(buffer, 0, read, null, 0);
                         sha1.TransformBlock(buffer, 0, read, null, 0);
                         sha256.TransformBlock(buffer, 0, read, null, 0);
 
-                        // CRC32
                         for (int i = 0; i < read; i++)
                         {
                             crc = (crc >> 8) ^ Crc32Table[(crc ^ buffer[i]) & 0xFF];
@@ -99,10 +129,11 @@ namespace MyTools.Services
                 {
                     c = (c & 1) != 0 ? (poly ^ (c >> 1)) : (c >> 1);
                 }
+
                 table[i] = c;
             }
+
             return table;
         }
-
     }
 }

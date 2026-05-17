@@ -8,6 +8,7 @@
     <AssemblyName>MyTools</AssemblyName>
     <RootNamespace>MyTools</RootNamespace>
     <ApplicationIcon>Resources\AppIcon.ico</ApplicationIcon>
+    <CopySQLiteInteropFiles>false</CopySQLiteInteropFiles>
   </PropertyGroup>
 
   <ItemGroup>
@@ -16,6 +17,7 @@
     <PackageReference Include="MahApps.Metro" Version="2.4.10" />
     <PackageReference Include="FluentWPF" Version="0.10.2" />
     <PackageReference Include="Dapper" Version="2.1.24" />
+    <PackageReference Include="NAudio" Version="2.2.1" />
     <PackageReference Include="System.Data.SQLite" Version="1.0.118" />
     <PackageReference Include="Npgsql" Version="4.1.13" />
     <PackageReference Include="MySqlConnector" Version="2.3.7" />
@@ -26,8 +28,12 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Stub.System.Data.SQLite.Core.NetFramework" Version="1.0.118" GeneratePathProperty="true" />
-    <PackageReference Include="Microsoft.Windows.SDK.Contracts" Version="10.0.19041.1001" />
+    <PackageReference Include="Microsoft.Windows.SDK.Contracts" Version="10.0.22000.194" />
     <PackageReference Include="LibreHardwareMonitorLib" Version="0.9.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Shared\MediaFileAssociationCore.cs" Link="Shared\MediaFileAssociationCore.cs" />
   </ItemGroup>
 
   <ItemGroup>

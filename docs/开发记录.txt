@@ -116,7 +116,7 @@
 
 ## [2026-05-10] 截图区域录像
 - 新增 `RecordingService` 与 `RecordRegionWindow`，支持可拖拽/可调大小区域录像窗口与开始/停止按钮状态切换。
-- 录像使用 ffmpeg（`NativeBinaries\\ffmpeg\\ffmpeg.exe`）调用 `gdigrab + dshow`，编码为 `H.264 + AAC + MP4`。
+- 录像使用 ffmpeg（`NativeBinaries\\ffmpeg\\ffmpeg.exe`）调用 `gdigrab` 录制画面；当前版本的系统声音由 WASAPI Loopback 采集后合成为 `H.264 + AAC + MP4`。
 - 未检测到音频设备时支持提示后降级为纯画面录制；停止时通过 `q` 优雅退出，超时后兜底 Kill。
 
 ## [2026-05-10] 独立录音
@@ -381,3 +381,520 @@
 - 安装开始时先扫描 HKLM/HKCU 32/64 位卸载注册表视图；发现旧版 `MyTools` 或“阿君的工具”后，静默运行旧卸载器，成功后再继续安装新版。
 - 兼容注册表缺失场景：目标目录存在旧卸载器时直接调用；如果是早期手工复制版本，则停止正在运行的 `MyTools.exe` 并清理已知程序文件后覆盖安装。
 - 构建验证：`artifacts\installer\MyToolsSetup.exe` 生成成功，完整包约 40.65 MB，SHA256 为 `9AB16C3745D012C4E0387DD0499BE94C26769C0F8ED173F89A0EF3804E180AB4`。
+
+## [2026-05-16] 构建警告与 OCR 兼容性优化
+- 关闭占用 `bin\Release\net48\MyTools.exe` 的本地运行实例后重新建立 Release 构建基线，避免输出文件被进程锁定导致 MSB3021/MSB3027。
+- `Microsoft.Windows.SDK.Contracts` 固定为构建实际解析成功的 `10.0.22000.194`，消除 `NU1603` 近似版本警告。
+- `MyTools.csproj` 设置 `CopySQLiteInteropFiles=false`，避免 SQLite stub 包额外复制 `x86/x64/SQLite.Interop.dll` 到 Release 输出目录；SQLite 原生依赖仍由 Costura 嵌入。
+- `ScheduleExcelExporter` 删除未使用的 `BORDER_NONE` 常量，消除 CS0219 警告，不改变排班 Excel 样式输出。
+- `OsVersionService` 新增 `IsWindows10Version1903OrGreater`；`OcrService.IsSupported` 与 OCR 命令统一改用该判断，确保 WindowsOCR 入口只在 Windows 10 1903 及以上可用。
+- `docs/功能说明.md` 同步文件哈希说明：当前实现为 MD5 / SHA-1 / SHA-256 / CRC32 单遍 1 MB 缓冲扫描。
+
+## [2026-05-16] 第二轮改错与格式转换完善
+- 截图工具页的文件哈希结果补齐 CRC32，并与文件验证页共用 `FormatFileHashResult`，避免两个入口展示不一致。
+- 文件哈希初始提示更新为 `MD5 / SHA-1 / SHA-256 / CRC32`。
+- `MediaConvertService.FindFfmpeg` 优先检测 `NativeBinaries\ffmpeg\ffmpeg.exe`，与录像/录音模块和安装包内置路径保持一致。
+- FFmpeg 探测改为并发排空 stdout/stderr，降低外部进程输出阻塞风险。
+- 图片/音视频转换输出路径新增自动避让：已有 `_converted` 文件时生成 `_converted_2`、`_converted_3` 等，不覆盖旧结果。
+- 图片输出格式增加白名单清洗，空值或不支持格式回退 `png`；音视频输出格式空值或不支持格式回退 `mp3`。
+- `scripts/Build-Installer.ps1` 新增 `Invoke-CheckedDotnetBuild`，每次 `dotnet build` 后检查 `$LASTEXITCODE`，避免构建失败后继续打包旧产物。
+
+## [2026-05-16] 录像文件缺失修复
+- 根据 Release 日志定位到录像实际写入目标目录，但 ffmpeg 打开音频输入设备失败后只留下 0B `.mp4`，导致用户在文件夹中找不到有效录像。
+- `RecordingService.StartVideoRecordingAsync` 增加启动探测：带音频录像若 ffmpeg 立即退出，自动删除空文件并降级为仅录制画面；仅画面仍立即退出时直接提示录像未开始。
+- `RecordingService` 在启动录像前将录制区域宽高自动向下修正为偶数像素，修复用户拖出 `1341x771` 等奇数尺寸时 `libx264 + yuv420p` 打开编码器失败的问题。
+- 新增 `WasapiLoopbackAudioRecorder`，录像与独立录音改为程序内置 WASAPI Loopback 采集系统播放声音，不再依赖 `virtual-audio-capturer`、`Stereo Mix`、`立体声混音` 或麦克风设备。
+- 录像时 ffmpeg 只录画面到临时 MP4，程序同步采集系统声音到临时 WAV；停止后自动合成为最终 `H.264 + AAC + MP4`，并清理临时文件。
+- 独立录音改为采集系统播放声音，停止后通过 ffmpeg 转码为 `.m4a`；采集为空时直接提示，不生成静音文件。
+- 修复纯录音停止后清理临时文件时空路径触发 `ArgumentException` 的问题；清理临时文件失败也不再阻断录制状态释放，避免后续误报“当前已有录像/录音任务在进行”。
+- `MyTools.csproj` 新增 `NAudio 2.2.1`，由 Costura 合并进单 exe。
+- `RecordingService.StartAudioOnlyAsync` 同步增加启动探测，音频设备被占用或禁用时避免进入虚假的“录音中”状态。
+- `MainViewModel.StopVideoRecordingInternalAsync` 停止后按实际输出路径检查文件存在性与字节数，不再把 `TimedOut=false` 的 0B 文件当成成功。
+- 录像保存成功后自动打开资源管理器并选中新文件；提示中标明“包含音频”或“仅画面”，便于确认本次录制内容。
+- ffmpeg 音频设备枚举与运行日志读取改用系统默认编码，降低中文设备名在日志中显示为乱码的概率。
+
+## [2026-05-16] 图片查看与简单编辑
+- 新增左侧导航“图片查看”，支持在主程序内打开 `PNG/JPG/BMP/GIF/TIFF` 图片并预览。
+- 图片查看页新增缩放、向左/向右旋转、水平/垂直翻转、灰度处理、复制到剪贴板、另存为新文件等轻量编辑能力。
+- 复用现有截图标注编辑器，图片可一键进入标注模式继续使用画笔、矩形、线条、橡皮、复制和另存。
+- 支持在“图片查看”页拖入图片文件直接打开，不影响文件验证、Codex 配置等现有拖拽流程。
+- 图片另存支持 `PNG/JPG/BMP/TIFF`，JPEG 输出自动转为 `Bgr24`，避免透明通道导致编码失败。
+- `MainViewModel` 新增图片查看状态、命令与 GDI+/WPF 位图转换逻辑，不引入 .NET Core 或额外运行时依赖。
+
+## [2026-05-16] 视频查看
+- 新增左侧导航“视频查看”，支持打开或拖入 `MP4/MOV/WMV/AVI/MKV/WEBM/FLV` 等常见视频文件。
+- 使用 WPF `MediaElement` 作为内置播放器，提供播放/暂停、停止、进度拖动、音量调节和静音。
+- 视频页显示文件名、路径、当前播放时间、总时长与播放状态。
+- 离开“视频查看”页时自动暂停，防止切走模块后继续播放声音。
+- 播放失败时提示系统解码器问题，并保留“外部打开”按钮调用系统默认播放器兜底。
+- `MainWindow.xaml.cs` 新增播放进度 `DispatcherTimer`、拖拽视频识别、播放事件处理和关闭时资源停止逻辑。
+
+## [2026-05-16] 音视频文件关联
+- 新增共享 `MediaFileAssociationCore`，统一维护音频/视频扩展名清单与注册表写入逻辑。
+- 安装器完成安装前会询问是否关联常见音视频文件；静默安装可传入 `/associate-media` 强制关联。
+- 系统设置页新增“关联所有音视频”按钮，可在安装后重新写入当前用户文件关联。
+- 文件关联写入 `ProgId=MyTools.MediaFile`、`Applications\MyTools.exe`、`RegisteredApplications` 与 `Capabilities\FileAssociations`，并通知 Shell 刷新关联缓存。
+- 卸载器增加关联清理，删除 MyTools 写入的 ProgId、应用能力注册和 OpenWithProgids；不阻断配置/日志保留策略。
+- `App.xaml.cs` 支持启动参数中的音视频路径；已有实例运行时通过 pending-open 文件唤醒原窗口并打开该文件。
+- 视频查看入口扩展为音视频播放入口，新增 MP3/WAV/M4A/AAC/FLAC/OGG/OPUS 等音频扩展名。
+
+## [2026-05-16] 排班 Excel 导出修复
+- 修复 `ScheduleExcelExporter` 的 OpenXML 工作表元素顺序：`sheetViews` 现在写在 `cols` 之前，避免 Excel 打开时提示修复或无法正常读取。
+- 排班导出的表头改为与界面一致：第 3 行输出“已休”，第 4 行输出“需休”，人员排班从第 5 行开始。
+- 导出时按每列实际休息人数计算“已休”，低于“需休”时使用红色统计样式提示；冻结窗格同步调整为 `B5`。
+- `ScheduleViewModel` 的导出保存对话框新增 `.xlsx` 自动补全、覆盖确认，并清洗版本名中的非法文件名字符，避免版本名包含 `/ : * ?` 等字符时保存失败。
+- 验证：Release 构建 0 warning / 0 error；测试导出 `artifacts\schedule-test.xlsx` 可作为 zip 正常读取，`sheetViews` 位于 `cols` 之前，且第 3/4 行分别包含“已休/需休”。
+- 重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 40.97 MB，SHA256 为 `83E09240F66BE22693BEDE2542B25EB7C871144A589A8156307B052654111A3C`。
+
+## [2026-05-16] 紧凑界面与排班体验优化
+- `Theme.xaml` 下调全局卡片圆角、卡片内边距、按钮高度、输入框高度和标题字号，减少工具型页面的空白占位。
+- `MainWindow.xaml` 将默认窗口改为 1120x720、最小窗口改为 980x640；左侧导航宽度从 200 缩至 176，导航项高度从 42 缩至 34，并给导航列表增加滚动容器。
+- 首页 Hero、快捷入口和系统概览卡片同步压缩，保留关键信息但减少装饰区域。
+- `SchedulePage` 版本栏、工具栏、日期单元格、统计列和底部图例改为紧凑布局；工具栏按钮文案压缩为“自动休息 / 导出”等短命令。
+- 排班表重建增加 45ms 节流，连续点击班次时不再每次立即完整重建，降低多人排班时的 UI 卡顿。
+- 修正排班“已休”统计：界面和 Excel 导出均保留“午”班次的 0.5 天休息，不再四舍五入成整数。
+- `SystemSettingsPage` 重排为“导出备份 / 导入恢复 / 音视频关联”三块操作面板，减少长段说明文字，保留 DPAPI 跨账户导入风险提示。
+
+## [2026-05-16] 播放与转换界面再压缩
+- 左侧导航和播放器标题将“视频查看”统一改为“音视频播放”，与已支持的 MP3/WAV/FLAC/M4A 等音频格式一致。
+- `MainWindow.xaml` 压缩截图工具页头部、快捷键卡片、截图行为卡片和文件哈希卡片的边距，减少顶部操作区高度。
+- 图片查看页右侧信息栏从 260 缩至 220，预览空态和文件信息文字同步压缩，保留打开/复制/另存/标注等高频操作。
+- 音视频播放页右侧信息栏从 260 缩至 220，空态提示改为“打开音频或视频开始播放”，支持格式提示补充音频扩展名。
+- 格式转换页改为左右双列紧凑布局：图片转换与音视频转换并排显示，输入项改用 `StandardTextBox`，结果区固定在底部。
+- `MainViewModel` 新增 `ConvertOutputPath` / `HasConvertOutputPath` / `OpenConvertOutputFolderCommand`；转换成功后结果区显示“打开位置”，直接用资源管理器选中新文件。
+
+## [2026-05-16] 格式转换批量处理扩展
+- 图片转换与音视频转换的文件选择框开启多选；一次可选择多个图片或多个音视频文件进行批量转换。
+- 批量转换按顺序逐个执行，单个文件失败不会中断后续文件；结束后汇总成功数、失败数和前若干个输出文件名。
+- `MainViewModel` 新增 `ConvertOutputFolder` / `HasConvertOutputFolder` / `HasConvertOutputTarget`，让“打开位置”同时支持单文件定位和批量输出目录打开。
+- 批量成功文件位于同一目录时，结果摘要显示输出目录；位于多个目录时提示“打开位置”会进入第一个输出目录。
+- 格式转换页按钮文案改为“选择图片（可多选）”和“选择音视频（可多选）”，让批量能力在界面上直接可见。
+
+## [2026-05-16] 文件校验官方哈希比对
+- 截图工具页与文件验证页新增“官方校验值”输入框，支持粘贴 MD5 / SHA-1 / SHA-256 / CRC32。
+- `MainViewModel` 保留最近一次结构化 `FileHashResult`，输入校验值时实时自动比对，不再从展示文本反解析。
+- 校验值解析支持 `SHA256: xxxx`、纯哈希、带空格/换行的复制文本；仅接受 8/32/40/64 位十六进制值，避免误判。
+- 比对结果在界面内以紧凑状态条显示“匹配”或“不匹配”，下载文件校验流程更接近 HashTab / 7-Zip 的使用习惯。
+- `FileHashService` 修复历史遗留的中文进度提示乱码，保留原单遍 MD5 / SHA-1 / SHA-256 / CRC32 计算逻辑。
+- 新增 `docs/功能对标改进清单.md`，按 ShareX / VLC / HandBrake / IrfanView 等同类软件思路梳理各模块已落地能力与后续增强方向。
+- 验证：Release 构建 0 warning / 0 error；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 40.98 MB，SHA256 为 `04FC80ED814E9C974444EDD975E79F1E499C262ECDC60E3A25116DF7E0003B5C`。
+
+## [2026-05-16] 音视频播放速度与乱码修复
+- 音视频播放页新增 `0.5x / 1x / 1.5x / 2x` 速度档位，切换后立即应用到 `MediaElement.SpeedRatio`。
+- 播放速度在底部状态行和右侧媒体信息中同步显示，打开新文件时自动恢复 `1x`。
+- 修复 `MainWindow.xaml.cs` 中播放状态、文件校验复制提示、拖放校验提示的历史乱码文本。
+
+## [2026-05-16] 执行功能对标清单第一批
+- 图片查看打开图片后自动扫描同目录图片，新增上一张/下一张按钮，右侧显示当前目录位置。
+- 音视频播放支持一次打开或拖入多个文件形成播放列表，播放结束后自动进入下一项，底部和右侧显示列表位置。
+- 音视频播放新增快捷键：空格播放/暂停，左右方向键快退/快进 5 秒，上下方向键调节音量。
+- 格式转换新增输出位置选择：同目录、桌面、指定目录；指定目录可通过按钮选择。
+- 格式转换新增常用预设：图片压缩、头像 512、视频转 MP4、音频转 MP3。
+- `MediaConvertService` 支持传入输出目录并自动创建目录，仍保留同名文件自动避让策略。
+- 验证：Release 构建 0 warning / 0 error；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 40.98 MB，SHA256 为 `694E4B7F262793DC85D4BC123B460143F57CE8C06FD983DB96C7C584CA25C220`。
+
+## [2026-05-17] 执行功能对标清单第二批
+- 截图工具页新增“录制输出目录”卡片，录像目录和录音目录均可直接查看并重新选择，不再只能首次弹窗设置。
+- 文件验证页支持一次选择或拖入多个文件，批量计算 MD5 / SHA-1 / SHA-256 / CRC32 并显示表格。
+- 批量校验结果新增“导出清单”按钮，输出 UTF-8 `.txt`，包含生成时间、完整路径和四种校验值。
+- 单文件校验时会清理旧批量结果，避免界面残留过期清单；多文件拖放现在会接收全部文件而不是只取第一个。
+- 启动项管理新增搜索框，可按名称、命令和位置实时筛选。
+- 程序卸载页新增搜索框，可按程序名、发布者、版本、安装路径和来源实时筛选，并显示筛选数量。
+- 验证：Release 构建 0 warning / 0 error；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 40.98 MB，SHA256 为 `FC91061700FC16CACEDB4F80CCDAEA00BF2D892E3F30B51B1C29820CDC902633`。
+
+## [2026-05-17] 执行功能对标清单第三批
+- 启动项管理会从注册表命令中保守解析可执行路径，读取文件版本信息中的公司名作为发布者，列表中直接显示发布者和路径。
+- 启动项搜索范围扩展到名称、发布者、可执行路径、原始命令和位置，更接近 Autoruns 的快速定位体验。
+- 程序卸载确认框增加发布者、版本、安装位置、来源、权限提示和完整卸载命令；确认后仍只启动软件自带卸载程序。
+- 格式转换新增“取消”按钮和当前任务 `CancellationTokenSource`；取消图片转换会停止后续队列，取消音视频转换会尝试终止正在运行的 FFmpeg。
+- 验证：Release 构建 0 warning / 0 error；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 40.98 MB，SHA256 为 `AB4C8206BD8361B58CC26E113FD738BAEC7258246308661F1AF55993D554A62C`。
+
+## [2026-05-17] 执行功能对标清单第四批
+- SQL 查询结果新增“导出 CSV”按钮，使用 UTF-8 文本输出，并正确转义逗号、引号和换行。
+- 性能测试结果区新增“复制”和“导出”按钮，导出 `.txt` 包含生成时间、系统版本、项目、得分、耗时和详情。
+- WireGuard 面板新增“导入配置”按钮，可选择 `.conf` 文件回填配置内容，并用文件名作为默认接口名。
+- 验证：Release 构建 0 warning / 0 error；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 40.99 MB，SHA256 为 `DA08E97C27D29BA47EE01D27FA556F4F1AC4659CC8AF63062C019F6F00BA742C`。
+
+## [2026-05-17] 执行功能对标清单第五批
+- 格式转换新增 `ConvertQueueItem` 队列模型，批量转换开始时按所选文件初始化“等待”队列。
+- 图片转换和音视频转换逐项更新队列状态：等待、转换中、完成、失败、已取消，并记录输出路径或错误消息。
+- 格式转换页新增“转换队列”表格，展示类型、文件名、状态、输出路径和消息；转换摘要与打开位置按钮继续保留。
+- 验证：Release 构建 0 warning / 0 error；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 40.99 MB，SHA256 为 `CC0594620FB7DDBB5B2AA8E2FF99864DAF824072E3B8D5DD100FB7B3B7AA5A24`。
+
+## [2026-05-17] 执行功能对标清单第六批
+- 格式转换队列新增“清空”按钮，转换空闲时可一键清除当前队列。
+- 转换队列表新增操作列：每项可打开输出位置，也可复制当前消息/输出路径/状态。
+- 队列项完成、失败或取消后会触发命令状态刷新，让行内按钮按实际可用性启用或禁用。
+- 验证：Release 构建 0 warning / 0 error；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 40.99 MB，SHA256 为 `5CB9D90AC5DD41995B276F6FD960D1AFBC8B44C622B5E5D86A012C5848927F14`。
+
+## [2026-05-17] 执行功能对标清单第七批
+- 格式转换队列项新增“重试”按钮，可在转换空闲时按当前格式、质量、输出目录设置重新处理原文件。
+- 格式转换队列项新增“移除”按钮，可直接清掉单个已完成、失败或不需要继续关注的队列项。
+- 重试前会校验源文件是否仍存在；音视频重试会复用 FFmpeg 可用性检测，未检测到 FFmpeg 时给出明确提示。
+- 验证：Release 构建 0 warning / 0 error；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 40.99 MB，SHA256 为 `CB44E15AE2BFAE32BD49122FDB248C16002A7524BE81D7BBAADF9BD8E4A8B36E`。
+
+## [2026-05-17] 执行功能对标清单第八批
+- 文件验证页的批量校验结果新增 MD5 / SHA-1 / SHA-256 / CRC32 四个一键复制按钮。
+- 复制内容采用“文件名 + 制表符 + 校验值”的逐行格式，便于直接粘贴到 Excel、工单或发布记录。
+- 验证：Release 构建 0 warning / 0 error；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 40.99 MB，SHA256 为 `D57E6111E56C68C3AB4ABEE34C435CA8E1151FEF1E5741F08C6E234F2F58EBAE`。
+
+## [2026-05-17] 执行功能对标清单第九批
+- 启动项管理新增文件存在性状态：文件存在、文件不存在、未识别路径。
+- 启动项命令解析在文件缺失时会保留疑似 `.exe/.bat/.cmd/.com/.ps1` 路径，便于判断残留启动项。
+- 启动项搜索范围扩展到文件存在性状态，可直接搜索“文件不存在”定位失效项。
+- 验证：Release 构建 0 warning / 0 error；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 40.99 MB，SHA256 为 `7F228CBA34F727A32E3C244BF4CA316BE6D1D28758979B37CA0B9D6CD4686F0F`。
+
+## [2026-05-17] 执行功能对标清单第十批
+- 启动项管理新增数字签名状态：已签名、未签名、未检测签名。
+- 文件存在时会读取 Authenticode 签名证书；已签名项的悬浮提示展示证书主体，避免用户必须手动打开文件属性确认。
+- 启动项搜索范围扩展到签名状态和证书主体，可搜索“未签名”或签名主体快速定位。
+- 验证：Release 构建 0 warning / 0 error；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 40.99 MB，SHA256 为 `FA76A45931548C12735C030F44DF0DC71E16ED8D952D932279A150A5B742F8F4`。
+
+## [2026-05-17] 执行功能对标清单第十一批
+- 程序卸载列表保留结构化安装日期和估算大小，供筛选与排序使用。
+- 程序卸载页顶部新增排序下拉框，支持名称、安装日期新旧、估算大小高低和发布者排序。
+- 程序卸载页顶部新增大小与安装日期过滤，可快速定位未知大小、大体积程序、近期安装程序或日期缺失条目。
+- 验证：Release 构建 0 warning / 0 error；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 40.99 MB，SHA256 为 `324D7755210C831FF49D583F0170A1D69BC4C6D87AFB5E99E94BFEDB25098D6E`。
+
+## [2026-05-17] 执行功能对标清单第十二批
+- 程序卸载列表新增勾选列，支持批量选择需要核对或记录的程序。
+- 程序卸载页新增“全选筛选”“清除选择”“导出清单”按钮；导出时优先导出已勾选项，未勾选时导出当前筛选结果。
+- 导出的程序清单包含程序名、版本、发布者、安装日期、估算大小、来源、安装位置、权限提示和卸载命令；不提供批量自动卸载，避免误操作。
+- 验证：Release 构建 0 warning / 0 error；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 40.99 MB，SHA256 为 `A33B639253DB5053AA0A53E2EFE2877C7FE01C95E50DAD57A340935A86BD9902`。
+
+## [2026-05-17] 执行功能对标清单第十三批
+- SQL 连接历史新增最近连接组合，保存服务器、端口、用户名和密码；密码继续使用 DPAPI 当前用户范围加密。
+- SQL 导出页新增“最近连接”快捷卡片，点击后回填服务器、端口、用户名和密码，并提示重新测试连接。
+- 旧版仅保存服务器/用户名/密码列表的历史文件仍可读取；没有组合记录时会用最后一次成功连接生成一个快捷卡片。
+- 验证：Release 构建 0 warning / 0 error；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41 MB，SHA256 为 `1C89F0E2F9FA4EC2E45EEF087392D6970BFC00DE53D5866635A4A39C059D1EB6`。
+
+## [2026-05-17] 执行功能对标清单第十四批
+- SQL 查询页新增“复制结果”按钮，支持复制选中单元格/行；未选择时复制全部查询结果。
+- 复制内容使用表头 + 制表符分隔文本，便于粘贴到 Excel、记事本或工单。
+- 验证：Release 构建 0 warning / 0 error；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41 MB，SHA256 为 `536A7665FB46CB8F996C11EBC26DF219618E840ECB1C941D9B9C095C2DF4AE2B`。
+
+## [2026-05-17] 执行功能对标清单第十五批
+- SQL 表导出新增进度回调，状态栏显示当前阶段、已处理行数、总行数、耗时和已生成文件大小。
+- 查询结果导出 Excel / CSV 共用同一套进度显示，完成后弹窗汇总行数、耗时、文件大小和保存路径。
+- 验证：Release 构建 0 warning / 0 error；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41 MB，SHA256 为 `8195D3F210BF4261EB060099180E24AD6AE6556D5A701022395E7BFF19E9D650`。
+
+## [2026-05-17] 执行功能对标清单第十六批
+- 排班页新增右侧冲突检查侧栏，实时列出每日需休未达标、人员休息不足和连续上班超限。
+- 排班工具栏新增导入人员、导出人员模板、复制上月人员；右侧新增“整月复制”，可把某人的整月班次复制给另一人。
+- 底部说明改为固定班次颜色图例，白/卡/副/感/大/小/休/公/午的颜色含义保持可见。
+- 验证：Release 构建 0 warning / 0 error；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.01 MB，SHA256 为 `08F69612476381554CEE34C16B79CBE21FC7B7E46204C1FF0310D53FBB80FE41`。
+
+## [2026-05-17] 执行功能对标清单第十七批
+- 首页新增“功能搜索”区，可按截图、录像、导出、转换、排班、哈希、网络等关键词快速跳转到对应模块。
+- 首页新增“最近使用”区，记录最近打开的图片、音视频、格式转换输出和排班入口，最多保留 8 条。
+- 点击最近使用项可重新打开图片/音视频，或进入格式转换页并定位输出文件；文件不存在时回退为跳转模块。
+- 验证：Release 构建 0 warning / 0 error；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.01 MB，SHA256 为 `A22A4CDD57EDDB37399A93DA473B3AA71AD39B1487F0AA86E056A996B56A3F03`。
+
+## [2026-05-17] 执行功能对标清单第十八批
+- 截图工具页新增“截图历史”，每次成功截图后自动保存 PNG 到程序同级 `Screenshots` 文件夹。
+- 截图历史最多保留 20 张，页面显示缩略图、时间、大小和尺寸，并支持复制、编辑、打开、删除。
+- 启动时自动扫描已有截图历史；区域截图取消选择时不会生成历史文件。
+- 验证：Release 构建 0 warning / 0 error；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.01 MB，SHA256 为 `05DB5CDD6CBC8DC580898285C7E06D98696F8EE86E657098EB61D1A7EEFFADBB`。
+
+## [2026-05-17] 执行功能对标清单第十九批
+- 区域录像开始前新增 3 秒倒计时，倒计时结束后才真正启动 ffmpeg 录制。
+- 录像区域窗口新增录制状态条，录制中显示“录制中 mm:ss / h:mm:ss”。
+- 倒计时期间关闭区域窗口会取消启动，不生成空录像文件。
+- 验证：Release 构建 0 warning / 0 error；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.01 MB，SHA256 为 `4B7463599BE6F8547804E1F9D7892C278122EE769134AF9214D29895D748ADC6`。
+
+## [2026-05-17] 执行功能对标清单第二十批
+- 截图工具页新增区域录像输出模式开关，可在 MP4 和 GIF 之间切换。
+- GIF 模式输出 `.gif`，使用 ffmpeg `gdigrab + palettegen/paletteuse` 生成 12 FPS 动图，不启动系统声音采集。
+- MP4 模式保持原有画面录制和系统声音合成逻辑，录制倒计时与时长提示继续共用。
+- 验证：Release 构建 0 warning / 0 error；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.01 MB，SHA256 为 `A501CE328D0EA2C765DC1A4C162E2423008C6B5869161973BE90293675988624`。
+
+## [2026-05-17] 执行功能对标清单第二十一批
+- 图片查看页右侧新增“轻编辑”区，支持中心裁剪预设：原图、1:1、4:3、16:9。
+- 图片查看新增亮度、对比度和锐化滑块，并提供“一键重置轻编辑”。
+- 图片复制、另存和标注编辑器入口均使用当前预览中的裁剪、调色、锐化、旋转和翻转结果。
+- 验证：Release 构建 0 warning / 0 error；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.02 MB，SHA256 为 `EC6D2902E815548540AFA53FF861FA984107B9BE07AB727D462330D32AF7B796`。
+
+## [2026-05-17] 执行功能对标清单第二十二批
+- 音视频播放模块新增 `.srt` 外挂字幕支持，可手动选择字幕文件，也会在打开媒体时自动载入同目录同名字幕。
+- 播放画面底部新增字幕浮层，随播放进度、拖动进度和快进快退同步刷新。
+- 右侧媒体信息栏新增字幕文件名、载入状态、“选择字幕”和“清除字幕”操作。
+- 验证：Release 构建 0 warning / 0 error；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.02 MB，SHA256 为 `EA5752ECE80BA5B47E2C26DCD700201E15581557451F0AA5248E7183373A93C6`。
+
+## [2026-05-17] 执行功能对标清单第二十三批
+- 音视频播放字幕新增时间偏移滑块，支持 `-10.0` 到 `+10.0` 秒微调，拖动进度、快进快退和正常播放均按偏移后的时间匹配字幕。
+- 音视频播放字幕新增字号滑块，支持 `12px` 到 `28px`，字幕行高随字号自动调整。
+- 右侧媒体信息栏保持紧凑布局，字幕选择、清除、偏移和字号控制集中在“字幕”区域。
+- 验证：Release 构建 0 warning / 0 error；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.02 MB，SHA256 为 `7DB0FDFD3C323A53AC18319E439DCBEE4149117A8545033F0E5F2ADD7B0CC4FC`。
+
+## [2026-05-17] 执行功能对标清单第二十四批
+- 音视频播放新增播放模式：顺序、列表循环、单项循环、随机。
+- 播放结束时会按当前模式决定下一步：顺序到末尾停止，列表循环回到开头，单项循环重播当前项，随机跳到不同项。
+- 右侧媒体信息栏新增播放模式下拉框，底部状态行同步显示当前模式；自动切换时状态文案区分“下一项 / 单项循环 / 随机播放”。
+- 验证：Release 构建 0 warning / 0 error；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.02 MB，SHA256 为 `C226CA70997544224A5B7F1785C3FB84B67DE22D11B126EEE69A71F60DCD43B8`。
+
+## [2026-05-17] 执行功能对标清单第二十五批
+- 音视频播放右侧新增紧凑播放列表，显示序号、文件名和目录，并高亮当前播放项。
+- 播放列表支持双击切换播放项，切换后保留原有播放控制、字幕自动载入和最近使用记录逻辑。
+- 播放列表支持拖拽排序，排序后当前播放项会按文件路径重新定位，避免拖拽后指向错误项。
+- 验证：Release 构建 0 warning / 0 error；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.02 MB，SHA256 为 `8DAF858EC7A2FCF452845FBDAA02E23C2F2CA20E001E62859681555D4CF4B140`。
+
+## [2026-05-17] 执行功能对标清单第二十六批
+- 音视频播放右侧播放列表新增载入和保存按钮，支持载入 `.m3u/.m3u8`，保存当前列表为 UTF-8 `.m3u8`。
+- 保存播放列表时写入 `#EXTM3U` 和 `#EXTINF`，并优先生成相对路径，方便整文件夹移动。
+- 载入播放列表时会解析相对路径、过滤不存在文件和暂不支持的扩展名，再按列表顺序载入播放器。
+- 验证：Release 构建 0 warning / 0 error；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.02 MB，SHA256 为 `484BEFF75A5499D800E4F88CBF953DC5F58BAFAA99AB604851CCD3D720AF716E`。
+
+## [2026-05-17] 执行功能对标清单第二十七批
+- 音视频播放新增最近播放列表记录，保存或载入 `.m3u/.m3u8` 后自动记录到 `MyTools.settings.json`。
+- 右侧播放列表区新增“最近列表”快捷入口，显示播放列表文件名和最近使用时间，点击即可重新载入。
+- 最近播放列表最多保留 6 条；文件不存在时会从界面移除并同步更新本地设置。
+- 验证：Release 构建 0 warning / 0 error；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.03 MB，SHA256 为 `7261F30CD54F0D7C64C93C5781756BA395499E434F180CD6C046FFCBE2B38E95`。
+
+## [2026-05-17] 执行功能对标清单第二十八批
+- 音视频播放右侧播放列表新增搜索框，可按序号、文件名、目录和完整路径过滤当前列表。
+- 搜索只影响右侧列表显示，不改变真实播放顺序；上一项、下一项、循环和随机仍按完整播放列表执行。
+- 搜索框右侧显示“筛选 N / 总数”，清空搜索时显示总项目数。
+- 验证：Release 构建 0 warning / 0 error；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.03 MB，SHA256 为 `3C634BFD971B856EE4DC5E7EA96E174F9E5AFE46C0C92BC12126CA9E2B4F2136`。
+
+## [2026-05-17] 执行功能对标清单第二十九批
+- 音视频播放列表新增单项移除按钮，每一项右侧可直接从列表删除，不影响磁盘文件。
+- 播放列表顶部新增清空按钮，清空后会停止当前播放并同步清理媒体路径、进度、时长和字幕状态。
+- 移除当前播放项时会自动定位到相邻项；移除非当前项时保留当前播放指向，避免列表序号变化后错播。
+- 验证：Release 构建 0 warning / 0 error；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.03 MB，SHA256 为 `79335EEBAF6AFC393DF83CE7AF14F99914D2A8A5AB00E2F99B78E56585E5E7D5`。
+
+## [2026-05-17] 执行功能对标清单第三十批
+- 音视频播放列表顶部新增复制按钮，可将当前列表完整路径按“一行一个”复制到剪贴板。
+- 播放列表顶部新增清理失效项按钮，可批量移除不存在或扩展名不支持的条目，不删除磁盘文件。
+- 清理失效项会保留有效的当前播放项；若当前项被清理，会自动切换到相邻有效项，避免播放指向悬空。
+- 验证：Release 构建 0 warning / 0 error；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.03 MB，SHA256 为 `D3F43F31FB11C1A125B87F18A2A25D562501D73400AAE250D6D19430E044728A`。
+
+## [2026-05-17] 执行功能对标清单第三十一批
+- 音视频播放列表顶部新增收藏按钮，可为当前列表命名并保存到本地 `MyTools.settings.json`。
+- 右侧播放列表区新增“收藏列表”，显示收藏名称、项目数、最近使用时间和路径预览，点击即可快速载入。
+- 收藏播放列表最多保留 8 条；重复收藏同一组文件会更新到顶部，打开收藏后也会自动前移。
+- 收藏项支持单独移除，不影响磁盘文件和当前播放列表。
+- 验证：Release 构建 0 warning / 0 error；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.03 MB，SHA256 为 `403CAD134FADBAF8D1883F4FB82748327F47B796950760F02A92A41EF4543E07`。
+
+## [2026-05-17] 执行功能对标清单第三十二批
+- 音视频播放新增临时 A/B 片段循环，可将当前位置设为 A 点或 B 点，并在越过 B 点后自动跳回 A 点。
+- 播放控制区新增 A 点、B 点、循环开关、清除循环和添加书签按钮，底部状态行同步显示 A/B 循环状态。
+- 右侧媒体信息区新增片段循环状态和“书签点”列表，书签支持双击或点击跳转按钮回到对应时间点。
+- 切换媒体或清空播放列表时会自动清空临时 A/B 循环与书签，避免跨文件误跳转。
+- 验证：Release 构建 0 warning / 0 error；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.03 MB，SHA256 为 `FDCF9AC2A24A0E4A070FB9E37994ED97F40FB68BBE8A8E17E77C4F1942BD4097`。
+
+## [2026-05-17] 执行功能对标清单第三十三批
+- 音视频播放新增“截帧”按钮，可将当前播放位置通过 FFmpeg 截取为 PNG。
+- 截帧文件保存到程序同级 `VideoFrames` 文件夹，文件名包含原媒体名和时间点，并自动避让重名文件。
+- 截帧成功后自动切换到图片查看并打开 PNG，可继续复制、另存、标注或使用轻编辑功能。
+- 截帧复用 `MediaConvertService.FindFfmpeg` 的检测逻辑；未检测到 `ffmpeg.exe` 时会提示用户放入程序目录或加入 PATH。
+- 验证：Release 构建 0 warning / 0 error；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.03 MB，SHA256 为 `07B044F6EB71361C56FD5DC569980BA75B5DA561A7565E3076E5E00389F3681A`。
+
+## [2026-05-17] 执行功能对标清单第三十四批
+- 音视频播放新增“波形”按钮，可通过 FFmpeg 为当前媒体音轨生成波形 PNG。
+- 波形文件保存到程序同级 `AudioWaveforms` 文件夹，文件名基于原媒体名并自动避让重名文件。
+- 波形生成成功后会在播放器进度条上方紧凑显示；打开新媒体或清空播放列表时会清除旧波形。
+- 波形生成复用 `MediaConvertService.FindFfmpeg` 的检测逻辑；无音轨或缺少 `ffmpeg.exe` 时会给出明确提示。
+- 验证：Release 构建 0 warning / 0 error；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.03 MB，SHA256 为 `30F473EDAB7122E8784302A96CAD49AC4361E3B5B835FD58611C11825EDE5747`。
+
+## [2026-05-17] 执行功能对标清单第三十五批
+- 音视频播放的波形图新增点击跳转能力，点击波形横向位置会按比例换算到媒体时长并执行 seek。
+- 跳转后同步更新进度文本和字幕位置，状态栏显示“已按波形跳转”。
+- 波形点击绑定到实际图片宽度，避免外层边距影响定位比例。
+- 验证：Release 构建 0 error；因当前环境无法访问 `https://api.nuget.org/v3/index.json`，NuGet 漏洞审计出现 NU1900 警告；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.03 MB，SHA256 为 `94C80224206A783141A4161A781F085DCFC25FD69B19B586DA9A633132CE9B60`。
+
+## [2026-05-17] 执行功能对标清单第三十六批
+- 音视频播放波形图新增红色当前位置指示线，播放、快进快退、拖动进度和点击波形后都会随当前位置刷新。
+- 新增 `VideoWaveformPositionConverter`，按“波形实际宽度 × 当前秒数 / 总时长”计算指示线位置。
+- 指示线不参与鼠标命中，不影响波形点击跳转。
+- 验证：Release 构建 0 error；因当前环境无法访问 `https://api.nuget.org/v3/index.json`，NuGet 漏洞审计出现 NU1900 警告；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.03 MB，SHA256 为 `38BEAC582D39CC882F151AE061DCB8BD190B0BC46309F270C6D70E39EE69BEC6`。
+
+## [2026-05-17] 执行功能对标清单第三十七批
+- 音视频播放波形图新增拖拽定位，按住波形左右拖动时会持续按横向比例 seek。
+- 拖拽期间暂停计时器位置回写，避免播放器当前进度覆盖用户正在拖动的位置。
+- 松开鼠标后释放捕获并保留最终定位点；若拖拽中鼠标按钮意外释放，也会自动退出拖拽状态。
+- 验证：Release 构建 0 error；因当前环境无法访问 `https://api.nuget.org/v3/index.json`，NuGet 漏洞审计出现 NU1900 警告；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.04 MB，SHA256 为 `7E803AC742AA6A6D27978E51B42F30CD7D9FC94C39FC7BF10C1B9531A3C0D505`。
+
+## [2026-05-17] 执行功能对标清单第三十八批
+- 音视频播放波形图新增 A/B 选区，Shift+左拖或右键拖拽波形可直接框选片段循环区间。
+- 新增 `VideoWaveformRangeConverter`，按波形实际宽度、A/B 秒数和总时长绘制半透明选区层，当前位置红线继续保持在最上层。
+- 波形选区与现有 A 点、B 点、循环开关共用同一套状态；拖拽结束会自动启用 A/B 循环，切换媒体或清空播放列表时继续清理临时区间。
+- 验证：Release 构建 0 error；因当前环境无法访问 `https://api.nuget.org/v3/index.json`，NuGet 漏洞审计出现 NU1900 警告；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.04 MB，SHA256 为 `A0F1BB55670BA2121D3462C71242E7E0C9A8618F0C26C64AC12B949E5D40CD32`。
+
+## [2026-05-17] 执行功能对标清单第三十九批
+- 音视频播放波形 A/B 选区新增左右微调手柄，框选后可拖动选区边缘调整 A 点或 B 点。
+- 手柄复用 `VideoWaveformRangeConverter` 计算位置，并在贴近波形两端时自动限制在波形范围内。
+- 微调过程中暂停播放器计时器位置回写，避免当前播放进度刷新干扰拖动；A/B 点保持最小 0.25 秒间距，防止左右边界互相穿越。
+- 验证：Release 构建 0 error；因当前环境无法访问 `https://api.nuget.org/v3/index.json`，NuGet 漏洞审计出现 NU1900 警告；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.04 MB，SHA256 为 `76C715D9E4BB13966D716BD63CB76370598E09A976DAB8AD0FDA20AF5EB85437`。
+
+## [2026-05-17] 执行功能对标清单第四十批
+- 音视频播放 A/B 循环新增区间记忆，当前 A/B 区间可通过“区间”按钮保存到右侧列表。
+- 右侧媒体信息栏新增“A/B 区间”紧凑列表，显示区间起止和持续时间，支持套用并跳到 A 点、双击套用、单项删除。
+- 区间记忆与当前媒体同生命周期，切换媒体或清空播放列表时会清空，避免跨文件误用。
+- 验证：Release 构建 0 error；因当前环境无法访问 `https://api.nuget.org/v3/index.json`，NuGet 漏洞审计出现 NU1900 警告；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.04 MB，SHA256 为 `6EDFFCD01C69B73938E7AD2E3DAD9004B3A47F79A1360C619861187BADE2D4C2`。
+
+## [2026-05-17] 执行功能对标清单第四十一批
+- 音视频播放保存 `.m3u8/.m3u` 播放列表时，会把当前媒体已保存的 A/B 区间写入 `#MYTOOLS-AB` 注释备注。
+- A/B 区间备注按媒体路径匹配，并写在对应媒体条目前；标准播放器会忽略注释，不影响常规 M3U 兼容性。
+- 保存完成状态会提示本次导出的 A/B 区间备注数量；载入播放列表仍跳过注释行，避免跨文件自动恢复误用。
+- 验证：Release 构建 0 error；因当前环境无法访问 `https://api.nuget.org/v3/index.json`，NuGet 漏洞审计出现 NU1900 警告；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.04 MB，SHA256 为 `4E3921ACED97FFCC57D8979CF336DCFAFB93434FE2847BABAAF4E185E82467C4`。
+
+## [2026-05-17] 执行功能对标清单第四十二批
+- 格式转换队列新增序号列、拖拽排序、上移和下移按钮，批量转换会按当前队列顺序执行。
+- 转换中新增“暂停/继续”队列控制，暂停会在当前文件完成后阻止后续项继续执行，避免中途截断输出文件。
+- 取消转换时会标记所有仍在等待或转换中的队列项为“已取消”，不再错误地只从固定索引开始标记。
+- 验证：Release 构建 0 error；因当前环境无法访问 `https://api.nuget.org/v3/index.json`，NuGet 漏洞审计出现 NU1900 警告；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.04 MB，SHA256 为 `4394345ACE00DD76B0333E187627321425EFA580FAF09183BB9BE63B99A164F2`。
+
+## [2026-05-17] 执行功能对标清单第四十三批
+- 文件验证新增“导入清单”，支持 MyTools 导出的校验清单，也兼容常见 `hash 文件名` / `文件名 hash` 文本行。
+- 批量校验结果新增“比对”和“清单算法”列，导入清单后会对当前结果标注匹配、不匹配或未找到。
+- 单文件校验和批量校验完成后都会尝试套用已导入清单，状态栏汇总匹配、不匹配和未找到数量。
+- 验证：Release 构建 0 error；因当前环境无法访问 `https://api.nuget.org/v3/index.json`，NuGet 漏洞审计出现 NU1900 警告；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.05 MB，SHA256 为 `A1A1A372572A8BEAB0235F4872086FA52B7BF99B0DEF443D3E956BEAEB6743D8`。
+
+## [2026-05-17] 执行功能对标清单第四十四批
+- SQL 表导出新增“取消”按钮，导出任务使用独立取消令牌，取消后状态栏显示“导出已取消”。
+- SQL Server 表导出移除单工作表行数硬限制，超过 Excel 单 Sheet 上限时会在同一 `.xlsx` 内自动拆分多个 Sheet。
+- 多 Sheet 写入仍保持流式读取 `SqlDataReader`，每个 Sheet 自动写表头并继续上报总体进度。
+- 验证：Release 构建 0 error；因当前环境无法访问 `https://api.nuget.org/v3/index.json`，NuGet 漏洞审计出现 NU1900 警告；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.05 MB，SHA256 为 `3DF7BC0DC3F4CEA9DD7C102E23F8AF5A2F8EB7BAC3FC6168D7A4F6C58C1BC8D4`。
+
+## [2026-05-17] 执行功能对标清单第四十五批
+- 排班右侧冲突列表新增“定位”按钮，可触发人员/日期定位并高亮对应单元格。
+- 排班表格对被定位的冲突单元格使用红色边框和提示标记，便于从冲突列表快速回到表格。
+- 右侧新增“周休均衡”统计，按每 7 天展示休息总量、人均休息和人员差值。
+- 验证：Release 构建 0 error；因当前环境无法访问 `https://api.nuget.org/v3/index.json`，NuGet 漏洞审计出现 NU1900 警告；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.05 MB，SHA256 为 `5E2001AE26F104A7348C8BBFCD3AB9E3DA4A5CB3A5DFF05E17503D236E603AED`。
+
+## [2026-05-17] 执行功能对标清单第四十六批
+- 系统信息实时传感器新增刷新频率选择：手动 / 2 秒 / 5 秒。
+- 手动模式下可点击“刷新”单次读取传感器，自动模式切换后会调整 `DispatcherTimer` 间隔。
+- 传感器读取后会检测温度 >= 85°C、负载 >= 95% 的异常项，并在状态栏提示对应硬件和传感器。
+- 验证：Release 构建 0 error；因当前环境无法访问 `https://api.nuget.org/v3/index.json`，NuGet 漏洞审计出现 NU1900 警告；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.05 MB，SHA256 为 `D10C8658BF122A9E32BB80736A3141EBFEAF75E5D9C80DEBD53AF0BB99B060E6`。
+
+## [2026-05-17] 执行功能对标清单第四十七批
+- 首页系统概览新增 CPU、内存、系统盘三张小型摘要卡片，显示百分比和进度条。
+- `SystemInfoService` 快照新增 CPU 当前负载、内存占用率、系统盘占用率和摘要文案。
+- 首页详细系统信息保留原有字段，并修正内存文本异步回填后不刷新的问题。
+- 验证：Release 构建 0 error；因当前环境无法访问 `https://api.nuget.org/v3/index.json`，NuGet 漏洞审计出现 NU1900 警告；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.05 MB，SHA256 为 `02CE0357E8B9CBB2679DE2EFD55DC3B7837B93EC3599B3A7F89CE9E37258AEE2`。
+
+## [2026-05-17] 执行功能对标清单第四十八批
+- 启动项签名信息新增证书链可信状态校验，已签名文件会显示“证书链可信”或“不可信或已过期”。
+- 启动项搜索新增证书链状态匹配，签名提示中同时展示证书主体和链状态。
+- 程序卸载列表新增“静默”列，识别 `QuietUninstallString`、MSI 卸载和常见静默参数作为静默候选。
+- 卸载确认框与导出清单新增静默候选说明；程序仍默认只启动交互卸载向导，不自动批量静默执行。
+- 验证：Release 构建 0 error；因当前环境无法访问 `https://api.nuget.org/v3/index.json`，NuGet 漏洞审计出现 NU1900 警告；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.05 MB，SHA256 为 `0645A91316B8C76177200749FD3E8968842499CCFD7FBBE94AA594FF7BBF6555`。
+
+## [2026-05-17] 执行功能对标清单第四十九批
+- 垃圾清理候选项新增中文类别、大小、风险和建议字段，表格改为更易扫读的安全判断布局。
+- 垃圾清理新增“导出报告”按钮，可在执行前导出已选择项、预计释放空间、风险分布、建议和完整路径。
+- 微信清理候选项新增大小、风险、建议列，媒体和文件类会提示按日期确认并建议先备份。
+- 垃圾清理确认框改为说明普通文件会进入回收站、系统缓存可能需要管理员授权，避免“不可撤销”误导。
+- 验证：Release 构建 0 error；因当前环境无法访问 `https://api.nuget.org/v3/index.json`，NuGet 漏洞审计出现 NU1900 警告；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.06 MB，SHA256 为 `516620757922BAD171ECF203171E8EF8014CA83537F76D3A3D876DA59A8F6DC2`。
+
+## [2026-05-17] 执行功能对标清单第五十批
+- 微信备份完成后会自动写入最近备份记录，记录 ZIP 路径、文件数、总大小和最近使用时间。
+- 恢复区新增“最近备份”快捷列表，最多显示 6 条，点击即可套用备份 ZIP 并解析 manifest。
+- 最近备份记录保存到 `MyTools.settings.json`；若文件已不存在，点击时会自动从列表移除并保存。
+- 验证：Release 构建 0 error；因当前环境无法访问 `https://api.nuget.org/v3/index.json`，NuGet 漏洞审计出现 NU1900 警告；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.06 MB，SHA256 为 `4161B3B94FCD0BAFD7B7A10E2B42304B5D97C193D840E34F1258A4C3C121FBCB`。
+
+## [2026-05-17] 执行功能对标清单第五十一批
+- WireGuard 页面新增连接日志按钮，可展开最近导入、连接、断开和状态检查记录。
+- WireGuard 连接和断开会记录本次耗时，连接成功后显示最近连接时间。
+- WireGuard 日志保留最近 80 条，并提供清空按钮，便于排查授权取消、网卡未上线或配置导入问题。
+- 验证：Release 构建 0 error；因当前环境无法访问 `https://api.nuget.org/v3/index.json`，NuGet 漏洞审计出现 NU1900 警告；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.06 MB，SHA256 为 `CC79C344B39DD78515903571E6FC294606CF0873FC99715AF31426057A8FF996`。
+
+## [2026-05-17] 执行功能对标清单第五十二批
+- WireGuard 服务新增 `Configs/*.conf` 扫描能力，按最近修改时间列出已保存隧道配置。
+- WireGuard 页面新增“已保存隧道”列表，显示接口名、目录、大小和修改时间，点击即可加载配置。
+- 导入 `.conf` 或连接成功后会自动刷新隧道列表，便于在多个配置之间切换。
+- 验证：Release 构建 0 error；因当前环境无法访问 `https://api.nuget.org/v3/index.json`，NuGet 漏洞审计出现 NU1900 警告；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.06 MB，SHA256 为 `F0676E7F752AB79AFDFE66AC60DAAA1AE9438AF4EDA1999A859B0578AEF5334C`。
+
+## [2026-05-17] 执行功能对标清单第五十三批
+- Codex 配置记录新增标签、最近应用时间，配置列表会按最近应用优先排序。
+- Codex 配置卡片新增“差异”按钮，可对比记录内容与当前 `%USERPROFILE%\.codex` 下的 `config.toml`、`auth.json`，显示缺失、大小和行级差异摘要。
+- Codex 配置卡片界面改为备注、标签、最近应用时间集中展示，右侧保留编辑、应用、导出和删除等紧凑操作。
+- 验证：Release 构建 0 error；因当前环境无法访问 `https://api.nuget.org/v3/index.json`，NuGet 漏洞审计出现 NU1900 警告；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.06 MB，SHA256 为 `3255A39FC3A3D6F0557292EB767E7A778281D48BB9FA0D7AF8E06D126E752282`。
+
+## [2026-05-17] 执行功能对标清单第五十四批
+- 系统备份服务改为分区导出/恢复，支持设置与历史、排班本地数据、Codex 当前配置、WireGuard 配置、FFmpeg 与依赖五类范围。
+- 系统设置页导出区新增范围复选框和“预检”按钮，可在导出前列出将导出的文件数量、大小和缺失项。
+- 导入恢复区新增范围复选框和“预览”按钮，导入前会显示备份来源机器/用户、文件数量、预计覆盖同名文件数和新增文件数。
+- 导入确认沿用 DPAPI 跨账户风险提示，并只覆盖所选类别的数据，便于只恢复排班、Codex 或 WireGuard 等单项资料。
+- 验证：Release 构建 0 error；因当前环境无法访问 `https://api.nuget.org/v3/index.json`，NuGet 漏洞审计出现 NU1900 警告；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.07 MB，SHA256 为 `C1D29E629984FB7FCB4D8AC006ED2E32AF4F7E32EC371775DEAA9B29932B4F2E`。
+
+## [2026-05-17] 执行功能对标清单第五十五批
+- 文件关联核心新增视频/音频分类注册、当前用户关联状态检测和恢复默认关联能力，主程序、安装器和卸载器继续共用同一份实现。
+- 系统设置页音视频关联区新增状态显示、刷新、只关联视频、只关联音频、关联全部和恢复默认按钮。
+- 安装器静默参数新增 `/associate-video` 与 `/associate-audio`，保留 `/associate-media` 作为全量关联入口。
+- 恢复默认关联会移除当前用户下 MyTools 写入的音视频默认关联，并提示 Windows 可能恢复原默认程序或要求重新选择默认应用。
+- 验证：Release 构建 0 error；因当前环境无法访问 `https://api.nuget.org/v3/index.json`，NuGet 漏洞审计出现 NU1900 警告；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.08 MB，SHA256 为 `C5BDB1D564722B30B505361207B8532775DC065D6FEB3135B9928E6744F782EF`。
+
+## [2026-05-17] 执行功能对标清单第五十六批
+- 微信备份 manifest 条目新增 `category` 字段，记录每个文件属于文字、图像、视频、语音、文件或缓存。
+- 微信恢复区新增类别复选框，可只恢复选中的类别；未选类别会在恢复时跳过且不写入目标目录。
+- 对旧备份缺少 `category` 的条目，恢复时会按相对路径尽量推断类别，保持向后兼容。
+- 恢复清单摘要新增按类别统计，恢复完成提示会显示按类别跳过数量。
+- 验证：Release 构建 0 error；因当前环境无法访问 `https://api.nuget.org/v3/index.json`，NuGet 漏洞审计出现 NU1900 警告；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.08 MB，SHA256 为 `561AD947E7F773F13754D577628AF549A498DE0ED37EE63D659D4B9166594838`。
+
+## [2026-05-17] 执行功能对标清单第五十七批
+- WireGuard 服务新增本地隧道配置重命名和删除能力，会对接口名做文件名安全化并避免覆盖同名 `.conf`。
+- WireGuard “已保存隧道”列表从整行点击改为明确的“加载 / 重命名 / 删除”操作区，减少误操作。
+- 删除隧道仅删除程序同级 `Configs` 下的本地 `.conf` 文件，不主动卸载正在运行的 WireGuard 隧道服务，确认框已明确提示。
+- 重命名或删除后会刷新隧道列表并写入连接日志；若当前编辑的是被重命名隧道，会同步更新接口名。
+- 验证：Release 构建 0 error；因当前环境无法访问 `https://api.nuget.org/v3/index.json`，NuGet 漏洞审计出现 NU1900 警告；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.08 MB，SHA256 为 `489CC9BA53EE410578BF687F38233A7F97C5021CFA925B3F2503C2B7203AE752`。
+
+## [2026-05-17] 执行功能对标清单第五十八批
+- 系统设置页音视频关联区新增“默认应用”按钮。
+- Win10/11 下打开 `ms-settings:defaultapps`，Win7/8 下打开控制面板默认程序入口，便于恢复默认关联后继续指定播放器。
+- 打开失败时会写入应用日志并提示失败原因。
+- 验证：Release 构建 0 error；因当前环境无法访问 `https://api.nuget.org/v3/index.json`，NuGet 漏洞审计出现 NU1900 警告；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.08 MB，SHA256 为 `8275C086E7D00E3E3E3B975287246935B2E594ECE3A3E90BA61AE80FD4E517D5`。
+
+## [2026-05-17] 执行功能对标清单第五十九批
+- Codex 配置导入前新增脱敏摘要确认窗口，用户可在保存前确认记录名、配置大小和关键字段。
+- `config.toml` 摘要展示常用配置键，涉及 key、token、secret、password、credential 的值会统一显示为 `***`。
+- `auth.json` 摘要改用 JSON 结构读取，只展示字段路径和类型，不展示认证明文。
+- 用户取消预览确认时不会创建配置记录，状态栏提示“已取消导入”。
+- 验证：Release 构建 0 error；因当前环境无法访问 `https://api.nuget.org/v3/index.json`，NuGet 漏洞审计出现 NU1900 警告；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.08 MB，SHA256 为 `274F4FACD85CC60683EEAB9C23E400E0BAB6280D1B08EACBF291D9DB3A12C46B`。
+
+## [2026-05-17] 执行功能对标清单第六十批
+- 系统备份导出的 `manifest.json` 新增文件清单和大小记录，用于后续校验备份完整性。
+- 系统设置页导入恢复区新增“校验”按钮，可检查备份内文件是否缺失或与 manifest 记录大小不一致。
+- 旧备份没有文件清单时，会回退为扫描备份目录中的现有文件并给出基础校验结果。
+- 校验结果会显示通过文件数、预期文件数、总大小和最多 20 条问题明细。
+- 验证：Release 构建 0 error；因当前环境无法访问 `https://api.nuget.org/v3/index.json`，NuGet 漏洞审计出现 NU1900 警告；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.08 MB，SHA256 为 `636566DB0C0CE179029395AE84E24E0B94257A19E631B606843ACFF7C2BFB0FD`。
+
+## [2026-05-17] 执行功能对标清单第六十一批
+- 首页系统概览新增传感器风险提示，显示传感器未启用、启动失败、读取失败、正常或异常状态。
+- 系统信息页传感器读取到温度 >= 85°C 或负载 >= 95% 时，首页同步显示同一条异常提示。
+- 传感器正常读取时，首页显示已读取项数量和未发现高温/高负载；非管理员或不支持时显示明确建议。
+- 验证：Release 构建 0 error；因当前环境无法访问 `https://api.nuget.org/v3/index.json`，NuGet 漏洞审计出现 NU1900 警告；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.08 MB，SHA256 为 `9A26A4EBBC741C9661C0138A2FDC91D2BB1D38FD8D5719B93E32DE7E47EE960F`。
+
+## [2026-05-17] 执行功能对标清单第六十二批
+- 启动项模型新增来源分类，区分 `注册表 Run` 与 `MyTools 禁用备份`。
+- 启动项卡片将来源分类与当前用户/所有用户范围合并显示，便于判断条目来自启用区还是禁用备份区。
+- 启动项搜索支持按来源分类和合并来源文本筛选，例如搜索“禁用备份”或“所有用户”。
+- 验证：Release 构建 0 error；因当前环境无法访问 `https://api.nuget.org/v3/index.json`，NuGet 漏洞审计出现 NU1900 警告；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.08 MB，SHA256 为 `FF7B4C5D05134264B72E04F5BA8CB4273DD290773C0477BC338D91453B0E8594`。
+
+## [2026-05-17] 执行功能对标清单第六十三批
+- 区域录像新增帧率选项：15 FPS、30 FPS、60 FPS。
+- MP4 录像新增画质预设：体积优先、均衡、高清，分别映射不同 CRF 和 preset 参数。
+- GIF 录制复用帧率设置但限制在 8~15 FPS 范围，避免动图体积失控。
+- `RecordingService` 新增 `RecordingOptions`，启动录像时统一传入帧率、CRF 和 preset。
+- 验证：Release 构建 0 error；因当前环境无法访问 `https://api.nuget.org/v3/index.json`，NuGet 漏洞审计出现 NU1900 警告；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.09 MB，SHA256 为 `9C3B9F6DC42804E583711664EC64DD09EAB1EDBC9894F28034E7C185BAF29DE0`。
+
+## [2026-05-17] 执行功能对标清单第六十四批
+- WireGuard 已保存隧道列表新增“差异”和“导出”按钮。
+- 差异预览会比较当前编辑区配置与保存的 `.conf` 文件，显示行数、大小和不同位置数量。
+- 导出功能可将单个隧道 `.conf` 另存到用户选择的位置，并写入连接日志。
+- 验证：Release 构建 0 error；因当前环境无法访问 `https://api.nuget.org/v3/index.json`，NuGet 漏洞审计出现 NU1900 警告；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.09 MB，SHA256 为 `3B47F940B29DA4031F299CB1EB9529BDF156DA0EFE3AEC60F24C1BE59EA45C3C`。
+
+## [2026-05-17] 排班编辑模式修复
+- 修复排班页进入编辑模式后动态表格未重建的问题，避免标题已显示“编辑中”但班次格子、姓名和每日需休输入仍保持只读。
+- 进入编辑模式后的状态栏改为提示可单击班次格子选择班次，也可修改姓名和每日需休人数。
+- 验证：Release 独立输出目录构建 0 error；因当前环境无法访问 `https://api.nuget.org/v3/index.json`，NuGet 漏洞审计出现 NU1900 警告；`artifacts\verify-build` 输出目录无托管 DLL。常规 Release 输出被正在运行的 `MyTools.exe`（PID 9904）锁定，未覆盖 `src\MyTools\bin\Release\net48\MyTools.exe`；已使用验证后的主程序和现有原生依赖重新生成安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.09 MB，SHA256 为 `4EDD23FD9D05D363A90E6C3CAC636EF44806CFC59B3957E21A655BA871AD820A`。
+
+## [2026-05-17] 排班硬约束与表格缩放
+- 排班表新增缩放按钮和 `Ctrl + 鼠标滚轮` 缩放，支持 65%~180%，便于在大屏与小屏下查看整月表格。
+- 排班表恢复为 3 行表头：星期、日期、每日总休目标；人员行从第 4 行开始。
+- 每日实际休息改为必须精确等于总休目标，少休和多休都会标红、进入冲突侧栏；总休目标支持 0.5 精度。
+- 保存前新增硬约束拦截：每日实际休息必须等于总休目标，任一人员连续上班不得超过 5 天，否则阻止保存并列出问题。
+- 自动设置休息日修正为按 0.5 精度统计手动休息，自动格只写入“白/休”，并在生成后修复或提示连续上班超限。
+- Excel 导出同步恢复为 3 行表头，总休目标超过或低于实际休息都会标红。
+- 验证：Release 构建 0 error；因当前环境无法访问 `https://api.nuget.org/v3/index.json`，NuGet 漏洞审计出现 NU1900 警告；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.09 MB，SHA256 为 `04B8605C1913120B7E237EA33371DAC2FB4F220B26B813D6EA517531DCFE25C8`。
