@@ -201,7 +201,8 @@ namespace MyTools.Views
             ScheduleHost.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(42) });  // 最长连上
             ScheduleHost.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(34) });  // 操作
 
-            // Rows: 0=星期, 1=日期, 2=每日总休目标, 3..=员工
+            // Rows: 0=星期, 1=日期, 2=实休, 3=总休, 4..=员工
+            ScheduleHost.RowDefinitions.Add(new RowDefinition { Height = new GridLength(24) });
             ScheduleHost.RowDefinitions.Add(new RowDefinition { Height = new GridLength(24) });
             ScheduleHost.RowDefinitions.Add(new RowDefinition { Height = new GridLength(24) });
             ScheduleHost.RowDefinitions.Add(new RowDefinition { Height = new GridLength(24) });
@@ -237,8 +238,29 @@ namespace MyTools.Views
             ScheduleHost.Children.Add(MakeHeaderCell("", 1, 3 + days, headerBg, false));
             ScheduleHost.Children.Add(MakeHeaderCell("", 1, 4 + days, headerBg, false));
 
-            // Row 2 — 当日总休目标（可编辑，实际不匹配时标红）
-            ScheduleHost.Children.Add(MakeHeaderCell("总休", 2, 0, headerBg, true));
+            // Row 2 — 实休（实际休息人数，只读；与总休目标不一致时标红）
+            ScheduleHost.Children.Add(MakeHeaderCell("实休", 2, 0, headerBg, true));
+            for (int d = 0; d < days; d++)
+            {
+                double quota = (d < sched.DailyRestQuotas.Count) ? sched.DailyRestQuotas[d] : 0;
+                double actual = _vm.ComputeColumnRestCount(d);
+                var matched = IsQuotaMatched(actual, quota);
+                var actualCell = MakeHeaderCell(FormatStat(actual), 2, 1 + d, matched ? headerBg : quotaMismatchBg, false);
+                if (actualCell is Border ab && ab.Child is TextBlock atb)
+                {
+                    atb.Foreground = matched ? Brushes.DarkSlateGray : Brushes.Crimson;
+                    atb.FontWeight = FontWeights.SemiBold;
+                    atb.ToolTip = BuildQuotaTooltip(actual, quota, matched);
+                }
+                ScheduleHost.Children.Add(actualCell);
+            }
+            ScheduleHost.Children.Add(MakeHeaderCell("", 2, 1 + days, headerBg, false));
+            ScheduleHost.Children.Add(MakeHeaderCell("", 2, 2 + days, headerBg, false));
+            ScheduleHost.Children.Add(MakeHeaderCell("", 2, 3 + days, headerBg, false));
+            ScheduleHost.Children.Add(MakeHeaderCell("", 2, 4 + days, headerBg, false));
+
+            // Row 3 — 当日总休目标（可编辑，实际不匹配时标红）
+            ScheduleHost.Children.Add(MakeHeaderCell("总休", 3, 0, headerBg, true));
             for (int d = 0; d < days; d++)
             {
                 int dayIdx = d;
@@ -257,9 +279,7 @@ namespace MyTools.Views
                     FontWeight = FontWeights.SemiBold,
                     IsReadOnly = !_vm.IsEditing,
                     Tag = d,
-                    ToolTip = matched
-                        ? $"实际休息 {FormatStat(actual)} / 目标 {FormatStat(quota)}"
-                        : $"实际休息 {FormatStat(actual)} / 目标 {FormatStat(quota)}，{(actual > quota ? "多" : "差")} {FormatStat(Math.Abs(actual - quota))}"
+                    ToolTip = BuildQuotaTooltip(actual, quota, matched)
                 };
                 quotaTextBox.LostFocus += (s, e) =>
                 {
@@ -272,17 +292,17 @@ namespace MyTools.Views
                         quotaTextBox.Text = FormatStat(sched.DailyRestQuotas[dayIdx]);
                     }
                 };
-                ScheduleHost.Children.Add(WrapBorder(quotaTextBox, 2, 1 + d, matched ? headerBg : quotaMismatchBg));
+                ScheduleHost.Children.Add(WrapBorder(quotaTextBox, 3, 1 + d, matched ? headerBg : quotaMismatchBg));
             }
-            ScheduleHost.Children.Add(MakeHeaderCell("", 2, 1 + days, headerBg, false));
-            ScheduleHost.Children.Add(MakeHeaderCell("", 2, 2 + days, headerBg, false));
-            ScheduleHost.Children.Add(MakeHeaderCell("", 2, 3 + days, headerBg, false));
-            ScheduleHost.Children.Add(MakeHeaderCell("", 2, 4 + days, headerBg, false));
+            ScheduleHost.Children.Add(MakeHeaderCell("", 3, 1 + days, headerBg, false));
+            ScheduleHost.Children.Add(MakeHeaderCell("", 3, 2 + days, headerBg, false));
+            ScheduleHost.Children.Add(MakeHeaderCell("", 3, 3 + days, headerBg, false));
+            ScheduleHost.Children.Add(MakeHeaderCell("", 3, 4 + days, headerBg, false));
 
-            // Rows 3+ — 员工
+            // Rows 4+ — 员工
             for (int e = 0; e < sched.Employees.Count; e++)
             {
-                int row = 3 + e;
+                int row = 4 + e;
                 int empIdx = e;
 
                 // Name (editable in edit mode)
@@ -406,9 +426,26 @@ namespace MyTools.Views
                 : value.ToString("0.#", CultureInfo.InvariantCulture);
         }
 
+        // 规范 §二 / §4.2.2 H1：(总休 - 0.5) ≤ 实休 ≤ 总休 即合规。
+        //   - 实休 > 总休（超员）→ 红
+        //   - 实休 < 总休 - 0.5（欠员超过半天）→ 红
+        //   - 否则 → 合规（允许 0.5 半天缺口给奇数半天场景）
         private static bool IsQuotaMatched(double actual, double quota)
         {
-            return Math.Abs(actual - quota) < 0.001;
+            return actual <= quota + 0.001 && actual >= quota - 0.5 - 0.001;
+        }
+
+        private static string BuildQuotaTooltip(double actual, double quota, bool matched)
+        {
+            if (matched)
+            {
+                return actual < quota - 0.001
+                    ? $"实际休息 {FormatStat(actual)} / 总休 {FormatStat(quota)}（差 {FormatStat(quota - actual)}，0.5 半天缺口允许）"
+                    : $"实际休息 {FormatStat(actual)} / 总休 {FormatStat(quota)}";
+            }
+            return actual > quota
+                ? $"实际休息 {FormatStat(actual)} / 总休 {FormatStat(quota)}，多排 {FormatStat(actual - quota)}（超员）"
+                : $"实际休息 {FormatStat(actual)} / 总休 {FormatStat(quota)}，欠 {FormatStat(quota - actual)}（缺口超过 0.5）";
         }
 
         private static bool TryParseQuota(string text, out double quota)
