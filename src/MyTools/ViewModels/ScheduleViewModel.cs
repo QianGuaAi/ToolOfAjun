@@ -165,6 +165,13 @@ namespace MyTools.ViewModels
             if (Current == null) return;
             try
             {
+                if (!Current.HasGenerated)
+                {
+                    StatusMessage = "导出被拒绝：本月排班尚未完成自动生成。";
+                    MessageBox.Show("本月排班尚未完成自动生成，不能导出 Excel。", "导出排班", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
                 var dlg = new Microsoft.Win32.SaveFileDialog
                 {
                     Filter = "Excel 文件 (*.xlsx)|*.xlsx",
@@ -477,6 +484,24 @@ namespace MyTools.ViewModels
             if (Current == null) return;
             try
             {
+                var validationIssues = BuildSaveValidationIssues(Current).ToList();
+                if (validationIssues.Count > 0)
+                {
+                    var detail = string.Join(Environment.NewLine, validationIssues.Take(12).Select(item => "· " + item));
+                    if (validationIssues.Count > 12)
+                    {
+                        detail += Environment.NewLine + $"· 另有 {validationIssues.Count - 12} 项未显示";
+                    }
+
+                    StatusMessage = $"保存被阻止：{validationIssues.Count} 项基础数据校验未通过。";
+                    MessageBox.Show(
+                        "排班基础数据不完整，不能保存：\n\n" + detail,
+                        "排班保存校验",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                    return;
+                }
+
                 var hardIssues = BuildHardConstraintIssues(Current).ToList();
                 if (hardIssues.Count > 0)
                 {
@@ -524,8 +549,15 @@ namespace MyTools.ViewModels
         private void AutoOptimize()
         {
             if (Current == null || !IsEditing) return;
-            var r = ShiftAutoOptimizer.Optimize(Current);
+            var r = ShiftAutoOptimizer.Optimize(Current, BuildPreservedCells(Current));
             NotifyScheduleDataChanged();
+            if (!r.Success)
+            {
+                StatusMessage = r.Warnings.Count > 0 ? r.Message + " " + r.Warnings[0] : r.Message;
+                foreach (var w in r.Warnings) AppLogService.Warning("Schedule optimize rejected: {W}", w);
+                return;
+            }
+
             var hardIssues = BuildHardConstraintIssues(Current).Take(6).ToList();
             if (hardIssues.Count > 0)
             {
@@ -546,10 +578,6 @@ namespace MyTools.ViewModels
                     foreach (var w in r.Warnings) AppLogService.Warning("Schedule warning: {W}", w);
                 }
             }
-            else
-            {
-                StatusMessage = r.Message;
-            }
         }
 
         // ============================ Cell update / shortcuts ============================
@@ -561,7 +589,7 @@ namespace MyTools.ViewModels
             if (dayIdx < 0 || dayIdx >= Current.DayCount) return;
 
             var cell = Current.Employees[empIdx].Cells[dayIdx];
-            cell.Code = code ?? string.Empty;
+            cell.Code = ShiftCodes.Normalize(code);
             cell.IsManual = !string.IsNullOrEmpty(cell.Code);
             NotifyScheduleDataChanged();
         }
@@ -673,6 +701,7 @@ namespace MyTools.ViewModels
             double work = 0, rest = 0;
             int maxRun = 0, run = 0;
             if (Current == null || empIdx < 0 || empIdx >= Current.Employees.Count) return (0, 0, 0);
+            if (string.IsNullOrWhiteSpace(Current.Employees[empIdx].Name)) return (0, 0, 0);
             foreach (var c in Current.Employees[empIdx].Cells)
             {
                 work += ShiftCodes.WorkDays(c.Code);
@@ -689,6 +718,7 @@ namespace MyTools.ViewModels
             double sum = 0;
             foreach (var emp in Current.Employees)
             {
+                if (string.IsNullOrWhiteSpace(emp.Name)) continue;
                 if (dayIdx < emp.Cells.Count) sum += ShiftCodes.RestDays(emp.Cells[dayIdx].Code);
             }
             return sum;
@@ -711,6 +741,98 @@ namespace MyTools.ViewModels
             ScheduleDataChanged?.Invoke(this, EventArgs.Empty);
         }
 
+        private static IReadOnlyCollection<(int emp, int day)> BuildPreservedCells(ScheduleVersion schedule)
+        {
+            return new List<(int emp, int day)>();
+        }
+
+        private static IEnumerable<string> BuildSaveValidationIssues(ScheduleVersion schedule)
+        {
+            if (schedule == null)
+            {
+                yield return "当前排班为空。";
+                yield break;
+            }
+
+            if (schedule.Year < 1900 || schedule.Year > 2100)
+            {
+                yield return $"年份 {schedule.Year} 无效。";
+                yield break;
+            }
+
+            if (schedule.Month < 1 || schedule.Month > 12)
+            {
+                yield return $"月份 {schedule.Month} 无效。";
+                yield break;
+            }
+
+            var dayCount = DateTime.DaysInMonth(schedule.Year, schedule.Month);
+            if (schedule.DailyRestQuotas == null)
+            {
+                yield return "每日总休数组为空。";
+            }
+            else
+            {
+                if (schedule.DailyRestQuotas.Count != dayCount)
+                {
+                    yield return $"每日总休数组长度 {schedule.DailyRestQuotas.Count} 与当月天数 {dayCount} 不一致。";
+                }
+
+                for (var day = 0; day < schedule.DailyRestQuotas.Count; day++)
+                {
+                    var quota = schedule.DailyRestQuotas[day];
+                    if (double.IsNaN(quota) || double.IsInfinity(quota) || quota < 0)
+                    {
+                        yield return $"{day + 1} 日总休值 {quota} 无效。";
+                    }
+                    else if (Math.Abs(quota * 2 - Math.Round(quota * 2)) > 0.001)
+                    {
+                        yield return $"{day + 1} 日总休 {FormatNumber(quota)} 不是 0.5 步进。";
+                    }
+                }
+            }
+
+            if (schedule.Employees == null)
+            {
+                yield return "人员行集合为空。";
+                yield break;
+            }
+
+            for (var row = 0; row < schedule.Employees.Count; row++)
+            {
+                var employee = schedule.Employees[row];
+                if (employee == null)
+                {
+                    yield return $"第 {row + 1} 个人员行为空。";
+                    continue;
+                }
+
+                if (employee.Cells == null)
+                {
+                    yield return $"{DisplayEmployeeName(employee, row)} 的日期单元格为空。";
+                }
+                else if (employee.Cells.Count != dayCount)
+                {
+                    yield return $"{DisplayEmployeeName(employee, row)} 的日期单元格数量 {employee.Cells.Count} 与当月天数 {dayCount} 不一致。";
+                }
+            }
+        }
+
+        private static string DisplayEmployeeName(EmployeeRow employee, int index)
+        {
+            return string.IsNullOrWhiteSpace(employee?.Name) ? $"第 {index + 1} 行" : employee.Name.Trim();
+        }
+
+        private static double MinDailyRestAllowed(double quota)
+        {
+            return Math.Max(0, quota - 0.5);
+        }
+
+        private static bool IsDailyRestWithinQuota(double actual, double quota)
+        {
+            return actual >= MinDailyRestAllowed(quota) - 0.001 && actual <= quota + 0.001;
+        }
+
         private static IEnumerable<string> BuildHardConstraintIssues(ScheduleVersion schedule)
         {
             if (schedule == null)
@@ -723,16 +845,21 @@ namespace MyTools.ViewModels
             {
                 var actual = ComputeColumnRestCount(schedule, day);
                 var quota = day < schedule.DailyRestQuotas.Count ? schedule.DailyRestQuotas[day] : 0;
-                var delta = actual - quota;
-                if (Math.Abs(delta) > 0.001)
+                if (actual > quota + 0.001)
                 {
-                    yield return $"{day + 1} 日实际休息 {FormatNumber(actual)} / 总休目标 {FormatNumber(quota)}，{(delta > 0 ? "多" : "差")} {FormatNumber(Math.Abs(delta))}";
+                    yield return $"{day + 1} 日实际休息 {FormatNumber(actual)} / 总休目标 {FormatNumber(quota)}，多 {FormatNumber(actual - quota)}";
+                }
+                else if (!IsDailyRestWithinQuota(actual, quota))
+                {
+                    var minAllowed = MinDailyRestAllowed(quota);
+                    yield return $"{day + 1} 日实际休息 {FormatNumber(actual)} / 总休目标 {FormatNumber(quota)}，少 {FormatNumber(minAllowed - actual)}，允许范围 {FormatNumber(minAllowed)}~{FormatNumber(quota)}";
                 }
             }
 
             for (var empIndex = 0; empIndex < schedule.Employees.Count; empIndex++)
             {
                 var employee = schedule.Employees[empIndex];
+                if (string.IsNullOrWhiteSpace(employee?.Name)) continue;
                 var maxRun = ComputeMaxConsecutiveWork(employee);
                 if (maxRun > 5)
                 {
@@ -751,6 +878,7 @@ namespace MyTools.ViewModels
             double sum = 0;
             foreach (var emp in schedule.Employees)
             {
+                if (string.IsNullOrWhiteSpace(emp.Name)) continue;
                 if (emp.Cells != null && dayIdx < emp.Cells.Count)
                 {
                     sum += ShiftCodes.RestDays(emp.Cells[dayIdx].Code);
@@ -806,14 +934,25 @@ namespace MyTools.ViewModels
             {
                 var actual = ComputeColumnRestCount(day);
                 var quota = day < Current.DailyRestQuotas.Count ? Current.DailyRestQuotas[day] : 0;
-                var delta = actual - quota;
-                if (Math.Abs(delta) > 0.001)
+                if (actual > quota + 0.001)
                 {
                     ScheduleConflicts.Add(new ScheduleConflictItem
                     {
                         Level = "高",
-                        Title = $"{day + 1} 日总休{(delta > 0 ? "超额" : "不足")}",
-                        Detail = $"实际 {FormatNumber(actual)} / 目标 {FormatNumber(quota)}，{(delta > 0 ? "多" : "差")} {FormatNumber(Math.Abs(delta))}。",
+                        Title = $"{day + 1} 日总休超额",
+                        Detail = $"实际 {FormatNumber(actual)} / 目标 {FormatNumber(quota)}，多 {FormatNumber(actual - quota)}。",
+                        Category = "每日总休",
+                        DayIndex = day
+                    });
+                }
+                else if (!IsDailyRestWithinQuota(actual, quota))
+                {
+                    var minAllowed = MinDailyRestAllowed(quota);
+                    ScheduleConflicts.Add(new ScheduleConflictItem
+                    {
+                        Level = "高",
+                        Title = $"{day + 1} 日总休不足",
+                        Detail = $"实际 {FormatNumber(actual)} / 目标 {FormatNumber(quota)}，允许范围 {FormatNumber(minAllowed)}~{FormatNumber(quota)}，少 {FormatNumber(minAllowed - actual)}。",
                         Category = "每日总休",
                         DayIndex = day
                     });
@@ -823,6 +962,7 @@ namespace MyTools.ViewModels
             for (var empIndex = 0; empIndex < Current.Employees.Count; empIndex++)
             {
                 var employee = Current.Employees[empIndex];
+                if (string.IsNullOrWhiteSpace(employee?.Name)) continue;
                 var stats = ComputeRowStats(empIndex);
                 if (stats.maxRun > 5)
                 {
@@ -865,6 +1005,7 @@ namespace MyTools.ViewModels
             {
                 var end = Math.Min(Current.DayCount - 1, start + 6);
                 var employeeRests = Current.Employees
+                    .Where(employee => !string.IsNullOrWhiteSpace(employee.Name))
                     .Select(employee => ComputeEmployeeRestRange(employee, start, end))
                     .ToList();
                 var totalRest = employeeRests.Sum();
@@ -974,6 +1115,11 @@ namespace MyTools.ViewModels
                 return;
             }
 
+            if (schedule.DailyRestQuotas == null)
+            {
+                schedule.DailyRestQuotas = new List<double>();
+            }
+
             while (schedule.DailyRestQuotas.Count < schedule.DayCount)
             {
                 schedule.DailyRestQuotas.Add(0);
@@ -1005,6 +1151,15 @@ namespace MyTools.ViewModels
             while (employee.Cells.Count > dayCount)
             {
                 employee.Cells.RemoveAt(employee.Cells.Count - 1);
+            }
+
+            for (var i = 0; i < employee.Cells.Count; i++)
+            {
+                if (employee.Cells[i] == null)
+                {
+                    employee.Cells[i] = new ShiftCell();
+                }
+                employee.Cells[i].Code = ShiftCodes.Normalize(employee.Cells[i].Code);
             }
         }
 

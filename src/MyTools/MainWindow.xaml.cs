@@ -530,6 +530,12 @@ namespace MyTools
             }
         }
 
+        private void ImageFolderTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+        {
+            if (e.NewValue is ImageFolderNode node && DataContext is MainViewModel vm)
+                vm.OnImageFolderTreeSelected(node);
+        }
+
         private void Window_PreviewDragOver(object sender, DragEventArgs e)
         {
             if (DataContext is MainViewModel videoVm

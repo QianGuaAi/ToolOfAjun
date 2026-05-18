@@ -31,6 +31,15 @@ namespace MyTools.Services
 
         public static OptimizeResult Optimize(ScheduleVersion sched)
         {
+            return Optimize(sched, null);
+        }
+
+        /// <summary>
+        /// 自动设置休息日。<paramref name="preservedCells"/> 中显式标记的 (empIdx, dayIdx) 在 sanitize 阶段不会被清空，
+        /// 与手工锁定一同作为"已分配休"基线参与 §4.2.3 的前置拒绝判定（规范 §4.2.1/§7）。
+        /// </summary>
+        public static OptimizeResult Optimize(ScheduleVersion sched, IReadOnlyCollection<(int emp, int day)> preservedCells)
+        {
             var result = new OptimizeResult();
             if (sched == null || sched.Employees.Count == 0)
             {
@@ -45,21 +54,113 @@ namespace MyTools.Services
             int days = sched.DayCount;
             int empCount = sched.Employees.Count;
 
-            // --------- 0. Sanitize ---------
+            // --------- 0a. 法定节假日配置存在校验（规范 §4.2.3 #1） ---------
+            if (!HolidayService.HasYearConfigured(sched.Year))
+            {
+                result.Success = false;
+                result.Message = $"未配置 {sched.Year} 年法定节假日，请先在 holidays.json 中补充该年配置。";
+                return result;
+            }
+
+            // --------- 0b. Sanitize：补齐/截断列长度，清空"非手动且未保留"的旧自动结果 ---------
             foreach (var e in sched.Employees)
             {
                 while (e.Cells.Count < days) e.Cells.Add(new ShiftCell());
                 if (e.Cells.Count > days) e.Cells.RemoveRange(days, e.Cells.Count - days);
             }
 
-            // 清空全部非手动单元格（重新生成自动结果）
+            var activeIndexes = Enumerable.Range(0, empCount)
+                .Where(i => !string.IsNullOrWhiteSpace(sched.Employees[i].Name))
+                .ToList();
+            if (activeIndexes.Count == 0)
+            {
+                result.Success = false;
+                result.Message = "无有效人员可排。";
+                return result;
+            }
+
+            foreach (var i in Enumerable.Range(0, empCount).Except(activeIndexes))
+            {
+                foreach (var cell in sched.Employees[i].Cells)
+                {
+                    cell.Code = string.Empty;
+                    cell.IsManual = false;
+                }
+            }
+
+            var preserved = preservedCells != null
+                ? new HashSet<(int emp, int day)>(preservedCells)
+                : new HashSet<(int emp, int day)>();
+
+            // --------- 0c. §4.2.3 #2 + #3 前置拒绝 ---------
+            //   #2 sanitize 后每日 (总休 - 已锁休) 必须保持 0.5 步进，允许自动生成后欠 0.5
+            //   #3 H2 强制休 > 当日剩余休息名额：当日因 5 连班必须强制休的人数超过 quota 余量
+            var rejections = new List<string>();
+            for (int d = 0; d < days; d++)
+            {
+                double quota = d < sched.DailyRestQuotas.Count ? sched.DailyRestQuotas[d] : 0;
+                double lockedRest = 0;
+                foreach (var i in activeIndexes)
+                {
+                    var c = sched.Employees[i].Cells[d];
+                    if (c.IsManual || preserved.Contains((i, d)))
+                    {
+                        lockedRest += ShiftCodes.RestDays(c.Code);
+                    }
+                }
+
+                double remaining = quota - lockedRest;
+                if (remaining < -Epsilon)
+                {
+                    rejections.Add($"{sched.Year}-{sched.Month:00}-{d + 1:00} 锁定休息 {FormatNumber(lockedRest)} 已超出总休 {FormatNumber(quota)}。");
+                    continue;
+                }
+
+                double frac = Math.Abs(remaining - Math.Round(remaining));
+                if (frac > Epsilon && Math.Abs(frac - 0.5) > Epsilon)
+                {
+                    rejections.Add($"{sched.Year}-{sched.Month:00}-{d + 1:00} 总休减锁定休后剩余 {FormatNumber(remaining)} 天，无法用整天补齐。");
+                }
+
+                // H2 强制休：当前考察 d 之前是否有 ≥5 连续上班的人（基于已锁定单元格），且 d 自身可被自动占用
+                int forcedCount = 0;
+                foreach (var i in activeIndexes)
+                {
+                    var c = sched.Employees[i].Cells[d];
+                    if (c.IsManual || preserved.Contains((i, d))) continue; // d 已锁定（含休或上班），不需要算强制
+                    int run = 0;
+                    for (int p = d - 1; p >= 0; p--)
+                    {
+                        var pc = sched.Employees[i].Cells[p];
+                        if (!ShiftCodes.IsWork(pc.Code)) break;
+                        if (!(pc.IsManual || preserved.Contains((i, p)))) break; // 仅锁定上班才算"必然连续"
+                        run++;
+                        if (run >= MaxConsecutiveWork) break;
+                    }
+                    if (run >= MaxConsecutiveWork) forcedCount++;
+                }
+                var autoRestCapacity = Math.Max(0, (int)Math.Floor(remaining + Epsilon));
+                if (forcedCount > autoRestCapacity)
+                {
+                    rejections.Add($"{sched.Year}-{sched.Month:00}-{d + 1:00} 因 5 连班必须强制休的人数 {forcedCount} 超过当日可自动安排休息名额 {autoRestCapacity}。");
+                }
+            }
+
+            if (rejections.Count > 0)
+            {
+                result.Success = false;
+                result.Message = "排班无法生成（违反硬性条件）：";
+                foreach (var r in rejections) result.Warnings.Add(r);
+                return result;
+            }
+
             int filled = 0;
             for (int d = 0; d < days; d++)
             {
                 for (int i = 0; i < empCount; i++)
                 {
                     var cell = sched.Employees[i].Cells[d];
-                    if (!cell.IsManual && !string.IsNullOrEmpty(cell.Code))
+                    if (!cell.IsManual && !preserved.Contains((i, d)) && !string.IsNullOrEmpty(cell.Code))
                     {
                         cell.Code = string.Empty;
                     }
@@ -90,7 +191,7 @@ namespace MyTools.Services
             double RemainingSlots(int d)
             {
                 double cur = 0;
-                for (int i = 0; i < empCount; i++) cur += ShiftCodes.RestDays(sched.Employees[i].Cells[d].Code);
+                foreach (var i in activeIndexes) cur += ShiftCodes.RestDays(sched.Employees[i].Cells[d].Code);
                 double quota = d < sched.DailyRestQuotas.Count ? sched.DailyRestQuotas[d] : 0;
                 return quota - cur;
             }
@@ -132,7 +233,7 @@ namespace MyTools.Services
             bool TryAssignRest(int empIdx, int dayIdx)
             {
                 var cell = sched.Employees[empIdx].Cells[dayIdx];
-                if (cell.IsManual) return false;
+                if (cell.IsManual || preserved.Contains((empIdx, dayIdx))) return false;
                 if (!string.IsNullOrEmpty(cell.Code)) return false; // 已被其它阶段分配
                 cell.Code = ShiftCodes.Rest;
                 return true;
@@ -145,12 +246,13 @@ namespace MyTools.Services
                 double slots = Math.Min(RemainingSlots(sat), RemainingSlots(sun));
                 if (slots < 1.0 - Epsilon) continue;
 
-                var candidates = Enumerable.Range(0, empCount)
+                var candidates = activeIndexes
                     .Where(i =>
                     {
                         var cs = sched.Employees[i].Cells[sat];
                         var cu = sched.Employees[i].Cells[sun];
                         return !cs.IsManual && !cu.IsManual
+                            && !preserved.Contains((i, sat)) && !preserved.Contains((i, sun))
                             && string.IsNullOrEmpty(cs.Code) && string.IsNullOrEmpty(cu.Code);
                     })
                     .OrderBy(CountPairWeekendsRested)
@@ -173,8 +275,9 @@ namespace MyTools.Services
                 double rem = RemainingSlots(d);
                 if (rem < 1.0 - Epsilon) continue;
 
-                var candidates = Enumerable.Range(0, empCount)
+                var candidates = activeIndexes
                     .Where(i => !sched.Employees[i].Cells[d].IsManual
+                                && !preserved.Contains((i, d))
                                 && string.IsNullOrEmpty(sched.Employees[i].Cells[d].Code))
                     .OrderBy(CountHolidayRested)
                     .ThenBy(TotalRest)
@@ -199,8 +302,9 @@ namespace MyTools.Services
                     rem = 0;
                 }
 
-                var unassigned = Enumerable.Range(0, empCount)
+                var unassigned = activeIndexes
                     .Where(i => !sched.Employees[i].Cells[d].IsManual
+                                && !preserved.Contains((i, d))
                                 && string.IsNullOrEmpty(sched.Employees[i].Cells[d].Code))
                     .ToList();
 
@@ -264,33 +368,37 @@ namespace MyTools.Services
             }
 
             // ============== 阶段 D：连续 >5 修复（保留原实现） ==============
-            filled += RepairConsecutiveRuns(sched, result.Warnings);
+            filled += RepairConsecutiveRuns(sched, result.Warnings, activeIndexes, preserved);
 
             // ============== 阶段 E：均衡 swap（让总休、节假日休分布更均匀） ==============
-            BalanceRestPass(sched, isHoliday);
+            BalanceRestPass(sched, isHoliday, activeIndexes, preserved);
 
             // ============== 阶段 F：连续上班 ≤ 5 兜底（H2 硬约束） ==============
             // 均衡 swap 已自带 ≤5 检查不会引入新违规；这里兜底处理阶段 D 因 quota=actual 卡死而残留的旧违规。
-            filled += RepairConsecutiveRuns(sched, result.Warnings);
+            filled += RepairConsecutiveRuns(sched, result.Warnings, activeIndexes, preserved);
 
             // ============== 校验与汇总 ==============
-            var hardIssues = CollectHardConstraintIssues(sched).ToList();
+            var hardIssues = CollectHardConstraintIssues(sched, activeIndexes).ToList();
             foreach (var issue in hardIssues) result.Warnings.Add(issue);
             result.Success = hardIssues.Count == 0;
             result.FilledCells = filled;
             result.Message = result.Success
                 ? $"已优化 {filled} 个单元格。"
                 : $"已优化 {filled} 个单元格，但仍有 {hardIssues.Count} 项硬约束未满足。";
+            if (result.Success)
+            {
+                sched.GeneratedAt = DateTime.Now;
+            }
             return result;
         }
 
         // ============== 均衡 swap：在不改变每日总休量、不破坏 5 连班、不动手动格的前提下做交换 ==============
         // 双目标：先压缩总休方差，再压缩节假日休方差。每轮挑当前差距最大者。
-        private static void BalanceRestPass(ScheduleVersion sched, bool[] isHoliday)
+        private static void BalanceRestPass(ScheduleVersion sched, bool[] isHoliday, List<int> activeIndexes, HashSet<(int emp, int day)> preserved)
         {
             int days = sched.DayCount;
             int empCount = sched.Employees.Count;
-            if (empCount < 2) return;
+            if (activeIndexes == null || activeIndexes.Count < 2) return;
 
             double[] Total()
             {
@@ -313,15 +421,15 @@ namespace MyTools.Services
             while (guard-- > 0)
             {
                 var tot = Total();
-                int hi = 0, lo = 0;
-                for (int i = 1; i < empCount; i++)
+                int hi = activeIndexes[0], lo = activeIndexes[0];
+                foreach (var i in activeIndexes)
                 {
                     if (tot[i] > tot[hi]) hi = i;
                     if (tot[i] < tot[lo]) lo = i;
                 }
                 if (tot[hi] - tot[lo] <= 1.0 + Epsilon) break;
 
-                if (!TrySwapRestDay(sched, hi, lo, days)) break;
+                if (!TrySwapRestDay(sched, hi, lo, days, preserved)) break;
             }
 
             // ---- Round 2: 节假日休均衡（差距 > 1 才交换） ----
@@ -329,8 +437,8 @@ namespace MyTools.Services
             while (guard-- > 0)
             {
                 var hRest = HolidayTotal();
-                int hi = 0, lo = 0;
-                for (int i = 1; i < empCount; i++)
+                int hi = activeIndexes[0], lo = activeIndexes[0];
+                foreach (var i in activeIndexes)
                 {
                     if (hRest[i] > hRest[hi]) hi = i;
                     if (hRest[i] < hRest[lo]) lo = i;
@@ -338,23 +446,24 @@ namespace MyTools.Services
                 if (hRest[hi] - hRest[lo] <= 1.0 + Epsilon) break;
 
                 // 只在节假日上做交换，避免破坏总休均衡
-                if (!TrySwapRestDayOnDays(sched, hi, lo, isHoliday, requireHoliday: true, days)) break;
+                if (!TrySwapRestDayOnDays(sched, hi, lo, isHoliday, requireHoliday: true, days, preserved)) break;
             }
         }
 
         /// <summary>把 hi 在某天的 自动休 和 lo 在同一天的 自动白 交换；交换后两人都不超 5 连班才算成功。</summary>
-        private static bool TrySwapRestDay(ScheduleVersion sched, int hi, int lo, int days)
+        private static bool TrySwapRestDay(ScheduleVersion sched, int hi, int lo, int days, HashSet<(int emp, int day)> preserved)
         {
-            return TrySwapRestDayOnDays(sched, hi, lo, null, requireHoliday: false, days);
+            return TrySwapRestDayOnDays(sched, hi, lo, null, requireHoliday: false, days, preserved);
         }
 
-        private static bool TrySwapRestDayOnDays(ScheduleVersion sched, int hi, int lo, bool[] isHoliday, bool requireHoliday, int days)
+        private static bool TrySwapRestDayOnDays(ScheduleVersion sched, int hi, int lo, bool[] isHoliday, bool requireHoliday, int days, HashSet<(int emp, int day)> preserved)
         {
             // 随机化访问顺序，避免每次都从 d=0 开始固定挑同一天
             var order = Enumerable.Range(0, days).OrderBy(_ => Guid.NewGuid()).ToList();
             foreach (var d in order)
             {
                 if (requireHoliday && (isHoliday == null || !isHoliday[d])) continue;
+                if (preserved.Contains((hi, d)) || preserved.Contains((lo, d))) continue;
                 var ch = sched.Employees[hi].Cells[d];
                 var cl = sched.Employees[lo].Cells[d];
                 if (ch.IsManual || cl.IsManual) continue;
@@ -379,13 +488,13 @@ namespace MyTools.Services
 
         // ============== 以下为原有辅助方法 ==============
 
-        private static int RepairConsecutiveRuns(ScheduleVersion sched, List<string> warnings)
+        private static int RepairConsecutiveRuns(ScheduleVersion sched, List<string> warnings, List<int> activeIndexes, HashSet<(int emp, int day)> preserved)
         {
             int repairs = 0;
-            int guard = Math.Max(1, sched.DayCount * Math.Max(1, sched.Employees.Count) * 4);
+            int guard = Math.Max(1, sched.DayCount * Math.Max(1, activeIndexes.Count) * 4);
             while (guard-- > 0)
             {
-                if (!TryFindOverlongRun(sched, out var empIdx, out var startDay, out var endDay, out var length))
+                if (!TryFindOverlongRun(sched, activeIndexes, out var empIdx, out var startDay, out var endDay, out var length))
                 {
                     return repairs;
                 }
@@ -394,9 +503,10 @@ namespace MyTools.Services
                 foreach (var day in CandidateBreakDays(startDay, endDay))
                 {
                     var cell = sched.Employees[empIdx].Cells[day];
+                    if (preserved.Contains((empIdx, day))) continue;
                     if (cell.IsManual || !ShiftCodes.IsWork(cell.Code)) continue;
 
-                    if (TryBreakRunOnDay(sched, empIdx, day))
+                    if (TryBreakRunOnDay(sched, empIdx, day, activeIndexes, preserved))
                     {
                         repairs++;
                         repaired = true;
@@ -422,10 +532,10 @@ namespace MyTools.Services
                 .OrderBy(day => Math.Abs(day - middle));
         }
 
-        private static bool TryBreakRunOnDay(ScheduleVersion sched, int empIdx, int day)
+        private static bool TryBreakRunOnDay(ScheduleVersion sched, int empIdx, int day, List<int> activeIndexes, HashSet<(int emp, int day)> preserved)
         {
             var quota = day < sched.DailyRestQuotas.Count ? sched.DailyRestQuotas[day] : 0;
-            var actual = ComputeColumnRestCount(sched, day);
+            var actual = ComputeColumnRestCount(sched, day, activeIndexes);
             var offender = sched.Employees[empIdx].Cells[day];
 
             // 已超员：不能再加休，但仍可尝试 donor-swap（列中性，能改善连班）
@@ -437,10 +547,11 @@ namespace MyTools.Services
             }
 
             // 直加会超 quota：用 donor-swap（offender 转休 +1，donor 转白 -1，列总数不变）
-            var donorIndexes = Enumerable.Range(0, sched.Employees.Count)
+            var donorIndexes = activeIndexes
                 .Where(i => i != empIdx)
                 .Where(i =>
                 {
+                    if (preserved.Contains((i, day))) return false;
                     var cell = sched.Employees[i].Cells[day];
                     return !cell.IsManual && cell.Code == ShiftCodes.Rest;
                 })
@@ -468,9 +579,9 @@ namespace MyTools.Services
             return false;
         }
 
-        private static bool TryFindOverlongRun(ScheduleVersion sched, out int employeeIndex, out int startDay, out int endDay, out int length)
+        private static bool TryFindOverlongRun(ScheduleVersion sched, List<int> activeIndexes, out int employeeIndex, out int startDay, out int endDay, out int length)
         {
-            for (int i = 0; i < sched.Employees.Count; i++)
+            foreach (var i in activeIndexes)
             {
                 var run = 0;
                 for (int d = 0; d < sched.DayCount; d++)
@@ -501,27 +612,25 @@ namespace MyTools.Services
             return false;
         }
 
-        private static IEnumerable<string> CollectHardConstraintIssues(ScheduleVersion sched)
+        private static IEnumerable<string> CollectHardConstraintIssues(ScheduleVersion sched, List<int> activeIndexes)
         {
-            // 规范 §4.2.2 H1：(总休 - 0.5) ≤ 实休 ≤ 总休。
-            //   - 实休 > 总休：超员，违规。
-            //   - 实休 < 总休 - 0.5：欠员超过半天，违规（只允许 0.5 半天缺口给奇数半天场景）。
+            // 规范 §二：每日实休必须落在 [总休-0.5, 总休]。
             for (int d = 0; d < sched.DayCount; d++)
             {
-                var actual = ComputeColumnRestCount(sched, d);
+                var actual = ComputeColumnRestCount(sched, d, activeIndexes);
                 var quota = d < sched.DailyRestQuotas.Count ? sched.DailyRestQuotas[d] : 0;
-                var delta = actual - quota;
-                if (delta > Epsilon)
+                var minAllowed = Math.Max(0, quota - 0.5);
+                if (actual > quota + Epsilon)
                 {
-                    yield return $"{sched.Year}-{sched.Month:00}-{d + 1:00} 实际休息 {FormatNumber(actual)} / 总休 {FormatNumber(quota)}，多排 {FormatNumber(delta)}（超员）。";
+                    yield return $"{sched.Year}-{sched.Month:00}-{d + 1:00} 实际休息 {FormatNumber(actual)} / 总休 {FormatNumber(quota)}，多排 {FormatNumber(actual - quota)}（超员）。";
                 }
-                else if (delta < -0.5 - Epsilon)
+                else if (actual < minAllowed - Epsilon)
                 {
-                    yield return $"{sched.Year}-{sched.Month:00}-{d + 1:00} 实际休息 {FormatNumber(actual)} / 总休 {FormatNumber(quota)}，欠 {FormatNumber(-delta)}（缺口超过 0.5）。";
+                    yield return $"{sched.Year}-{sched.Month:00}-{d + 1:00} 实际休息 {FormatNumber(actual)} / 总休 {FormatNumber(quota)}，低于允许下限 {FormatNumber(minAllowed)}。";
                 }
             }
 
-            for (int i = 0; i < sched.Employees.Count; i++)
+            foreach (var i in activeIndexes)
             {
                 var maxRun = ComputeMaxConsecutiveWork(sched.Employees[i]);
                 if (maxRun > MaxConsecutiveWork)
@@ -531,11 +640,12 @@ namespace MyTools.Services
             }
         }
 
-        private static double ComputeColumnRestCount(ScheduleVersion sched, int dayIdx)
+        private static double ComputeColumnRestCount(ScheduleVersion sched, int dayIdx, List<int> activeIndexes)
         {
             double sum = 0;
-            foreach (var emp in sched.Employees)
+            foreach (var i in activeIndexes)
             {
+                var emp = sched.Employees[i];
                 if (emp.Cells != null && dayIdx < emp.Cells.Count)
                     sum += ShiftCodes.RestDays(emp.Cells[dayIdx].Code);
             }

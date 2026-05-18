@@ -38,9 +38,19 @@ namespace MyTools.Services
         public DateTime CreatedAt { get; set; } = DateTime.Now;
         public DateTime UpdatedAt { get; set; } = DateTime.Now;
 
+        /// <summary>
+        /// 自动设置休息日成功后写入的时间戳。规范 §5/§8：
+        /// - 仅当 GeneratedAt 非空时允许 Excel 导出。
+        /// - 普通保存不会清除该值；新建/重新自动生成才会刷新。
+        /// </summary>
+        public DateTime? GeneratedAt { get; set; }
+
         /// <summary>当月天数（28-31）。</summary>
         [JsonIgnore]
         public int DayCount => DateTime.DaysInMonth(Year, Month);
+
+        [JsonIgnore]
+        public bool HasGenerated => GeneratedAt.HasValue;
 
         public DateTime DateOf(int dayIndex0Based) => new DateTime(Year, Month, dayIndex0Based + 1);
     }
@@ -78,15 +88,23 @@ namespace MyTools.Services
 
         public static readonly string[] All = { Day, Card, Deputy, Infect, Big, Small, Rest, Public, Half };
 
+        public static string Normalize(string code)
+        {
+            code = (code ?? string.Empty).Trim();
+            return code == "夜" ? Big : code;
+        }
+
         /// <summary>是否计入"上班"。</summary>
         public static bool IsWork(string code)
         {
+            code = Normalize(code);
             return code == Day || code == Card || code == Deputy || code == Infect || code == Big || code == Small;
         }
 
         /// <summary>休息天数（0 / 0.5 / 1）。</summary>
         public static double RestDays(string code)
         {
+            code = Normalize(code);
             if (code == Rest || code == Public) return 1.0;
             if (code == Half) return 0.5;
             return 0.0;
@@ -96,6 +114,7 @@ namespace MyTools.Services
 
         public static string Description(string code)
         {
+            code = Normalize(code);
             switch (code)
             {
                 case Day: return "白班";

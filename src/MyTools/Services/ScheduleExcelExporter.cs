@@ -91,8 +91,8 @@ namespace MyTools.Services
             w.WriteAttributeString("workbookViewId", "0");
             w.WriteStartElement("pane");
             w.WriteAttributeString("xSplit", "1");
-            w.WriteAttributeString("ySplit", "3");
-            w.WriteAttributeString("topLeftCell", "B4");
+            w.WriteAttributeString("ySplit", "4");
+            w.WriteAttributeString("topLeftCell", "B5");
             w.WriteAttributeString("activePane", "bottomRight");
             w.WriteAttributeString("state", "frozen");
             w.WriteEndElement();
@@ -145,25 +145,40 @@ namespace MyTools.Services
             WriteStr(w, Cell(4 + days, 2), "", styles.S("header"));
             w.WriteEndElement();
 
-            // ---------- 第3行：总休目标 ----------
+            // ---------- 第3行：实休 ----------
             w.WriteStartElement("row");
             w.WriteAttributeString("r", "3");
-            WriteStr(w, Cell(1, 3), "总休", styles.S("header"));
+            WriteStr(w, Cell(1, 3), "实休", styles.S("header"));
             for (int d = 0; d < days; d++)
             {
                 var actual = ComputeColumnRestCount(sched, d);
                 var quota = d < sched.DailyRestQuotas.Count ? sched.DailyRestQuotas[d] : 0;
-                WriteNum(w, Cell(2 + d, 3), FormatStat(quota), styles.S(Math.Abs(actual - quota) > 0.001 ? "statBad" : "statGood"));
+                WriteNum(w, Cell(2 + d, 3), FormatStat(actual), styles.S(IsDailyRestWithinQuota(actual, quota) ? "statGood" : "statBad"));
             }
             WriteStr(w, Cell(2 + days, 3), "", styles.S("header"));
             WriteStr(w, Cell(3 + days, 3), "", styles.S("header"));
             WriteStr(w, Cell(4 + days, 3), "", styles.S("header"));
             w.WriteEndElement();
 
+            w.WriteStartElement("row");
+            w.WriteAttributeString("r", "4");
+            WriteStr(w, Cell(1, 4), "总休", styles.S("header"));
+            for (int d = 0; d < days; d++)
+            {
+                var actual = ComputeColumnRestCount(sched, d);
+                var quota = d < sched.DailyRestQuotas.Count ? sched.DailyRestQuotas[d] : 0;
+                WriteNum(w, Cell(2 + d, 4), FormatStat(quota), styles.S(IsDailyRestWithinQuota(actual, quota) ? "statGood" : "statBad"));
+            }
+            WriteStr(w, Cell(2 + days, 4), "", styles.S("header"));
+            WriteStr(w, Cell(3 + days, 4), "", styles.S("header"));
+            WriteStr(w, Cell(4 + days, 4), "", styles.S("header"));
+            w.WriteEndElement();
+
             // ---------- 员工行 ----------
-            int rowIdx = 3;
+            int rowIdx = 4;
             foreach (var emp in sched.Employees)
             {
+                if (string.IsNullOrWhiteSpace(emp.Name)) continue;
                 rowIdx++;
                 w.WriteStartElement("row");
                 w.WriteAttributeString("r", rowIdx.ToString(CultureInfo.InvariantCulture));
@@ -177,7 +192,7 @@ namespace MyTools.Services
                 for (int d = 0; d < days; d++)
                 {
                     var cell = d < emp.Cells.Count ? emp.Cells[d] : new ShiftCell();
-                    var code = cell.Code ?? string.Empty;
+                    var code = ShiftCodes.Normalize(cell.Code);
                     var date = sched.DateOf(d);
                     var holiday = HolidayService.IsHoliday(date);
                     string styleKey;
@@ -213,6 +228,11 @@ namespace MyTools.Services
                               : v.ToString("0.#", CultureInfo.InvariantCulture);
         }
 
+        private static bool IsDailyRestWithinQuota(double actual, double quota)
+        {
+            return actual >= Math.Max(0, quota - 0.5) - 0.001 && actual <= quota + 0.001;
+        }
+
         private static double ComputeColumnRestCount(ScheduleVersion sched, int dayIdx)
         {
             if (sched == null || dayIdx < 0)
@@ -223,6 +243,7 @@ namespace MyTools.Services
             double sum = 0;
             foreach (var emp in sched.Employees)
             {
+                if (string.IsNullOrWhiteSpace(emp.Name)) continue;
                 if (emp.Cells != null && dayIdx < emp.Cells.Count)
                 {
                     sum += ShiftCodes.RestDays(emp.Cells[dayIdx].Code);

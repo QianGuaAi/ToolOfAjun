@@ -898,3 +898,36 @@
 - 自动设置休息日修正为按 0.5 精度统计手动休息，自动格只写入“白/休”，并在生成后修复或提示连续上班超限。
 - Excel 导出同步恢复为 3 行表头，总休目标超过或低于实际休息都会标红。
 - 验证：Release 构建 0 error；因当前环境无法访问 `https://api.nuget.org/v3/index.json`，NuGet 漏洞审计出现 NU1900 警告；Release 输出目录无托管 DLL；重新生成完整安装包 `artifacts\installer\MyToolsSetup.exe`，大小 41.09 MB，SHA256 为 `04B8605C1913120B7E237EA33371DAC2FB4F220B26B813D6EA517531DCFE25C8`。
+
+## [2026-05-18] 系统设置 - 桌面背景管理
+- 新增 Services/WallpaperService.cs：图库目录 Wallpapers/、导入/删除/读取当前壁纸/写入壁纸（SPI_SETDESKWALLPAPER + WallpaperStyle/TileWallpaper 注册表），Win7-Win11 通用。
+- 新增 ViewModels/SystemSettingsViewModel.Wallpaper.cs（partial）：缩略图集合、显示方式 5 档单选、导入/保存当前桌面/设为桌面/在看图模块浏览/移除/刷新/打开文件夹七个命令。
+- Views/SystemSettingsPage.xaml 加桌面背景卡片：工具栏 + 显示方式 + 缩略图 WrapPanel ListBox（双击调用看图模块全屏浏览）。
+- WallpaperItem 用 BitmapImage 懒加载缩略图（DecodePixelWidth=300）。
+
+## [2026-05-18] 系统设置 - Windows 调整卡片
+- 新增 Services/WindowsTweaksService.cs：时钟秒（ShowSecondsInSystemClock）、托盘图标全显（EnableAutoTray）、任务栏合并三档（TaskbarGlomLevel/MMTaskbarGlomLevel）、五类桌面图标显隐（CLSID HideDesktopIcons 注册表），以及 RestartExplorer()。
+- 新增 ViewModels/SystemSettingsViewModel.WindowsTweaks.cs（partial）：七个绑定属性（ShowSecondsInClock/TrayShowAll/IsGlomAlways|WhenFull|Never/ShowComputer|RecycleBin|ControlPanel|UserFiles|Network）、状态消息、刷新命令、重启资源管理器命令；注册表写入即时生效，Explorer 重启需用户确认。
+- SystemSettingsViewModel 构造函数末尾补调 InitWindowsTweaks()。
+- Views/SystemSettingsPage.xaml 外层 Grid 增加第 5/6 行（Row 6），插入 Windows 调整卡片：三列布局（任务栏开关 / 合并档位 RadioButton 组 / 桌面图标 CheckBox 组）+ 底部状态栏（左侧状态消息，右侧说明提示）。
+
+## [2026-05-18] 看图模块 - 满框显示 + 左侧文件夹树 + 顺时针旋转
+- 新增 ViewModels/ImageFolderNode.cs：懒加载资源管理器风格的文件夹树节点，CreateRoots() 枚举全部已就绪驱动器根目录，IsExpanded setter 触发子目录加载，过滤 System/Hidden 目录。
+- MainViewModel 新增 ImageFolderRoots（ObservableCollection）、ImageViewerFitToFrame 属性、ImageViewerFitToFrameCommand（切换 Stretch 模式，启用时重置 Zoom = 1.0）；Zoom 变化时自动清除 FitToFrame；OnImageFolderTreeSelected() 枚举文件夹内图片文件并加载第一张。
+- MainWindow.xaml 看图模块布局：ColumnDefinitions 从 2 列改为 3 列（175px / * / 220px），Column 0 加 TreeView（懒加载、SelectedItemChanged 绑事件处理器），主预览卡移至 Column 1，信息面板移至 Column 2；工具栏加「满框」按钮，激活时文字变蓝加粗；Image.Style DataTrigger 在 ImageViewerFitToFrame = True 时切换 Stretch = Uniform。
+- MainWindow.xaml.cs 加 ImageFolderTree_SelectedItemChanged 事件处理器，桥接 TreeView 选中到 VM。
+- 工具栏移除向左/向右旋转按钮，保留单个顺时针旋转按钮（RotateImageViewerRightCommand）。
+- 验证：Release 构建 0 error 0 warning。
+
+## [2026-05-18] 启动失败修复 - PackIconKind 兼容
+- 修复 Windows 调整卡片中 `PackIcon Kind="WindowsClassic"` 导致的 `XamlParseException`：当前 MaterialDesignThemes 4.9.0 不包含该枚举值，替换为已验证存在的 `CogOutline`。
+- 将新增按钮中的可疑图标 `Restart`、`FitToPage` 替换为项目中已有且兼容的 `Refresh`、`ImageSearchOutline`，降低旧版图标枚举不兼容风险。
+- 验证：独立输出目录 `artifacts\verify-startup-fix\` Release 构建 0 error 0 warning；常规 `bin\Release\net48\MyTools.exe` 当前被正在运行的进程 PID 16436 锁定，未能覆盖。
+
+## [2026-05-18] 排班机制完善 - 自动生成与导出闸门
+- ScheduleVersion 新增 `GeneratedAt`，自动设置休息日成功后写入；Excel 导出增加 `HasGenerated` 闸门，未完成自动生成时拒绝导出。
+- 自动优化增加节假日年份配置校验、剩余名额 0.5 步进校验、5 连班强制休人数超过当日可自动安排休息名额拒绝；优化过程支持显式保留格集合，且保留格不会被清空、均衡交换或连续上班修复覆盖。
+- 冲突侧栏和保存硬约束调整为每日 `实休` 必须落在 `[总休-0.5, 总休]` 区间内；例如总休为 8 时，实休 7.5 和 8 均为正常。
+- 排班表和 Excel 导出改为 `实休`/`总休` 两行语义，仅当实休不在 `[总休-0.5, 总休]` 区间内时标红；Excel 导出跳过空姓名占位行。
+- 保存前增加基础校验：年份、月份、每日总休数组长度、每日总休 0.5 步进与人员单元格长度。
+- 验证：常规 Release 构建编译通过但最终 `bin\Release\net48\MyTools.exe` 被运行中进程 PID 18116 锁定未覆盖；独立输出目录 `src\MyTools\bin\ReleaseVerify\` Release 构建 0 error。

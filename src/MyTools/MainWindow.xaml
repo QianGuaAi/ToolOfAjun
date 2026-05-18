@@ -3347,11 +3347,51 @@
 
                 <Grid Grid.Row="1">
                     <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="175" />
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="220" />
                     </Grid.ColumnDefinitions>
 
-                    <materialDesign:Card Grid.Column="0" Padding="12" Margin="0,0,12,0">
+                    <!-- 左侧文件夹树 -->
+                    <materialDesign:Card Grid.Column="0" Padding="8" Margin="0,0,12,0">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Text="文件夹" FontSize="11" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource MaterialDesignBodyLight}"
+                                       Margin="2,0,0,6" />
+                            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                                          HorizontalScrollBarVisibility="Auto">
+                                <TreeView ItemsSource="{Binding ImageFolderRoots}"
+                                          Background="Transparent"
+                                          BorderThickness="0"
+                                          SelectedItemChanged="ImageFolderTree_SelectedItemChanged">
+                                    <TreeView.ItemContainerStyle>
+                                        <Style TargetType="TreeViewItem">
+                                            <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+                                            <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
+                                            <Setter Property="FontSize" Value="11" />
+                                            <Setter Property="Padding" Value="2,2" />
+                                        </Style>
+                                    </TreeView.ItemContainerStyle>
+                                    <TreeView.ItemTemplate>
+                                        <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                                            <StackPanel Orientation="Horizontal">
+                                                <materialDesign:PackIcon Kind="FolderOutline" Width="13" Height="13"
+                                                                         VerticalAlignment="Center" Margin="0,0,4,0"
+                                                                         Foreground="{DynamicResource BrushAccentBlue}" />
+                                                <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
+                                            </StackPanel>
+                                        </HierarchicalDataTemplate>
+                                    </TreeView.ItemTemplate>
+                                </TreeView>
+                            </ScrollViewer>
+                        </Grid>
+                    </materialDesign:Card>
+
+                    <materialDesign:Card Grid.Column="1" Padding="12" Margin="0,0,12,0">
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" />
@@ -3399,18 +3439,31 @@
                                         Width="34"
                                         Height="32"
                                         Padding="0"
-                                        Margin="0,0,10,6"
+                                        Margin="0,0,6,6"
                                         ToolTip="放大">
                                     <materialDesign:PackIcon Kind="MagnifyPlusOutline" Width="16" Height="16" />
                                 </Button>
                                 <Button Style="{StaticResource GhostActionButton}"
-                                        Command="{Binding RotateImageViewerLeftCommand}"
-                                        Width="34"
+                                        Command="{Binding ImageViewerFitToFrameCommand}"
                                         Height="32"
-                                        Padding="0"
-                                        Margin="0,0,6,6"
-                                        ToolTip="向左旋转">
-                                    <materialDesign:PackIcon Kind="RotateLeft" Width="16" Height="16" />
+                                        Padding="10,0"
+                                        Margin="0,0,10,6"
+                                        ToolTip="满框显示（自动缩放以铺满预览区域）">
+                                    <StackPanel Orientation="Horizontal">
+                                        <materialDesign:PackIcon Kind="ImageSearchOutline" Width="15" Height="15" Margin="0,0,5,0" />
+                                        <TextBlock Text="满框">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding ImageViewerFitToFrame}" Value="True">
+                                                            <Setter Property="Foreground" Value="{DynamicResource BrushAccentBlue}" />
+                                                            <Setter Property="FontWeight" Value="Bold" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </StackPanel>
                                 </Button>
                                 <Button Style="{StaticResource GhostActionButton}"
                                         Command="{Binding RotateImageViewerRightCommand}"
@@ -3418,7 +3471,7 @@
                                         Height="32"
                                         Padding="0"
                                         Margin="0,0,10,6"
-                                        ToolTip="向右旋转">
+                                        ToolTip="顺时针旋转 90°">
                                     <materialDesign:PackIcon Kind="RotateRight" Width="16" Height="16" />
                                 </Button>
                                 <Button Style="{StaticResource GhostActionButton}"
@@ -3465,10 +3518,19 @@
                                                   VerticalScrollBarVisibility="Auto">
                                         <Grid MinHeight="360" MinWidth="500">
                                             <Image Source="{Binding ImageViewerPreviewImage}"
-                                                   Stretch="None"
                                                    HorizontalAlignment="Center"
                                                    VerticalAlignment="Center"
                                                    RenderOptions.BitmapScalingMode="HighQuality">
+                                                <Image.Style>
+                                                    <Style TargetType="Image">
+                                                        <Setter Property="Stretch" Value="None" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding ImageViewerFitToFrame}" Value="True">
+                                                                <Setter Property="Stretch" Value="Uniform" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Image.Style>
                                                 <Image.LayoutTransform>
                                                     <ScaleTransform ScaleX="{Binding ImageViewerZoom}" ScaleY="{Binding ImageViewerZoom}" />
                                                 </Image.LayoutTransform>
@@ -3499,7 +3561,7 @@
                         </Grid>
                     </materialDesign:Card>
 
-                    <materialDesign:Card Grid.Column="1" Padding="14">
+                    <materialDesign:Card Grid.Column="2" Padding="14">
                         <StackPanel>
                             <ScrollViewer VerticalScrollBarVisibility="Auto">
                                 <StackPanel>

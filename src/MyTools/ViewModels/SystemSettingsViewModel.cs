@@ -17,7 +17,7 @@ namespace MyTools.ViewModels
     /// <summary>
     /// 系统设置：导出/导入程序数据与依赖文件。
     /// </summary>
-    public class SystemSettingsViewModel : INotifyPropertyChanged
+    public partial class SystemSettingsViewModel : INotifyPropertyChanged
     {
         public event PropertyChangedEventHandler PropertyChanged;
 
@@ -35,6 +35,8 @@ namespace MyTools.ViewModels
             RefreshMediaAssociationStatusCommand = new RelayCommand(RefreshMediaAssociationStatus, () => !IsBusy);
             OpenDefaultAppsSettingsCommand = new RelayCommand(OpenDefaultAppsSettings, () => !IsBusy);
             RefreshMediaAssociationStatus();
+            InitWallpaperCommands();
+            InitWindowsTweaks();
         }
 
         public ICommand PreviewExportCommand { get; }

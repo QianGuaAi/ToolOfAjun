@@ -187,6 +187,7 @@ namespace MyTools.ViewModels
         private int _imageViewerSharpenAmount;
         private List<string> _imageViewerDirectoryFiles = new List<string>();
         private int _imageViewerDirectoryIndex = -1;
+        private bool _imageViewerFitToFrame;
         private Uri _videoViewerSource;
         private string _videoViewerFilePath = string.Empty;
         private string _videoViewerStatusMessage = "选择音频或视频后可播放、暂停、拖动进度或调节音量。";
@@ -487,6 +488,7 @@ namespace MyTools.ViewModels
             FlipImageViewerVerticalCommand = new RelayCommand(() => { _imageViewerFlipVertical = !_imageViewerFlipVertical; UpdateImageViewerPreview("已垂直翻转。"); }, () => HasImageViewerImage);
             ToggleImageViewerGrayscaleCommand = new RelayCommand(() => { ImageViewerIsGrayscale = !ImageViewerIsGrayscale; UpdateImageViewerPreview(ImageViewerIsGrayscale ? "已应用灰度效果。" : "已取消灰度效果。"); }, () => HasImageViewerImage);
             ResetImageViewerAdjustmentsCommand = new RelayCommand(ResetImageViewerAdjustments, () => HasImageViewerImage);
+            ImageViewerFitToFrameCommand = new RelayCommand(ToggleImageViewerFitToFrame, () => HasImageViewerImage);
             OpenVideoViewerFileCommand = new RelayCommand(OpenVideoViewerFile);
             OpenVideoViewerInExternalPlayerCommand = new RelayCommand(OpenVideoViewerInExternalPlayer, () => HasVideoViewerVideo);
             CaptureVideoViewerFrameCommand = new AsyncRelayCommand(CaptureVideoViewerFrameAsync, () => HasVideoViewerVideo && !_isVideoViewerCapturingFrame);
@@ -1754,6 +1756,8 @@ namespace MyTools.ViewModels
         public ICommand FlipImageViewerVerticalCommand { get; }
         public ICommand ToggleImageViewerGrayscaleCommand { get; }
         public ICommand ResetImageViewerAdjustmentsCommand { get; }
+        public ICommand ImageViewerFitToFrameCommand { get; }
+        public ObservableCollection<ImageFolderNode> ImageFolderRoots { get; } = ImageFolderNode.CreateRoots();
         public ICommand OpenVideoViewerFileCommand { get; }
         public ICommand OpenVideoViewerInExternalPlayerCommand { get; }
         public ICommand CaptureVideoViewerFrameCommand { get; }
@@ -1956,12 +1960,23 @@ namespace MyTools.ViewModels
                 }
 
                 _imageViewerZoom = zoom;
+                if (_imageViewerFitToFrame)
+                {
+                    _imageViewerFitToFrame = false;
+                    OnPropertyChanged(nameof(ImageViewerFitToFrame));
+                }
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(ImageViewerZoomText));
             }
         }
 
         public string ImageViewerZoomText => $"{Math.Round(ImageViewerZoom * 100):0}%";
+
+        public bool ImageViewerFitToFrame
+        {
+            get => _imageViewerFitToFrame;
+            private set { _imageViewerFitToFrame = value; OnPropertyChanged(); }
+        }
 
         public bool ImageViewerIsGrayscale
         {
@@ -3975,6 +3990,43 @@ namespace MyTools.ViewModels
                 _imageViewerDirectoryIndex = -1;
                 OnPropertyChanged(nameof(ImageViewerDirectoryPositionText));
                 TriggerCommandRequery();
+            }
+        }
+
+        private void ToggleImageViewerFitToFrame()
+        {
+            _imageViewerFitToFrame = !_imageViewerFitToFrame;
+            if (_imageViewerFitToFrame)
+            {
+                _imageViewerZoom = 1.0;
+                OnPropertyChanged(nameof(ImageViewerZoom));
+                OnPropertyChanged(nameof(ImageViewerZoomText));
+            }
+            OnPropertyChanged(nameof(ImageViewerFitToFrame));
+            UpdateImageViewerPreview(_imageViewerFitToFrame ? "已满框显示。" : "已还原实际大小。");
+        }
+
+        public void OnImageFolderTreeSelected(ImageFolderNode node)
+        {
+            if (node == null || string.IsNullOrEmpty(node.FullPath) || !Directory.Exists(node.FullPath))
+                return;
+            try
+            {
+                var files = Directory.EnumerateFiles(node.FullPath)
+                    .Where(f => IsSupportedImageViewerFile(Path.GetExtension(f)))
+                    .OrderBy(f => Path.GetFileName(f), StringComparer.CurrentCultureIgnoreCase)
+                    .ToList();
+                if (files.Count == 0)
+                {
+                    ImageViewerStatusMessage = $"文件夹「{node.Name}」中没有图片。";
+                    return;
+                }
+                LoadImageViewerFile(files[0]);
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Warning("Image folder tree select failed: {Msg}", ex.Message);
+                ImageViewerStatusMessage = "读取文件夹失败：" + ex.Message;
             }
         }
 

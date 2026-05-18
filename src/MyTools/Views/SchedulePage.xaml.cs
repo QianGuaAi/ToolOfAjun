@@ -238,7 +238,7 @@ namespace MyTools.Views
             ScheduleHost.Children.Add(MakeHeaderCell("", 1, 3 + days, headerBg, false));
             ScheduleHost.Children.Add(MakeHeaderCell("", 1, 4 + days, headerBg, false));
 
-            // Row 2 — 实休（实际休息人数，只读；与总休目标不一致时标红）
+            // Row 2 — 实休（实际休息人数，只读；不在 [总休-0.5, 总休] 时标红）
             ScheduleHost.Children.Add(MakeHeaderCell("实休", 2, 0, headerBg, true));
             for (int d = 0; d < days; d++)
             {
@@ -259,7 +259,7 @@ namespace MyTools.Views
             ScheduleHost.Children.Add(MakeHeaderCell("", 2, 3 + days, headerBg, false));
             ScheduleHost.Children.Add(MakeHeaderCell("", 2, 4 + days, headerBg, false));
 
-            // Row 3 — 当日总休目标（可编辑，实际不匹配时标红）
+            // Row 3 — 当日总休目标（可编辑；不在 [总休-0.5, 总休] 时标红）
             ScheduleHost.Children.Add(MakeHeaderCell("总休", 3, 0, headerBg, true));
             for (int d = 0; d < days; d++)
             {
@@ -426,26 +426,23 @@ namespace MyTools.Views
                 : value.ToString("0.#", CultureInfo.InvariantCulture);
         }
 
-        // 规范 §二 / §4.2.2 H1：(总休 - 0.5) ≤ 实休 ≤ 总休 即合规。
-        //   - 实休 > 总休（超员）→ 红
-        //   - 实休 < 总休 - 0.5（欠员超过半天）→ 红
-        //   - 否则 → 合规（允许 0.5 半天缺口给奇数半天场景）
         private static bool IsQuotaMatched(double actual, double quota)
         {
-            return actual <= quota + 0.001 && actual >= quota - 0.5 - 0.001;
+            return actual >= Math.Max(0, quota - 0.5) - 0.001 && actual <= quota + 0.001;
         }
 
         private static string BuildQuotaTooltip(double actual, double quota, bool matched)
         {
+            var minAllowed = Math.Max(0, quota - 0.5);
             if (matched)
             {
                 return actual < quota - 0.001
-                    ? $"实际休息 {FormatStat(actual)} / 总休 {FormatStat(quota)}（差 {FormatStat(quota - actual)}，0.5 半天缺口允许）"
-                    : $"实际休息 {FormatStat(actual)} / 总休 {FormatStat(quota)}";
+                    ? $"实际休息 {FormatStat(actual)} / 总休 {FormatStat(quota)}（允许范围 {FormatStat(minAllowed)}~{FormatStat(quota)}）"
+                    : $"实际休息 {FormatStat(actual)} / 总休 {FormatStat(quota)}（允许范围 {FormatStat(minAllowed)}~{FormatStat(quota)}）";
             }
-            return actual > quota
+            return actual > quota + 0.001
                 ? $"实际休息 {FormatStat(actual)} / 总休 {FormatStat(quota)}，多排 {FormatStat(actual - quota)}（超员）"
-                : $"实际休息 {FormatStat(actual)} / 总休 {FormatStat(quota)}，欠 {FormatStat(quota - actual)}（缺口超过 0.5）";
+                : $"实际休息 {FormatStat(actual)} / 总休 {FormatStat(quota)}，少排 {FormatStat(minAllowed - actual)}（低于允许范围 {FormatStat(minAllowed)}~{FormatStat(quota)}）";
         }
 
         private static bool TryParseQuota(string text, out double quota)
