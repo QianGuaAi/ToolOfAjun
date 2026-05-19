@@ -64,6 +64,8 @@ namespace MyTools.ViewModels
         private ObservableCollection<string> _wgConnectionLogs;
         private ObservableCollection<WireGuardTunnelItem> _wireGuardTunnels;
         private string _currentModule;
+        private ScheduleViewModel _schedule;
+        private SystemSettingsViewModel _systemSettings;
         private string _sqlServerAddress;
         private string _sqlPort = "1433";
         private SqlProviderKind _selectedSqlProvider = SqlProviderKind.SqlServer;
@@ -326,9 +328,7 @@ namespace MyTools.ViewModels
             ShowVideoViewerCommand = new RelayCommand(() => SwitchModule("VideoViewer"));
             ShowBenchmarkCommand = new RelayCommand(() => SwitchModule("Benchmark"));
             ShowScheduleCommand = new RelayCommand(() => SwitchModule("Schedule"));
-            Schedule = new ScheduleViewModel();
             ShowSystemSettingsCommand = new RelayCommand(() => SwitchModule("SystemSettings"));
-            SystemSettings = new SystemSettingsViewModel();
             LoadSystemInfoCommand = new AsyncRelayCommand(LoadSystemInfoAsync, () => !_isSystemInfoBusy);
             ToggleHardwareSensorsCommand = new RelayCommand(ToggleHardwareSensors);
             RefreshSensorsOnceCommand = new RelayCommand(() => SensorTimer_OnTick(this, EventArgs.Empty), () => _sensorService != null);
@@ -539,18 +539,29 @@ namespace MyTools.ViewModels
             EditCodexConfigTomlCommand = new AsyncRelayParameterCommand(p => EditCodexFileAsync(p, CodexConfigProfileService.ConfigFileName));
             EditCodexAuthJsonCommand = new AsyncRelayParameterCommand(p => EditCodexFileAsync(p, CodexConfigProfileService.AuthFileName));
 
-            SafeFireAndForget(LoadSystemInfoSnapshotAsync());
-            SafeFireAndForget(LoadRecordingOutputFoldersAsync());
-            LoadScreenshotHistory();
-            SafeFireAndForget(LoadRecentVideoViewerPlaylistsAsync());
-            SafeFireAndForget(LoadFavoriteVideoViewerPlaylistsAsync());
             CurrentModule = "Home";
-            SafeFireAndForget(LoadSqlConnectionHistoryAsync());
-            SafeFireAndForget(LoadScreenshotSettingsAsync());
-            SafeFireAndForget(LoadCodexProfilesAsync());
-            SafeFireAndForget(LoadOptimizationReportsAsync());
-            SafeFireAndForget(LoadWeChatRootsAsync());
-            SafeFireAndForget(LoadRecentWeChatBackupsAsync());
+            ScheduleStartupBackgroundLoads();
+        }
+
+        private void ScheduleStartupBackgroundLoads()
+        {
+            var dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
+            dispatcher.BeginInvoke(
+                DispatcherPriority.ApplicationIdle,
+                new Action(() =>
+                {
+                    SafeFireAndForget(LoadSystemInfoSnapshotAsync());
+                    SafeFireAndForget(LoadRecordingOutputFoldersAsync());
+                    LoadScreenshotHistory();
+                    SafeFireAndForget(LoadRecentVideoViewerPlaylistsAsync());
+                    SafeFireAndForget(LoadFavoriteVideoViewerPlaylistsAsync());
+                    SafeFireAndForget(LoadSqlConnectionHistoryAsync());
+                    SafeFireAndForget(LoadScreenshotSettingsAsync());
+                    SafeFireAndForget(LoadCodexProfilesAsync());
+                    SafeFireAndForget(LoadOptimizationReportsAsync());
+                    SafeFireAndForget(LoadWeChatRootsAsync());
+                    SafeFireAndForget(LoadRecentWeChatBackupsAsync());
+                }));
         }
 
         public ObservableCollection<NetworkData> NetworkList
@@ -9561,9 +9572,33 @@ namespace MyTools.ViewModels
 
         public ICommand ShowBenchmarkCommand { get; }
         public ICommand ShowScheduleCommand { get; }
-        public ScheduleViewModel Schedule { get; }
+        public ScheduleViewModel Schedule
+        {
+            get
+            {
+                if (_schedule == null)
+                {
+                    _schedule = new ScheduleViewModel();
+                    OnPropertyChanged();
+                }
+
+                return _schedule;
+            }
+        }
         public ICommand ShowSystemSettingsCommand { get; }
-        public SystemSettingsViewModel SystemSettings { get; }
+        public SystemSettingsViewModel SystemSettings
+        {
+            get
+            {
+                if (_systemSettings == null)
+                {
+                    _systemSettings = new SystemSettingsViewModel();
+                    OnPropertyChanged();
+                }
+
+                return _systemSettings;
+            }
+        }
         public ICommand RunAllBenchmarksCommand { get; }
         public ICommand RunSingleBenchmarkCommand { get; }
         public ICommand CopyBenchmarkResultsCommand { get; }

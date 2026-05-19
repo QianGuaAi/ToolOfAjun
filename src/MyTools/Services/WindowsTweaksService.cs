@@ -19,6 +19,7 @@ namespace MyTools.Services
         private const string KeyExplorer = @"Software\Microsoft\Windows\CurrentVersion\Explorer";
         private const string KeyHideNew = @"Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel";
         private const string KeyHideClassic = @"Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\ClassicStartMenu";
+        private const string KeyNotifyIconSettings = @"Control Panel\NotifyIconSettings";
 
         // ===== 桌面图标 CLSID =====
         public const string ClsidComputer = "{20D04FE0-3AEA-1069-A2D8-08002B30309D}";
@@ -52,12 +53,21 @@ namespace MyTools.Services
         // ===================== 托盘图标自动隐藏 =====================
         public static bool GetTrayShowAll()
         {
-            // EnableAutoTray=0 → 全部显示；=1（默认）→ 隐藏不活跃
-            return ReadDword(Registry.CurrentUser, KeyExplorer, "EnableAutoTray", 1) == 0;
+            var legacyShowAll = ReadDword(Registry.CurrentUser, KeyExplorer, "EnableAutoTray", 1) == 0;
+            if (IsWindows11 && TryReadNotifyIconPromotedAll(out var promotedAll))
+            {
+                return legacyShowAll && promotedAll;
+            }
+
+            return legacyShowAll;
         }
         public static void SetTrayShowAll(bool showAll)
         {
             WriteDword(Registry.CurrentUser, KeyExplorer, "EnableAutoTray", showAll ? 0 : 1);
+            if (IsWindows11)
+            {
+                SetNotifyIconPromotedForAll(showAll);
+            }
         }
 
         // ===================== 任务栏合并 =====================
@@ -145,6 +155,74 @@ namespace MyTools.Services
                 if (key == null) throw new InvalidOperationException("打开注册表项失败：" + subKey);
                 key.SetValue(name, value, RegistryValueKind.DWord);
             }
+        }
+
+        private static bool TryReadNotifyIconPromotedAll(out bool showAll)
+        {
+            showAll = false;
+            using (var key = Registry.CurrentUser.OpenSubKey(KeyNotifyIconSettings))
+            {
+                if (key == null)
+                {
+                    return false;
+                }
+
+                var hasIcon = false;
+                foreach (var subKeyName in key.GetSubKeyNames())
+                {
+                    using (var subKey = key.OpenSubKey(subKeyName))
+                    {
+                        if (subKey == null)
+                        {
+                            continue;
+                        }
+
+                        hasIcon = true;
+                        if (ReadRegistryDwordValue(subKey.GetValue("IsPromoted"), 0) == 0)
+                        {
+                            return true;
+                        }
+                    }
+                }
+
+                showAll = hasIcon;
+                return hasIcon;
+            }
+        }
+
+        private static void SetNotifyIconPromotedForAll(bool showAll)
+        {
+            using (var key = Registry.CurrentUser.OpenSubKey(KeyNotifyIconSettings, writable: true))
+            {
+                if (key == null)
+                {
+                    return;
+                }
+
+                var value = showAll ? 1 : 0;
+                foreach (var subKeyName in key.GetSubKeyNames())
+                {
+                    using (var subKey = key.OpenSubKey(subKeyName, writable: true))
+                    {
+                        subKey?.SetValue("IsPromoted", value, RegistryValueKind.DWord);
+                    }
+                }
+            }
+        }
+
+        private static int ReadRegistryDwordValue(object value, int defVal)
+        {
+            if (value is int i)
+            {
+                return i;
+            }
+
+            if (value != null && int.TryParse(value.ToString(), out var parsed))
+            {
+                return parsed;
+            }
+
+            return defVal;
         }
 
         // ===================== Win32 互操作 =====================

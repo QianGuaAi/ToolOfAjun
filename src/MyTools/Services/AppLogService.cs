@@ -32,9 +32,11 @@ namespace MyTools.Services
                         Path.Combine(logDirectory, "MyTools.log"),
                         rollingInterval: RollingInterval.Day,
                         retainedFileCountLimit: 14,
-                        fileSizeLimitBytes: 10 * 1024 * 1024,
+                        fileSizeLimitBytes: 5 * 1024 * 1024,
                         rollOnFileSizeLimit: true,
-                        shared: true,
+                        shared: false,
+                        buffered: true,
+                        flushToDiskInterval: TimeSpan.FromSeconds(2),
                         encoding: System.Text.Encoding.UTF8)
                     .CreateLogger();
 

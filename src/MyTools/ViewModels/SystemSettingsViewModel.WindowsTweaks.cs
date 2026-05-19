@@ -16,7 +16,7 @@ namespace MyTools.ViewModels
 
         public bool IsWindows11 => WindowsTweaksService.IsWindows11;
         public string TweaksHint => IsWindows11
-            ? "时钟秒、任务栏合并、托盘图标改动需重启资源管理器后生效；桌面图标即时生效。"
+            ? "时钟秒、任务栏合并、托盘图标改动需重启资源管理器后生效；Win11 托盘开关会同步当前已记录的图标。"
             : "当前不是 Windows 11（22H2+），「时钟显示秒」开关无效。其余项 Win10/11 均可。";
 
         // ========== 时钟秒 ==========
@@ -159,7 +159,9 @@ namespace MyTools.ViewModels
             try
             {
                 write();
-                TweaksStatusMessage = $"已写入：{fieldName}。如未生效，请点「重启资源管理器」。";
+                TweaksStatusMessage = fieldName == nameof(TrayShowAll)
+                    ? "已写入托盘图标设置。请点「重启资源管理器」使任务栏重新加载。"
+                    : $"已写入：{fieldName}。如未生效，请点「重启资源管理器」。";
             }
             catch (Exception ex)
             {

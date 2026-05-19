@@ -931,3 +931,40 @@
 - 排班表和 Excel 导出改为 `实休`/`总休` 两行语义，仅当实休不在 `[总休-0.5, 总休]` 区间内时标红；Excel 导出跳过空姓名占位行。
 - 保存前增加基础校验：年份、月份、每日总休数组长度、每日总休 0.5 步进与人员单元格长度。
 - 验证：常规 Release 构建编译通过但最终 `bin\Release\net48\MyTools.exe` 被运行中进程 PID 18116 锁定未覆盖；独立输出目录 `src\MyTools\bin\ReleaseVerify\` Release 构建 0 error。
+## [2026-05-18] 启动与运行性能优化
+- App 启动阶段延后 `MyTools.startup.log` 追加写入和旧系统 Warning 到主窗口显示后的 `ApplicationIdle`，减少首屏前磁盘 IO。
+- MainWindow 托盘图标提取延后到 `Loaded + ApplicationIdle`，避免构造函数同步读取 exe 图标资源。
+- MainViewModel 启动期历史、截图设置、Codex 配置、优化报告、微信根目录与最近备份加载统一通过 `ScheduleStartupBackgroundLoads()` 在 Idle 派发。
+- `ScheduleViewModel` 与 `SystemSettingsViewModel` 改为懒加载属性，避免 Home 首屏直接构造重型子 ViewModel。
+- Serilog File Sink 改为缓冲写入，`flushToDiskInterval` 为 2 秒，降低运行期同步刷盘压力。
+- 新增 `App.config`，保留 `gcServer` 与 `gcConcurrent`；`MyTools.csproj` 显式声明 `LangVersion` 和 `ServerGarbageCollection`。
+- `AGENTS.md` 新增「九、性能与启动规则」，沉淀启动期、ViewModel、日志 IO、面板可见性、GC 与基线维护约束。
+- 验证：Release 构建 0 error；因当前环境无法访问 `https://api.nuget.org/v3/index.json`，NuGet 漏洞审计出现 3 个 NU1900 警告。性能基线记录见 `docs\规划\性能基线_启动后.txt`，本次未做 GUI 自动采样。
+
+## [2026-05-18] UI 面板可见性性能复查
+- 复查 `MainWindow.xaml` 顶层模块面板的默认可见性，确认非 Home 面板默认 `Collapsed`，并通过 `CurrentModule` 触发显示。
+- 修复 WireGuard 面板缺少 `CurrentModule=WireGuard` 显示触发器的问题，避免从首页命令切换 WireGuard 后内容区域仍保持折叠。
+- 统计模块面板长度：仅 VideoViewer 面板超过 800 行；由于其 `MediaElement`、波形交互和播放列表拖拽均与 `MainWindow.xaml.cs` 强耦合，本轮不做高风险拆分，后续应单独规划 `VideoViewerPage` 重构。
+- 验证：Release 构建 0 error；因当前环境无法访问 `https://api.nuget.org/v3/index.json`，NuGet 漏洞审计出现 3 个 NU1900 警告。
+
+## [2026-05-18] VideoViewer 面板拆分
+- 将 `MainWindow.xaml` 中的 VideoViewer 面板抽出为 `Views/VideoViewerPage.xaml`，主窗口仅保留页面引用和 `CurrentModule=VideoViewer` 可见性触发器。
+- 新增 `Views/VideoViewerPage.xaml.cs`，迁移播放器事件、波形拖拽、播放列表拖拽、A/B 循环区间和书签跳转逻辑。
+- MainWindow 保留窗口级快捷键、拖放和关闭入口，通过 `VideoViewerPage` 公开方法调用播放页逻辑，降低主窗口 XAML 与代码后端体量。
+- 验证：Release 构建 0 error；因当前环境无法访问 `https://api.nuget.org/v3/index.json`，NuGet 漏洞审计出现 3 个 NU1900 警告。
+
+## [2026-05-18] 性能优化最终验证
+- `VideoViewerPage.xaml` 补充页面级转换器资源，避免拆分为独立 UserControl 后运行期无法解析原 `MainWindow.Resources` 中的静态资源。
+- Release 构建 0 error；因当前环境无法访问 `https://api.nuget.org/v3/index.json`，NuGet 漏洞审计出现 3 个 NU1900 警告。
+- 启动烟测通过：Release 产物启动后进程响应，窗口标题为“阿君的工具”，启动日志成功追加当前启动记录，烟测进程已停止。
+
+## [2026-05-18] 修复图片查看器满框显示
+- 修复图片查看器“满框”按钮无效的问题：原实现仅切换 `Image.Stretch=Uniform`，但图片位于 `ScrollViewer` 内会被无限空间测量，未绑定目标视口尺寸，导致视觉上不缩放。
+- 调整 `MainWindow.xaml` 图片预览区：普通模式保留原实际大小与手动缩放图片；满框模式切换为独立预览图片，并将宽高绑定到 `ImageViewerScrollViewer.ActualWidth/ActualHeight`，使用 `Stretch=Uniform` 适配预览区域。
+- 验证：Release 构建通过；仍有 NU1900 网络警告，原因是当前环境无法访问 `https://api.nuget.org/v3/index.json`。
+
+## [2026-05-18] 优化图片轻编辑滑块拖动体验
+- 加宽图片查看器右侧信息/轻编辑栏：列宽由 220 调整为 260，增加亮度、对比度、锐化滑块的横向可拖动区域。
+- 将亮度、对比度、锐化滑块的绑定提交时机由 `PropertyChanged` 调整为释放鼠标、键盘调整或失焦时提交，避免拖动过程中每个微小变化都同步重算预览图导致卡顿。
+- 为三个滑块设置 `Height=28`，扩大鼠标命中区域，降低拖动难度。
+- 验证：Release 构建通过；仍有 NU1900 网络警告，原因是当前环境无法访问 `https://api.nuget.org/v3/index.json`。

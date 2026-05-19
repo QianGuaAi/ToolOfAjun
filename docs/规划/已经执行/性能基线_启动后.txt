@@ -1,0 +1,51 @@
+[2026-05-18] 启动与运行性能优化记录
+
+## 测量状态
+- 启动前基线：未测。
+- 未测原因：本次在用户确认“开始执行”后直接进行稳定性优先的低风险优化；未在修改前插入 PERF_TEMP 临时打点，避免额外污染启动路径源码。
+- 启动后基线：未做自动 GUI 运行采样。
+- 未测原因：当前环境只能可靠执行编译验证；GUI 首帧、稳态私有工作集、模块切换耗时需要人工交互或专门插桩后多次启动采样。
+
+## 已完成的可验证优化
+| 文件 | 优化点 | 预期收益 |
+|------|--------|----------|
+| `src/MyTools/Services/AppLogService.cs` | Serilog File Sink 改为 `buffered: true`，`flushToDiskInterval=2s`，关闭 `shared` | 减少运行期同步刷盘压力 |
+| `src/MyTools/App.xaml.cs` | `MyTools.startup.log` 追加写入与低版本系统 Warning 延后到 `ApplicationIdle` | 减少主窗口显示前磁盘 IO |
+| `src/MyTools/MainWindow.xaml.cs` | 托盘图标 `ExtractAssociatedIcon` 延后到窗口 Loaded 后 `ApplicationIdle` | 减少构造函数同步 IO |
+| `src/MyTools/ViewModels/MainViewModel.cs` | 启动期历史/配置/报告加载统一延后到 `ScheduleStartupBackgroundLoads()` | 减少 `MainViewModel` 构造后立即抢 UI 线程资源 |
+| `src/MyTools/ViewModels/MainViewModel.cs` | `ScheduleViewModel` 与 `SystemSettingsViewModel` 改为懒加载 | 减少首屏创建对象与潜在注册表/状态读取 |
+| `src/MyTools/App.config` | 启用 Server GC 与 Concurrent GC | 降低大对象/批处理场景 GC 停顿风险 |
+
+## 构建验证
+- 命令：`dotnet build src\MyTools\MyTools.csproj -c Release`
+- 结果：0 error。
+- 警告：3 个 `NU1900`，原因是当前环境无法访问 `https://api.nuget.org/v3/index.json` 获取漏洞数据；非本次代码改动导致。
+- 产物：`src\MyTools\bin\Release\net48\MyTools.exe`
+
+## 后续人工复测建议
+1. 关闭已运行的 `MyTools.exe`。
+2. 连续启动 3 次，记录从双击到主窗口可点击的耗时。
+3. Home 停留 10 秒后记录任务管理器“专用内存”。
+4. 首次点击“日程”“系统设置”“SQL 导出”各记录卡顿感与响应时间。
+5. 若任一指标明显退化，优先回滚对应步骤：懒加载、后台加载、App.config GC 配置。
+
+## [2026-05-18] UI 面板可见性复查
+- 已复查 `MainWindow.xaml` 顶层模块面板：Home、Network、Uninstall、Startup、System、SqlExport、Screenshot、ImageViewer、VideoViewer、CodexProfiles、SystemInfo、FileVerify、Convert、Benchmark、Schedule、SystemSettings 均存在 `Collapsed` 默认值和 `CurrentModule` 显示触发器。
+- 修复 WireGuard 面板：原面板仅默认 `Collapsed`，缺少 `CurrentModule=WireGuard` 的显示触发器；已补齐，避免首页命令切换后面板不可见。
+- 超 800 行面板复查：仅 `VideoViewer` 面板约 914 行。该面板包含 `MediaElement x:Name="VideoPlayer"`、波形鼠标事件、播放列表拖拽事件，并被 `MainWindow.xaml.cs` 直接引用，直接拆分会迁移播放器状态机和事件处理链。为避免启动崩溃，本轮暂不拆分，建议后续单独建立 `VideoViewerPage` 重构任务。
+- 验证：Release 构建 0 error；仍有 3 个 NU1900 网络警告，原因是无法访问 nuget.org 漏洞数据源。
+
+## [2026-05-18] VideoViewer 面板拆分
+- 已将 `MainWindow.xaml` 中约 914 行的 VideoViewer 面板抽出为 `src/MyTools/Views/VideoViewerPage.xaml`。
+- 新增 `src/MyTools/Views/VideoViewerPage.xaml.cs`，承接原 `MainWindow.xaml.cs` 中播放器、波形拖拽、播放列表拖拽、循环区间和书签跳转相关事件处理。
+- `MainWindow.xaml` 仅保留 `<views:VideoViewerPage x:Name="VideoViewerPage">` 与 `CurrentModule=VideoViewer` 可见性触发器。
+- `MainWindow.xaml.cs` 保留窗口级快捷键、窗口拖放、模块切换和关闭入口，并通过 `VideoViewerPage` 的公开方法调用播放页逻辑。
+- 文件行数复查：`MainWindow.xaml` 约 5018 行，`VideoViewerPage.xaml` 约 908 行，`VideoViewerPage.xaml.cs` 约 741 行。
+- 验证：Release 构建 0 error；仍有 3 个 NU1900 网络警告，原因是无法访问 nuget.org 漏洞数据源。
+
+## [2026-05-18] 最终启动烟测
+- 修复拆分后的资源作用域：`VideoViewerPage.xaml` 自带 `BoolToVis`、`InverseBoolToVis`、`VideoWaveformPositionConverter`、`VideoWaveformRangeConverter`，避免独立 UserControl 在运行期依赖 `MainWindow.Resources`。
+- Release 构建：0 error；仍有 3 个 NU1900 网络警告，原因是无法访问 nuget.org 漏洞数据源。
+- 启动烟测：启动 `src\MyTools\bin\Release\net48\MyTools.exe`，等待约 10 秒后进程仍响应，`MainWindowTitle=阿君的工具`，`PrivateMemorySize64≈262.2 MB`。
+- 启动日志验证：`MyTools.startup.log` 已追加 `[2026-05-18 21:15:58] 启动 — OS=Windows 11 (10.0.26200), 64bit=True, .NET=.NET Framework 4.8.9325.0`。
+- 烟测结束：测试进程已停止。

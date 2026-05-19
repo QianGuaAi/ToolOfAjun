@@ -86,29 +86,14 @@ namespace MyTools
                     Environment.Is64BitOperatingSystem,
                     System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription);
 
-                try
-                {
-                    Directory.CreateDirectory(Path.GetDirectoryName(LogPath) ?? AppDomain.CurrentDomain.BaseDirectory);
-                    File.AppendAllText(
-                        LogPath,
-                        $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] 启动 — OS={OsVersionService.DisplayName}, 64bit={Environment.Is64BitOperatingSystem}, .NET={System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription}{Environment.NewLine}",
-                        Encoding.UTF8);
-                }
-                catch
-                {
-                }
-
-                if (!OsVersionService.IsWindows10OrGreater)
-                {
-                    AppLogService.Warning("Running on legacy Windows ({Os}). Some modules (Lock Win10 22H2 / Defender / Auto Update / DXGI capture) will be hidden or unavailable.",
-                        OsVersionService.DisplayName);
-                }
-
                 base.OnStartup(e);
 
                 var mainWindow = new MainWindow();
                 MainWindow = mainWindow;
                 mainWindow.Show();
+                mainWindow.Dispatcher.BeginInvoke(
+                    DispatcherPriority.ApplicationIdle,
+                    new Action(WriteStartupDiagnostics));
                 TryOpenStartupPath(mainWindow, e.Args);
             }
             catch (Exception ex)
@@ -254,6 +239,27 @@ namespace MyTools
             }
 
             return null;
+        }
+
+        private static void WriteStartupDiagnostics()
+        {
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(LogPath) ?? AppDomain.CurrentDomain.BaseDirectory);
+                File.AppendAllText(
+                    LogPath,
+                    $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] 启动 — OS={OsVersionService.DisplayName}, 64bit={Environment.Is64BitOperatingSystem}, .NET={System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription}{Environment.NewLine}",
+                    Encoding.UTF8);
+            }
+            catch
+            {
+            }
+
+            if (!OsVersionService.IsWindows10OrGreater)
+            {
+                AppLogService.Warning("Running on legacy Windows ({Os}). Some modules (Lock Win10 22H2 / Defender / Auto Update / DXGI capture) will be hidden or unavailable.",
+                    OsVersionService.DisplayName);
+            }
         }
     }
 }

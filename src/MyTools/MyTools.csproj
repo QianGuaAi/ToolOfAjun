@@ -9,6 +9,8 @@
     <RootNamespace>MyTools</RootNamespace>
     <ApplicationIcon>Resources\AppIcon.ico</ApplicationIcon>
     <CopySQLiteInteropFiles>false</CopySQLiteInteropFiles>
+    <LangVersion>9.0</LangVersion>
+    <ServerGarbageCollection>true</ServerGarbageCollection>
   </PropertyGroup>
 
   <ItemGroup>

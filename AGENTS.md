@@ -103,4 +103,42 @@
 
 生成完毕后，自动扮演一个能力较弱的 AI 通读说明书找出歧义并修改，只输出说明书本身，不加前言/解释/元注释。Markdown 格式，可直接复制使用。
 
+## 九、性能与启动规则（不可违反）
+
+### 9.1 启动期黄金 500 ms 原则
+- `App.OnStartup` 与 `MainWindow` 构造函数中严禁执行任何耗时超过 50 ms 的磁盘 IO、注册表查询、WMI 调用或大对象反序列化。
+- 启动期允许的同步操作仅限：单实例 Mutex、全局异常处理器挂接、合并资源字典加载、命令对象创建、空 `ObservableCollection<T>` 创建。
+- 加载历史、扫描磁盘、查询硬件、读取注册表、枚举启动项、枚举已安装程序等任务，必须通过 `Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, ...)` 延后，或在用户点击对应模块时按需加载。
+
+### 9.2 ViewModel 构造约束
+- `MainViewModel` 构造函数禁止直接创建重型子 ViewModel；`ScheduleViewModel`、`SystemSettingsViewModel` 等必须以懒加载属性形式暴露。
+- 构造函数末尾禁止直接启动批量后台任务；统一通过私有方法 `ScheduleStartupBackgroundLoads()` 在 `ApplicationIdle` 优先级派发。
+- 任何 `ObservableCollection<T>` 在构造时禁止预填充大量数据；数据必须由延迟加载方法填入。
+
+### 9.3 面板可见性约束
+- `MainWindow.xaml` 中非 Home 模块面板默认使用 `Visibility="Collapsed"`，仅在 `CurrentModule` 匹配时显示。
+- 切换可见性必须通过 `DataTrigger Binding=CurrentModule` 实现；禁止用 `Hidden` 代替 `Collapsed`。
+- 单个面板 XAML 行数超过 800 行时，必须抽出到 `src\MyTools\Views\<Module>View.xaml` 作为 `UserControl`，并保持继承主窗口 `DataContext`。
+
+### 9.4 日志与磁盘 IO 约束
+- Serilog `File` Sink 必须使用缓冲写入，`flushToDiskInterval` 不得超过 2 秒。
+- 启动期 `MyTools.startup.log` 的追加写入必须延后到主窗口可见之后。
+- 单条日志严禁记录完整连接字符串、密码或超过 1 KB 的大文本；只记录关键状态、文件名、服务器名、用户名等非敏感摘要。
+
+### 9.5 内存与 GC 约束
+- `App.config` 的 `<runtime>` 节点必须保留 `<gcServer enabled="true" />` 与 `<gcConcurrent enabled="true" />`。
+- 长期持有的 `ObservableCollection` 元素数超过 5000 项时，必须启用 WPF 虚拟化列表，不能依赖无虚拟化布局渲染全部元素。
+- 新增事件订阅时必须同步规划退订位置；长期对象订阅短生命周期对象事件时必须实现 `IDisposable` 或在 `Unloaded` 中解绑。
+
+### 9.6 性能基线维护
+- 修改 `App.OnStartup`、`MainWindow` 构造函数、`MainViewModel` 构造函数时，必须在 `docs/规划/` 下记录启动基线或说明未测原因。
+- 启动首帧、稳态私有工作集、单 exe 体积任一指标回退超过 5% 时，必须回滚或说明不可回避原因。
+- 新增静态资源导致单 exe 体积增长超过 1% 时，必须在 `docs/开发记录.txt` 说明文件名、大小和用途。
+
+### 9.7 禁止事项（红线）
+- 禁止在启动期同步调用 WMI。
+- 禁止在构造函数中调用 `Task.Run(...).Result` 或 `.Wait()`。
+- 禁止用 `Application.Current.Dispatcher.Invoke` 同步等待 UI 线程结果。
+- 禁止为了追求速度关闭全局异常处理、DPAPI 加密、SQL 白名单校验或日志脱敏。
+
 ---
