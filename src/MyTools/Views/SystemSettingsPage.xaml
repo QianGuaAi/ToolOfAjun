@@ -52,7 +52,12 @@
             <TextBlock Text="{Binding StatusMessage}" FontSize="11" TextWrapping="Wrap" />
         </Border>
 
-        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <TabControl Grid.Row="2"
+                    Style="{StaticResource MaterialDesignTabControl}"
+                    HorizontalContentAlignment="Stretch"
+                    VerticalContentAlignment="Stretch"
+                    materialDesign:ColorZoneAssist.Mode="PrimaryMid">
+            <TabItem Header="备份恢复">
         <Grid>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
@@ -257,6 +262,9 @@
                 </Grid>
             </materialDesign:Card>
 
+        </Grid>
+            </TabItem>
+            <TabItem Header="桌面背景">
             <!-- ============== Wallpaper Library ============== -->
             <materialDesign:Card Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="3" Style="{StaticResource SectionCardDense}">
                 <Grid>
@@ -416,6 +424,8 @@
                     </Border>
                 </Grid>
             </materialDesign:Card>
+            </TabItem>
+            <TabItem Header="Windows 调整">
             <!-- ============== Windows 调整 ============== -->
             <materialDesign:Card Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="3" Style="{StaticResource SectionCardDense}">
                 <Grid>
@@ -508,7 +518,7 @@
                 </Grid>
             </materialDesign:Card>
 
-        </Grid>
-        </ScrollViewer>
+            </TabItem>
+        </TabControl>
     </Grid>
 </UserControl>

@@ -21,7 +21,7 @@
         <Rectangle x:Name="DimRect" Fill="#80000000" />
         <!-- 选区高亮：用 Image + Clip 显示原图 -->
         <Canvas x:Name="OverlayCanvas">
-            <Image x:Name="SelectionImage" Stretch="None" Visibility="Collapsed" />
+            <Image x:Name="SelectionImage" Stretch="Fill" Visibility="Collapsed" />
             <Rectangle x:Name="SelectionBorder"
                        Stroke="#FF5e72e4" StrokeThickness="2"
                        Visibility="Collapsed" />

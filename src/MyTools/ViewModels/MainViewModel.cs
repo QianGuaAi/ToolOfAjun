@@ -6046,11 +6046,26 @@ namespace MyTools.ViewModels
                 var ok = win.ShowDialog() == true;
                 if (!ok) return (BitmapSource)null;
                 var rect = win.SelectedRectPx;
+                rect = ClampBitmapRect(rect, fullSnapshot.PixelWidth, fullSnapshot.PixelHeight);
                 if (rect.Width < 1 || rect.Height < 1) return null;
                 var cropped = new System.Windows.Media.Imaging.CroppedBitmap(fullSnapshot, rect);
                 cropped.Freeze();
                 return (BitmapSource)cropped;
             });
+        }
+
+        private static Int32Rect ClampBitmapRect(Int32Rect rect, int pixelWidth, int pixelHeight)
+        {
+            if (pixelWidth < 1 || pixelHeight < 1)
+            {
+                return Int32Rect.Empty;
+            }
+
+            int x = Math.Max(0, Math.Min(rect.X, pixelWidth - 1));
+            int y = Math.Max(0, Math.Min(rect.Y, pixelHeight - 1));
+            int right = Math.Max(x + 1, Math.Min(rect.X + rect.Width, pixelWidth));
+            int bottom = Math.Max(y + 1, Math.Min(rect.Y + rect.Height, pixelHeight));
+            return new Int32Rect(x, y, right - x, bottom - y);
         }
 
         private void LoadScreenshotHistory()

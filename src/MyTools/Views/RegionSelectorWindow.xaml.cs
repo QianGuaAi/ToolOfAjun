@@ -21,8 +21,6 @@ namespace MyTools.Views
         private const int SM_CYVIRTUALSCREEN = 79;
 
         private readonly BitmapSource _snapshot;
-        private readonly int _virtualLeftPx;
-        private readonly int _virtualTopPx;
         private readonly int _virtualWidthPx;
         private readonly int _virtualHeightPx;
 
@@ -40,8 +38,8 @@ namespace MyTools.Views
             InitializeComponent();
             _snapshot = snapshot ?? throw new ArgumentNullException(nameof(snapshot));
 
-            _virtualLeftPx = GetSystemMetrics(SM_XVIRTUALSCREEN);
-            _virtualTopPx = GetSystemMetrics(SM_YVIRTUALSCREEN);
+            var virtualLeftPx = GetSystemMetrics(SM_XVIRTUALSCREEN);
+            var virtualTopPx = GetSystemMetrics(SM_YVIRTUALSCREEN);
             _virtualWidthPx = GetSystemMetrics(SM_CXVIRTUALSCREEN);
             _virtualHeightPx = GetSystemMetrics(SM_CYVIRTUALSCREEN);
 
@@ -54,8 +52,8 @@ namespace MyTools.Views
             //   而 GetSystemMetrics 返回物理像素。这里把进程上下文 DPI 用 PresentationSource 推算出来。
             // 简化处理：用主显示器 DPI。
             var dpi = VisualTreeHelper.GetDpi(this);
-            Left = _virtualLeftPx / dpi.DpiScaleX;
-            Top = _virtualTopPx / dpi.DpiScaleY;
+            Left = virtualLeftPx / dpi.DpiScaleX;
+            Top = virtualTopPx / dpi.DpiScaleY;
             Width = _virtualWidthPx / dpi.DpiScaleX;
             Height = _virtualHeightPx / dpi.DpiScaleY;
 
@@ -116,23 +114,18 @@ namespace MyTools.Views
             SelectionBorder.Width = w;
             SelectionBorder.Height = h;
 
-            // 高亮选区：把同一张图按相对偏移显示
-            Canvas.SetLeft(SelectionImage, x);
-            Canvas.SetTop(SelectionImage, y);
-            SelectionImage.Width = w;
-            SelectionImage.Height = h;
-            // 用 ImageBrush 也行，这里用 Image + Clip 的 RectangleGeometry
-            SelectionImage.Clip = new RectangleGeometry(new Rect(0, 0, w, h));
-            // 通过 RenderTransform 把图像的视区平移到选中那一块
-            SelectionImage.RenderTransform = new TranslateTransform(-x, -y);
-            // 让 SelectionImage 自身仍铺满整个虚拟屏幕大小
+            // Keep the preview image aligned with the background, then clip out only the selected area.
+            Canvas.SetLeft(SelectionImage, 0);
+            Canvas.SetTop(SelectionImage, 0);
             SelectionImage.Width = ActualWidth;
             SelectionImage.Height = ActualHeight;
+            SelectionImage.Clip = new RectangleGeometry(new Rect(x, y, w, h));
+            SelectionImage.RenderTransform = null;
 
             // 尺寸提示
-            var dpi = VisualTreeHelper.GetDpi(this);
-            int wPx = (int)Math.Round(w * dpi.DpiScaleX);
-            int hPx = (int)Math.Round(h * dpi.DpiScaleY);
+            var scale = GetSnapshotScale();
+            int wPx = (int)Math.Round(w * scale.X);
+            int hPx = (int)Math.Round(h * scale.Y);
             SizeHintText.Text = $"{wPx} × {hPx}";
             // 提示框放在选区上方；若空间不够则放下方
             double hintX = x;
@@ -151,18 +144,42 @@ namespace MyTools.Views
             double x = Canvas.GetLeft(SelectionBorder);
             double y = Canvas.GetTop(SelectionBorder);
 
-            var dpi = VisualTreeHelper.GetDpi(this);
-            int xPx = Math.Max(0, (int)Math.Round(x * dpi.DpiScaleX));
-            int yPx = Math.Max(0, (int)Math.Round(y * dpi.DpiScaleY));
-            int wPx = (int)Math.Round(w * dpi.DpiScaleX);
-            int hPx = (int)Math.Round(h * dpi.DpiScaleY);
-            // 防溢出
-            wPx = Math.Min(wPx, _snapshot.PixelWidth - xPx);
-            hPx = Math.Min(hPx, _snapshot.PixelHeight - yPx);
+            var scale = GetSnapshotScale();
+            int xPx = (int)Math.Round(x * scale.X);
+            int yPx = (int)Math.Round(y * scale.Y);
+            int rightPx = (int)Math.Round((x + w) * scale.X);
+            int bottomPx = (int)Math.Round((y + h) * scale.Y);
+            xPx = Clamp(xPx, 0, _snapshot.PixelWidth - 1);
+            yPx = Clamp(yPx, 0, _snapshot.PixelHeight - 1);
+            rightPx = Clamp(rightPx, xPx + 1, _snapshot.PixelWidth);
+            bottomPx = Clamp(bottomPx, yPx + 1, _snapshot.PixelHeight);
+
+            int wPx = rightPx - xPx;
+            int hPx = bottomPx - yPx;
             if (wPx < 1 || hPx < 1) return false;
 
             SelectedRectPx = new Int32Rect(xPx, yPx, wPx, hPx);
             return true;
+        }
+
+        private Point GetSnapshotScale()
+        {
+            double width = ActualWidth > 0 ? ActualWidth : Width;
+            double height = ActualHeight > 0 ? ActualHeight : Height;
+            if (width <= 0 || height <= 0)
+            {
+                return new Point(1.0, 1.0);
+            }
+
+            return new Point(_snapshot.PixelWidth / width, _snapshot.PixelHeight / height);
+        }
+
+        private static int Clamp(int value, int min, int max)
+        {
+            if (max < min) return min;
+            if (value < min) return min;
+            if (value > max) return max;
+            return value;
         }
     }
 }

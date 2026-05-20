@@ -968,3 +968,21 @@
 - 将亮度、对比度、锐化滑块的绑定提交时机由 `PropertyChanged` 调整为释放鼠标、键盘调整或失焦时提交，避免拖动过程中每个微小变化都同步重算预览图导致卡顿。
 - 为三个滑块设置 `Height=28`，扩大鼠标命中区域，降低拖动难度。
 - 验证：Release 构建通过；仍有 NU1900 网络警告，原因是当前环境无法访问 `https://api.nuget.org/v3/index.json`。
+## [2026-05-20] 区域截图矩形选择修复
+- 修复“划区域”截图在矩形选区靠近屏幕边缘、跨屏或缩放环境下可能生成越界裁剪矩形的问题。
+- RegionSelectorWindow 改为按窗口实际显示尺寸与截图像素尺寸的比例换算选区坐标，并对左上角与右下角统一做边界钳制。
+- 修复选区高亮预览层错位：SelectionImage 改为全屏对齐背景图，仅用 Clip 显示蓝框内区域。
+- ShowRegionSelectorAsync 在创建 CroppedBitmap 前再次校验并钳制 Int32Rect，避免运行期因越界矩形导致截图失败。
+- 验证：独立输出目录 `artifacts\verify-region-screenshot\` Release 构建 0 error 0 warning；常规 `bin\Release\net48\MyTools.exe` 被运行中进程 PID 17292 锁定，未覆盖。
+
+## [2026-05-20] 功能页面免整页滚动布局
+- 系统优化、截图工具、系统信息、文件验证、格式转换、性能测试改为页签分组或固定行布局，避免为了操作功能按钮滚动整页。
+- 图片查看器右侧信息栏拆为“信息 / 轻编辑”页签，轻编辑滑块和重置按钮可直接操作。
+- 系统设置页拆为“备份恢复 / 桌面背景 / Windows 调整”页签，保留列表、表格、树、图片预览等内容区域的内部滚动。
+- 验证：独立输出目录 `artifacts\verify-layout\` Release 构建 0 error 0 warning。
+
+## [2026-05-20] 截图工具页签崩溃修复
+- 修复截图历史项模板中 `Run.Text` 绑定只读属性 `TimeText` / `SizeText` 时默认双向绑定导致的 `XamlParseException`。
+- 将截图历史时间和大小的 `Run.Text` 绑定显式设置为 `Mode=OneWay`，切换到“截图工具”页面时不再尝试写回只读属性。
+- 同步将主窗口内其它展示型 `Run.Text` 绑定显式设置为 `Mode=OneWay`，避免系统信息等页面的只读展示属性触发同类异常。
+- 验证：独立输出目录 `artifacts\verify-screenshot-tab\` Release 构建 0 error 0 warning。

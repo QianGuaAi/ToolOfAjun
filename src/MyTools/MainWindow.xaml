@@ -532,7 +532,7 @@
                                 <TextBlock Text="{Binding SystemInfo.CpuName}" Grid.Row="0" Grid.Column="3" Style="{StaticResource TextBodyStandard}" TextTrimming="CharacterEllipsis" Margin="0,0,0,6" />
                                 <TextBlock Text="内存" Grid.Row="1" Grid.Column="0" Style="{StaticResource TextHint}" Margin="0,0,12,6" />
                                 <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource TextBodyStandard}" Margin="0,0,20,6">
-                                    <Run Text="{Binding SystemInfo.AvailableRam}" /><Run Text=" / " /><Run Text="{Binding SystemInfo.TotalRam}" />
+                                    <Run Text="{Binding SystemInfo.AvailableRam, Mode=OneWay}" /><Run Text=" / " /><Run Text="{Binding SystemInfo.TotalRam, Mode=OneWay}" />
                                 </TextBlock>
                                 <TextBlock Text="系统盘" Grid.Row="1" Grid.Column="2" Style="{StaticResource TextHint}" Margin="0,0,12,6" />
                                 <TextBlock Text="{Binding SystemInfo.SystemDisk}" Grid.Row="1" Grid.Column="3" Style="{StaticResource TextBodyStandard}" TextTrimming="CharacterEllipsis" Margin="0,0,0,6" />
@@ -1801,8 +1801,13 @@
                     </StackPanel>
                 </Border>
 
-                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-                    <StackPanel>
+                <TabControl Grid.Row="1"
+                            Style="{StaticResource MaterialDesignTabControl}"
+                            HorizontalContentAlignment="Stretch"
+                            VerticalContentAlignment="Stretch"
+                            materialDesign:ColorZoneAssist.Mode="PrimaryMid">
+                    <TabItem Header="系统锁定">
+                        <StackPanel>
                         <materialDesign:Card Padding="14,10" Margin="0,0,0,8">
                             <Grid>
                                 <Grid.ColumnDefinitions>
@@ -1827,6 +1832,10 @@
                             </Grid>
                         </materialDesign:Card>
 
+                        </StackPanel>
+                    </TabItem>
+                    <TabItem Header="安全防护">
+                        <StackPanel>
                         <materialDesign:Card Padding="14,10" Margin="0,0,0,8">
                             <Grid>
                                 <Grid.ColumnDefinitions>
@@ -1898,6 +1907,10 @@
                             </Grid>
                         </materialDesign:Card>
 
+                        </StackPanel>
+                    </TabItem>
+                    <TabItem Header="自动更新">
+                        <StackPanel>
                         <materialDesign:Card Padding="14,10" Margin="0,0,0,8">
                             <Grid>
                                 <Grid.ColumnDefinitions>
@@ -1991,6 +2004,10 @@
                             </Grid>
                         </materialDesign:Card>
 
+                        </StackPanel>
+                    </TabItem>
+                    <TabItem Header="自动优化">
+                        <StackPanel>
                         <materialDesign:Card Padding="14,10" Margin="0,0,0,8">
                             <StackPanel>
                                 <TextBlock Text="自动优化与报告"
@@ -2064,6 +2081,10 @@
                             </StackPanel>
                         </materialDesign:Card>
 
+                        </StackPanel>
+                    </TabItem>
+                    <TabItem Header="垃圾清理">
+                        <StackPanel>
                         <materialDesign:Card Padding="14,10" Margin="0,0,0,8">
                             <StackPanel>
                                 <TextBlock Text="垃圾清理"
@@ -2127,6 +2148,10 @@
                             </StackPanel>
                         </materialDesign:Card>
 
+                        </StackPanel>
+                    </TabItem>
+                    <TabItem Header="微信清理">
+                        <StackPanel>
                         <materialDesign:Card Padding="14,10" Margin="0,0,0,8">
                             <StackPanel>
                                 <TextBlock Text="微信清理"
@@ -2205,6 +2230,10 @@
                             </StackPanel>
                         </materialDesign:Card>
 
+                        </StackPanel>
+                    </TabItem>
+                    <TabItem Header="微信备份">
+                        <StackPanel>
                         <materialDesign:Card Padding="14,10" Margin="0,0,0,8">
                             <StackPanel>
                                 <TextBlock Text="微信备份"
@@ -2270,6 +2299,10 @@
                             </StackPanel>
                         </materialDesign:Card>
 
+                        </StackPanel>
+                    </TabItem>
+                    <TabItem Header="微信恢复">
+                        <StackPanel>
                         <materialDesign:Card Padding="14,10">
                             <StackPanel>
                                 <TextBlock Text="微信恢复"
@@ -2384,8 +2417,9 @@
                                 </Border>
                             </StackPanel>
                         </materialDesign:Card>
-                    </StackPanel>
-                </ScrollViewer>
+                        </StackPanel>
+                    </TabItem>
+                </TabControl>
             </Grid>
 
             <Grid Margin="20">
@@ -2894,8 +2928,13 @@
                     </DockPanel>
                 </Border>
 
-                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-                    <StackPanel>
+                <TabControl Grid.Row="1"
+                            Style="{StaticResource MaterialDesignTabControl}"
+                            HorizontalContentAlignment="Stretch"
+                            VerticalContentAlignment="Stretch"
+                            materialDesign:ColorZoneAssist.Mode="PrimaryMid">
+                    <TabItem Header="截图设置">
+                        <StackPanel>
 
                         <!-- Hotkey card -->
                         <materialDesign:Card Padding="12,10" Margin="0,0,0,8">
@@ -3069,6 +3108,10 @@
                             </StackPanel>
                         </materialDesign:Card>
 
+                        </StackPanel>
+                    </TabItem>
+                    <TabItem Header="截图历史">
+                        <StackPanel>
                         <!-- Screenshot history -->
                         <materialDesign:Card Padding="12,10" Margin="0,0,0,8">
                             <StackPanel>
@@ -3109,7 +3152,7 @@
                                                         <TextBlock Text="{Binding Title}" Style="{StaticResource TextBodyStandard}"
                                                                    FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Margin="0,6,0,1" />
                                                         <TextBlock Style="{StaticResource TextHint}" TextTrimming="CharacterEllipsis">
-                                                            <Run Text="{Binding TimeText}" /><Run Text=" · " /><Run Text="{Binding SizeText}" />
+                                                            <Run Text="{Binding TimeText, Mode=OneWay}" /><Run Text=" · " /><Run Text="{Binding SizeText, Mode=OneWay}" />
                                                         </TextBlock>
                                                         <TextBlock Text="{Binding DimensionsText}" Style="{StaticResource TextHint}" TextTrimming="CharacterEllipsis" Margin="0,1,0,6" />
                                                         <WrapPanel>
@@ -3159,6 +3202,10 @@
                             </StackPanel>
                         </materialDesign:Card>
 
+                        </StackPanel>
+                    </TabItem>
+                    <TabItem Header="录制目录">
+                        <StackPanel>
                         <!-- Recording output folders -->
                         <materialDesign:Card Padding="12,10" Margin="0,0,0,8">
                             <StackPanel>
@@ -3210,6 +3257,10 @@
                             </StackPanel>
                         </Button>
 
+                        </StackPanel>
+                    </TabItem>
+                    <TabItem Header="哈希校验">
+                        <StackPanel>
                         <!-- File Hash Calculator -->
                         <materialDesign:Card Padding="12,10" Margin="0,8,0,0">
                             <StackPanel>
@@ -3260,8 +3311,9 @@
                             </StackPanel>
                         </materialDesign:Card>
 
-                    </StackPanel>
-                </ScrollViewer>
+                        </StackPanel>
+                    </TabItem>
+                </TabControl>
             </Grid>
 
             <!-- Image viewer panel -->
@@ -3587,8 +3639,11 @@
                     </materialDesign:Card>
 
                     <materialDesign:Card Grid.Column="2" Padding="14">
-                        <StackPanel>
-                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <TabControl Style="{StaticResource MaterialDesignTabControl}"
+                                    HorizontalContentAlignment="Stretch"
+                                    VerticalContentAlignment="Stretch"
+                                    materialDesign:ColorZoneAssist.Mode="PrimaryMid">
+                            <TabItem Header="信息">
                                 <StackPanel>
                                     <TextBlock Text="图片信息" Style="{StaticResource TextSubtitle}" FontWeight="Bold" Margin="0,0,0,8" />
                                     <TextBlock Text="文件名" Style="{StaticResource TextFieldLabel}" />
@@ -3603,7 +3658,25 @@
                                     <TextBlock Text="{Binding ImageViewerTransformText}" TextWrapping="Wrap" Margin="0,1,0,7" FontSize="12" />
 
                                     <Border Style="{StaticResource DividerLine}" Margin="0,4,0,8" />
+                                    <TextBlock Text="路径" Style="{StaticResource TextFieldLabel}" />
+                                    <TextBlock Text="{Binding ImageViewerFilePath}"
+                                               TextWrapping="Wrap"
+                                               Opacity="0.72"
+                                               FontSize="11"
+                                               Margin="0,1,0,8" />
 
+                                    <Border Background="{DynamicResource MaterialDesignToolBarBackground}"
+                                            CornerRadius="6"
+                                            Padding="10"
+                                            Margin="0,4,0,0">
+                                        <TextBlock Text="{Binding ImageViewerStatusMessage}"
+                                                   Style="{StaticResource TextCaption}"
+                                                   TextWrapping="Wrap" />
+                                    </Border>
+                                </StackPanel>
+                            </TabItem>
+                            <TabItem Header="轻编辑">
+                                <StackPanel>
                                     <TextBlock Text="轻编辑" Style="{StaticResource TextSubtitle}" FontWeight="Bold" Margin="0,0,0,8" />
                                     <TextBlock Text="中心裁剪" Style="{StaticResource TextFieldLabel}" />
                                     <ComboBox ItemsSource="{Binding ImageViewerCropModes}"
@@ -3668,25 +3741,9 @@
                                             <TextBlock Text="重置轻编辑" />
                                         </StackPanel>
                                     </Button>
-
-                                    <TextBlock Text="路径" Style="{StaticResource TextFieldLabel}" />
-                                    <TextBlock Text="{Binding ImageViewerFilePath}"
-                                               TextWrapping="Wrap"
-                                               Opacity="0.72"
-                                               FontSize="11"
-                                               Margin="0,1,0,8" />
-
-                                    <Border Background="{DynamicResource MaterialDesignToolBarBackground}"
-                                            CornerRadius="6"
-                                            Padding="10"
-                                            Margin="0,4,0,0">
-                                        <TextBlock Text="{Binding ImageViewerStatusMessage}"
-                                                   Style="{StaticResource TextCaption}"
-                                                   TextWrapping="Wrap" />
-                                    </Border>
                                 </StackPanel>
-                            </ScrollViewer>
-                        </StackPanel>
+                            </TabItem>
+                        </TabControl>
                     </materialDesign:Card>
                 </Grid>
             </Grid>
@@ -3997,8 +4054,14 @@
                     </DockPanel>
                 </Border>
 
-                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-                    <StackPanel>
+                <TabControl Grid.Row="1"
+                            Style="{StaticResource MaterialDesignTabControl}"
+                            HorizontalContentAlignment="Stretch"
+                            VerticalContentAlignment="Stretch"
+                            materialDesign:ColorZoneAssist.Mode="PrimaryMid">
+                    <TabItem Header="硬件概览">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel>
 
                         <!-- Hardware overview cards -->
                         <Grid Visibility="{Binding HasHardwareSummary, Converter={StaticResource BoolToVis}}">
@@ -4023,14 +4086,14 @@
                                         <TextBlock Text="系统与主板" Style="{StaticResource TextSubtitle}" VerticalAlignment="Center" />
                                     </StackPanel>
                                     <StackPanel>
-                                        <TextBlock><Run Text="计算机名：" FontWeight="SemiBold" /><Run Text="{Binding HardwareSummaryInfo.ComputerName}" /></TextBlock>
-                                        <TextBlock><Run Text="操作系统：" FontWeight="SemiBold" /><Run Text="{Binding HardwareSummaryInfo.OsName}" /></TextBlock>
-                                        <TextBlock><Run Text="版本：" FontWeight="SemiBold" /><Run Text="{Binding HardwareSummaryInfo.OsVersion}" /><Run Text=" · " /><Run Text="{Binding HardwareSummaryInfo.OsArchitecture}" /></TextBlock>
-                                        <TextBlock><Run Text="制造商：" FontWeight="SemiBold" /><Run Text="{Binding HardwareSummaryInfo.Manufacturer}" /></TextBlock>
-                                        <TextBlock><Run Text="型号：" FontWeight="SemiBold" /><Run Text="{Binding HardwareSummaryInfo.Model}" /></TextBlock>
-                                        <TextBlock><Run Text="主板：" FontWeight="SemiBold" /><Run Text="{Binding HardwareSummaryInfo.MotherboardManufacturer}" /><Run Text=" " /><Run Text="{Binding HardwareSummaryInfo.MotherboardProduct}" /></TextBlock>
-                                        <TextBlock><Run Text="BIOS：" FontWeight="SemiBold" /><Run Text="{Binding HardwareSummaryInfo.BiosVersion}" /><Run Text=" · " /><Run Text="{Binding HardwareSummaryInfo.BiosDate}" /></TextBlock>
-                                        <TextBlock><Run Text="运行时间：" FontWeight="SemiBold" /><Run Text="{Binding HardwareSummaryInfo.SystemUpTime}" /></TextBlock>
+                                        <TextBlock><Run Text="计算机名：" FontWeight="SemiBold" /><Run Text="{Binding HardwareSummaryInfo.ComputerName, Mode=OneWay}" /></TextBlock>
+                                        <TextBlock><Run Text="操作系统：" FontWeight="SemiBold" /><Run Text="{Binding HardwareSummaryInfo.OsName, Mode=OneWay}" /></TextBlock>
+                                        <TextBlock><Run Text="版本：" FontWeight="SemiBold" /><Run Text="{Binding HardwareSummaryInfo.OsVersion, Mode=OneWay}" /><Run Text=" · " /><Run Text="{Binding HardwareSummaryInfo.OsArchitecture, Mode=OneWay}" /></TextBlock>
+                                        <TextBlock><Run Text="制造商：" FontWeight="SemiBold" /><Run Text="{Binding HardwareSummaryInfo.Manufacturer, Mode=OneWay}" /></TextBlock>
+                                        <TextBlock><Run Text="型号：" FontWeight="SemiBold" /><Run Text="{Binding HardwareSummaryInfo.Model, Mode=OneWay}" /></TextBlock>
+                                        <TextBlock><Run Text="主板：" FontWeight="SemiBold" /><Run Text="{Binding HardwareSummaryInfo.MotherboardManufacturer, Mode=OneWay}" /><Run Text=" " /><Run Text="{Binding HardwareSummaryInfo.MotherboardProduct, Mode=OneWay}" /></TextBlock>
+                                        <TextBlock><Run Text="BIOS：" FontWeight="SemiBold" /><Run Text="{Binding HardwareSummaryInfo.BiosVersion, Mode=OneWay}" /><Run Text=" · " /><Run Text="{Binding HardwareSummaryInfo.BiosDate, Mode=OneWay}" /></TextBlock>
+                                        <TextBlock><Run Text="运行时间：" FontWeight="SemiBold" /><Run Text="{Binding HardwareSummaryInfo.SystemUpTime, Mode=OneWay}" /></TextBlock>
                                     </StackPanel>
                                 </StackPanel>
                             </materialDesign:Card>
@@ -4044,7 +4107,7 @@
                                         </Border>
                                         <TextBlock Text="内存" Style="{StaticResource TextSubtitle}" VerticalAlignment="Center" />
                                         <TextBlock Style="{StaticResource TextCaption}" Margin="10,0,0,0" VerticalAlignment="Center">
-                                            <Run Text="总容量：" /><Run Text="{Binding HardwareSummaryInfo.TotalMemoryGb}" FontWeight="SemiBold" />
+                                            <Run Text="总容量：" /><Run Text="{Binding HardwareSummaryInfo.TotalMemoryGb, Mode=OneWay}" FontWeight="SemiBold" />
                                         </TextBlock>
                                     </StackPanel>
                                     <ItemsControl ItemsSource="{Binding HardwareSummaryInfo.MemoryModules}">
@@ -4053,10 +4116,10 @@
                                                 <Border Background="{DynamicResource MaterialDesignToolBarBackground}" CornerRadius="6" Padding="8,6" Margin="0,0,0,4">
                                                     <StackPanel>
                                                         <TextBlock Style="{StaticResource TextBodyStandard}">
-                                                            <Run Text="{Binding BankLabel}" FontWeight="SemiBold" /><Run Text=" · " /><Run Text="{Binding CapacityGb}" /><Run Text=" · " /><Run Text="{Binding MemoryType}" /><Run Text=" · " /><Run Text="{Binding SpeedMhz}" /><Run Text=" MHz" />
+                                                            <Run Text="{Binding BankLabel, Mode=OneWay}" FontWeight="SemiBold" /><Run Text=" · " /><Run Text="{Binding CapacityGb, Mode=OneWay}" /><Run Text=" · " /><Run Text="{Binding MemoryType, Mode=OneWay}" /><Run Text=" · " /><Run Text="{Binding SpeedMhz, Mode=OneWay}" /><Run Text=" MHz" />
                                                         </TextBlock>
                                                         <TextBlock Style="{StaticResource TextHint}">
-                                                            <Run Text="{Binding Manufacturer}" /><Run Text=" · " /><Run Text="{Binding PartNumber}" />
+                                                            <Run Text="{Binding Manufacturer, Mode=OneWay}" /><Run Text=" · " /><Run Text="{Binding PartNumber, Mode=OneWay}" />
                                                         </TextBlock>
                                                     </StackPanel>
                                                 </Border>
@@ -4082,17 +4145,17 @@
                                                     <StackPanel>
                                                         <TextBlock Text="{Binding Name}" Style="{StaticResource TextSubtitle}" />
                                                         <TextBlock Style="{StaticResource TextCaption}">
-                                                            <Run Text="厂商：" /><Run Text="{Binding Manufacturer}" />
-                                                            <Run Text="  ·  插槽：" /><Run Text="{Binding Socket}" />
+                                                            <Run Text="厂商：" /><Run Text="{Binding Manufacturer, Mode=OneWay}" />
+                                                            <Run Text="  ·  插槽：" /><Run Text="{Binding Socket, Mode=OneWay}" />
                                                         </TextBlock>
                                                         <TextBlock Style="{StaticResource TextCaption}">
-                                                            <Run Text="物理核心：" /><Run Text="{Binding Cores}" FontWeight="SemiBold" />
-                                                            <Run Text="  ·  逻辑处理器：" /><Run Text="{Binding LogicalProcessors}" FontWeight="SemiBold" />
-                                                            <Run Text="  ·  最大频率：" /><Run Text="{Binding MaxClockMhz}" /><Run Text=" MHz" />
-                                                            <Run Text="  ·  当前：" /><Run Text="{Binding CurrentClockMhz}" /><Run Text=" MHz" />
+                                                            <Run Text="物理核心：" /><Run Text="{Binding Cores, Mode=OneWay}" FontWeight="SemiBold" />
+                                                            <Run Text="  ·  逻辑处理器：" /><Run Text="{Binding LogicalProcessors, Mode=OneWay}" FontWeight="SemiBold" />
+                                                            <Run Text="  ·  最大频率：" /><Run Text="{Binding MaxClockMhz, Mode=OneWay}" /><Run Text=" MHz" />
+                                                            <Run Text="  ·  当前：" /><Run Text="{Binding CurrentClockMhz, Mode=OneWay}" /><Run Text=" MHz" />
                                                         </TextBlock>
                                                         <TextBlock Style="{StaticResource TextHint}">
-                                                            <Run Text="L2：" /><Run Text="{Binding L2CacheKb}" /><Run Text=" KB · L3：" /><Run Text="{Binding L3CacheKb}" /><Run Text=" KB" />
+                                                            <Run Text="L2：" /><Run Text="{Binding L2CacheKb, Mode=OneWay}" /><Run Text=" KB · L3：" /><Run Text="{Binding L3CacheKb, Mode=OneWay}" /><Run Text=" KB" />
                                                         </TextBlock>
                                                     </StackPanel>
                                                 </Border>
@@ -4118,11 +4181,11 @@
                                                     <StackPanel>
                                                         <TextBlock Text="{Binding Name}" Style="{StaticResource TextSubtitle}" />
                                                         <TextBlock Style="{StaticResource TextCaption}">
-                                                            <Run Text="厂商：" /><Run Text="{Binding Manufacturer}" />
-                                                            <Run Text="  ·  显存：" /><Run Text="{Binding AdapterRamGb}" FontWeight="SemiBold" />
+                                                            <Run Text="厂商：" /><Run Text="{Binding Manufacturer, Mode=OneWay}" />
+                                                            <Run Text="  ·  显存：" /><Run Text="{Binding AdapterRamGb, Mode=OneWay}" FontWeight="SemiBold" />
                                                         </TextBlock>
                                                         <TextBlock Style="{StaticResource TextHint}">
-                                                            <Run Text="驱动：" /><Run Text="{Binding DriverVersion}" /><Run Text=" · " /><Run Text="{Binding DriverDate}" />
+                                                            <Run Text="驱动：" /><Run Text="{Binding DriverVersion, Mode=OneWay}" /><Run Text=" · " /><Run Text="{Binding DriverDate, Mode=OneWay}" />
                                                         </TextBlock>
                                                         <TextBlock Text="{Binding VideoMode}" Style="{StaticResource TextHint}" />
                                                     </StackPanel>
@@ -4149,12 +4212,12 @@
                                                     <StackPanel>
                                                         <TextBlock Text="{Binding Model}" Style="{StaticResource TextSubtitle}" />
                                                         <TextBlock Style="{StaticResource TextCaption}">
-                                                            <Run Text="容量：" /><Run Text="{Binding SizeGb}" FontWeight="SemiBold" />
-                                                            <Run Text="  ·  接口：" /><Run Text="{Binding InterfaceType}" />
-                                                            <Run Text="  ·  介质：" /><Run Text="{Binding MediaType}" />
+                                                            <Run Text="容量：" /><Run Text="{Binding SizeGb, Mode=OneWay}" FontWeight="SemiBold" />
+                                                            <Run Text="  ·  接口：" /><Run Text="{Binding InterfaceType, Mode=OneWay}" />
+                                                            <Run Text="  ·  介质：" /><Run Text="{Binding MediaType, Mode=OneWay}" />
                                                         </TextBlock>
                                                         <TextBlock Style="{StaticResource TextHint}">
-                                                            <Run Text="序列号：" /><Run Text="{Binding SerialNumber}" />
+                                                            <Run Text="序列号：" /><Run Text="{Binding SerialNumber, Mode=OneWay}" />
                                                         </TextBlock>
                                                     </StackPanel>
                                                 </Border>
@@ -4177,9 +4240,9 @@
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
                                                 <TextBlock Style="{StaticResource TextCaption}" Margin="0,0,0,2">
-                                                    <Run Text="{Binding Name}" FontWeight="SemiBold" />
-                                                    <Run Text=" · MAC " /><Run Text="{Binding MacAddress}" />
-                                                    <Run Text=" · " /><Run Text="{Binding LinkSpeed}" />
+                                                    <Run Text="{Binding Name, Mode=OneWay}" FontWeight="SemiBold" />
+                                                    <Run Text=" · MAC " /><Run Text="{Binding MacAddress, Mode=OneWay}" />
+                                                    <Run Text=" · " /><Run Text="{Binding LinkSpeed, Mode=OneWay}" />
                                                 </TextBlock>
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
@@ -4189,9 +4252,9 @@
                                             <DataTemplate>
                                                 <TextBlock Style="{StaticResource TextCaption}" Margin="0,0,0,2">
                                                     <Run Text="显示器：" FontWeight="SemiBold" />
-                                                    <Run Text="{Binding Name}" />
-                                                    <Run Text=" · " /><Run Text="{Binding Manufacturer}" />
-                                                    <Run Text=" · " /><Run Text="{Binding Resolution}" />
+                                                    <Run Text="{Binding Name, Mode=OneWay}" />
+                                                    <Run Text=" · " /><Run Text="{Binding Manufacturer, Mode=OneWay}" />
+                                                    <Run Text=" · " /><Run Text="{Binding Resolution, Mode=OneWay}" />
                                                 </TextBlock>
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
@@ -4200,6 +4263,11 @@
                             </materialDesign:Card>
                         </Grid>
 
+                            </StackPanel>
+                        </ScrollViewer>
+                    </TabItem>
+                    <TabItem Header="实时传感器">
+                        <StackPanel>
                         <!-- Sensors live readings -->
                         <materialDesign:Card Padding="14,12" Margin="0,0,0,12">
                             <StackPanel>
@@ -4246,8 +4314,9 @@
                             </StackPanel>
                         </materialDesign:Card>
 
-                    </StackPanel>
-                </ScrollViewer>
+                        </StackPanel>
+                    </TabItem>
+                </TabControl>
             </Grid>
 
             <!-- File Verify module -->
@@ -4306,9 +4375,19 @@
                     </DockPanel>
                 </Border>
 
-                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-                    <StackPanel>
-                        <Border Margin="0,0,0,12" Padding="20,18" CornerRadius="8"
+                <TabControl Grid.Row="1"
+                            Style="{StaticResource MaterialDesignTabControl}"
+                            HorizontalContentAlignment="Stretch"
+                            VerticalContentAlignment="Stretch"
+                            materialDesign:ColorZoneAssist.Mode="PrimaryMid">
+                    <TabItem Header="单文件校验">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="8" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                        <Border Grid.Row="0" Margin="0,0,0,0" Padding="20,18" CornerRadius="8"
                                 BorderThickness="2" BorderBrush="#5e72e4" Background="#F4F6FF">
                             <StackPanel HorizontalAlignment="Center">
                                 <materialDesign:PackIcon Kind="FileUploadOutline" Width="32" Height="32"
@@ -4320,7 +4399,14 @@
                                            Margin="0,4,0,0" HorizontalAlignment="Center" />
                             </StackPanel>
                         </Border>
-                        <materialDesign:Card Padding="14,12" Margin="0,0,0,12">
+                        <Grid Grid.Row="2">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="8" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                        <materialDesign:Card Grid.Column="0" Padding="14,12" Margin="0">
                             <StackPanel>
                                 <TextBlock Text="支持算法：MD5 / SHA-1 / SHA-256 / CRC32" Style="{StaticResource TextSubtitle}" />
                                 <TextBlock Style="{StaticResource TextCaption}" Margin="0,4,0,0" TextWrapping="Wrap"
@@ -4346,7 +4432,7 @@
                             </StackPanel>
                         </materialDesign:Card>
 
-                        <materialDesign:Card Padding="14,12"
+                        <materialDesign:Card Grid.Column="2" Padding="14,12"
                                              Visibility="{Binding FileHashResult, Converter={StaticResource StringNotEmptyToVisibility}}">
                             <StackPanel>
                                 <StackPanel Style="{StaticResource SectionHeaderRow}">
@@ -4364,7 +4450,12 @@
                             </StackPanel>
                         </materialDesign:Card>
 
-                        <materialDesign:Card Padding="14,12" Margin="0,12,0,0"
+                        </Grid>
+                        </Grid>
+                    </TabItem>
+                    <TabItem Header="批量结果">
+                        <StackPanel>
+                        <materialDesign:Card Padding="14,12" Margin="0,0,0,0"
                                              Visibility="{Binding HasBatchFileHashResults, Converter={StaticResource BoolToVis}}">
                             <StackPanel>
                                 <DockPanel Margin="0,0,0,8">
@@ -4450,8 +4541,9 @@
                                 </DataGrid>
                             </StackPanel>
                         </materialDesign:Card>
-                    </StackPanel>
-                </ScrollViewer>
+                        </StackPanel>
+                    </TabItem>
+                </TabControl>
             </Grid>
 
             <!-- Convert module -->
@@ -4502,13 +4594,13 @@
                     </DockPanel>
                 </Border>
 
-                <Grid Grid.Row="1">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="*" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
-
-                    <Grid Grid.Row="0">
+                <TabControl Grid.Row="1"
+                            Style="{StaticResource MaterialDesignTabControl}"
+                            HorizontalContentAlignment="Stretch"
+                            VerticalContentAlignment="Stretch"
+                            materialDesign:ColorZoneAssist.Mode="PrimaryMid">
+                    <TabItem Header="转换设置">
+                    <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="8" />
@@ -4695,8 +4787,9 @@
                             </StackPanel>
                         </materialDesign:Card>
                     </Grid>
-
-                    <StackPanel Grid.Row="1">
+                    </TabItem>
+                    <TabItem Header="队列与结果">
+                    <StackPanel>
                         <!-- Convert queue -->
                         <materialDesign:Card Padding="12,10" Margin="0,8,0,0"
                                              Visibility="{Binding HasConvertQueueItems, Converter={StaticResource BoolToVis}}">
@@ -4854,7 +4947,8 @@
                                          VerticalAlignment="Center" />
                         </DockPanel>
                     </StackPanel>
-                </Grid>
+                    </TabItem>
+                </TabControl>
             </Grid>
 
             <!-- Benchmark module -->
@@ -4914,14 +5008,18 @@
                     </DockPanel>
                 </Border>
 
-                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-                    <StackPanel>
-                        <ProgressBar IsIndeterminate="True" Margin="0,0,0,10"
+                <Grid Grid.Row="1">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                        <ProgressBar Grid.Row="0" IsIndeterminate="True" Margin="0,0,0,10"
                                      Style="{StaticResource MaterialDesignLinearProgressBar}"
                                      Visibility="{Binding IsBenchmarkBusy, Converter={StaticResource BoolToVis}}" />
 
                         <!-- Individual test buttons -->
-                        <materialDesign:Card Padding="14,12" Margin="0,0,0,12">
+                        <materialDesign:Card Grid.Row="1" Padding="14,12" Margin="0,0,0,12">
                             <StackPanel>
                                 <TextBlock Text="单项测试" Style="{StaticResource TextSubtitle}" Margin="0,0,0,8" />
                                 <WrapPanel>
@@ -4965,7 +5063,7 @@
                         </materialDesign:Card>
 
                         <!-- Results DataGrid -->
-                        <materialDesign:Card Padding="14,12">
+                        <materialDesign:Card Grid.Row="2" Padding="14,12">
                             <StackPanel>
                                 <DockPanel Margin="0,0,0,8">
                                     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
@@ -4996,7 +5094,9 @@
                                           IsReadOnly="True"
                                           HeadersVisibility="Column"
                                           GridLinesVisibility="Horizontal"
-                                          MinHeight="200">
+                                          MinHeight="160"
+                                          MaxHeight="320"
+                                          VerticalScrollBarVisibility="Auto">
                                     <DataGrid.Columns>
                                         <DataGridTextColumn Header="项目" Binding="{Binding Name}" Width="*" />
                                         <DataGridTextColumn Header="得分" Binding="{Binding Score}" Width="180">
@@ -5012,8 +5112,7 @@
                                 </DataGrid>
                             </StackPanel>
                         </materialDesign:Card>
-                    </StackPanel>
-                </ScrollViewer>
+                </Grid>
             </Grid>
 
             <!-- ============== Schedule module ============== -->
