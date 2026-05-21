@@ -2483,6 +2483,7 @@
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="1.1*" />
@@ -2499,7 +2500,7 @@
                                       SelectedValuePath="Kind"
                                       DisplayMemberPath="DisplayName"
                                       SelectedValue="{Binding SelectedSqlProvider, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                      Style="{StaticResource MaterialDesignFloatingHintComboBox}"
+                                      Style="{StaticResource StandardComboBox}"
                                       materialDesign:HintAssist.Hint="数据库类型" />
 
                             <ComboBox Grid.Row="0"
@@ -2511,14 +2512,14 @@
                                       StaysOpenOnEdit="True"
                                       ItemsSource="{Binding SqlServerAddressHistory}"
                                       Text="{Binding SqlServerAddress, UpdateSourceTrigger=PropertyChanged}"
-                                      Style="{StaticResource MaterialDesignFloatingHintComboBox}"
+                                      Style="{StaticResource StandardComboBox}"
                                       materialDesign:HintAssist.Hint="服务器地址或 IP" />
 
                             <TextBox Grid.Row="0"
                                      Grid.Column="2"
                                      Margin="0,0,8,6"
                                      Text="{Binding SqlPort, UpdateSourceTrigger=PropertyChanged}"
-                                     Style="{StaticResource MaterialDesignFloatingHintTextBox}"
+                                     Style="{StaticResource StandardTextBox}"
                                      materialDesign:HintAssist.Hint="{Binding SqlPortHint}" />
 
                             <ComboBox Grid.Row="0"
@@ -2528,21 +2529,20 @@
                                       IsTextSearchEnabled="False"
                                       ItemsSource="{Binding SqlUsernameHistory}"
                                       Text="{Binding SqlUsername, UpdateSourceTrigger=PropertyChanged}"
-                                      Style="{StaticResource MaterialDesignFloatingHintComboBox}"
+                                      Style="{StaticResource StandardComboBox}"
                                       materialDesign:HintAssist.Hint="用户名" />
 
                             <Grid Grid.Row="0"
                                   Grid.Column="4"
                                   Margin="0,0,0,6">
                                 <PasswordBox x:Name="SqlPasswordBox"
-                                             Padding="0,0,38,0"
-                                             Style="{StaticResource MaterialDesignFloatingHintPasswordBox}"
+                                             Height="36"
+                                             Style="{StaticResource MaterialDesignOutlinedPasswordBox}"
                                              materialDesign:HintAssist.Hint="密码"
                                              PasswordChanged="SqlPasswordBox_OnPasswordChanged" />
                                 <Button x:Name="SqlPasswordHistoryButton"
                                         Width="32"
                                         Height="32"
-                                        Margin="0,18,0,0"
                                         Padding="0"
                                         HorizontalAlignment="Right"
                                         VerticalAlignment="Center"
@@ -2572,13 +2572,13 @@
                                       ItemsSource="{Binding SqlDatabaseList}"
                                       SelectedItem="{Binding SelectedSqlDatabase}"
                                       DisplayMemberPath="Name"
-                                      Style="{StaticResource MaterialDesignFilledComboBox}"
+                                      Style="{StaticResource StandardComboBox}"
                                       materialDesign:HintAssist.Hint="数据库" />
 
                             <ComboBox Grid.Row="1"
                                       Grid.Column="2"
-                                      Grid.ColumnSpan="2"
-                                      Margin="0,0,8,6"
+                                      Grid.ColumnSpan="3"
+                                      Margin="0,0,0,6"
                                       IsEditable="True"
                                       IsTextSearchEnabled="False"
                                       StaysOpenOnEdit="True"
@@ -2586,10 +2586,12 @@
                                       SelectedItem="{Binding SelectedSqlTable, UpdateSourceTrigger=PropertyChanged}"
                                       Text="{Binding SqlTableSearchText, UpdateSourceTrigger=PropertyChanged}"
                                       DisplayMemberPath="DisplayName"
-                                      Style="{StaticResource MaterialDesignFilledComboBox}"
+                                      Style="{StaticResource StandardComboBox}"
                                       materialDesign:HintAssist.Hint="数据表" />
 
-                            <StackPanel Grid.Row="1" Grid.Column="4" Orientation="Horizontal">
+                            <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="5"
+                                        Orientation="Horizontal" HorizontalAlignment="Right"
+                                        Margin="0,0,0,6">
                                 <Button Width="88"
                                         Height="34"
                                         Margin="0,0,8,0"
@@ -2597,7 +2599,7 @@
                                         Style="{StaticResource PrimaryActionButton}"
                                         Content="测试连接" />
 
-                                <Button Width="104"
+                                <Button Width="116"
                                         Height="34"
                                         Margin="0,0,8,0"
                                         Command="{Binding ExportSqlTableCommand}"
@@ -2611,7 +2613,7 @@
                                         Content="取消" />
                             </StackPanel>
 
-                            <Grid Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="5" Margin="0,2,0,0">
+                            <Grid Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="5" Margin="0,2,0,0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
@@ -2632,7 +2634,7 @@
                                              Visibility="{Binding IsSqlBusy, Converter={StaticResource BoolToVis}}" />
                             </Grid>
 
-                            <Border Grid.Row="3"
+                            <Border Grid.Row="4"
                                     Grid.Column="0"
                                     Grid.ColumnSpan="5"
                                     Margin="0,8,0,0"

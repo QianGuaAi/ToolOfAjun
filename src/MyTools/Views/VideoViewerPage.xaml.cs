@@ -2,6 +2,7 @@ using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 using MyTools.Services;
 using MyTools.ViewModels;
@@ -10,6 +11,7 @@ namespace MyTools.Views
 {
     public partial class VideoViewerPage : UserControl
     {
+        private const double VideoKeyboardSeekSeconds = 7;
         private readonly DispatcherTimer _videoProgressTimer;
         private bool _isDraggingVideoProgress;
         private bool _isDraggingVideoWaveform;
@@ -19,6 +21,11 @@ namespace MyTools.Views
         private double _videoWaveformRangeStartSeconds;
         private Point _videoPlaylistDragStartPoint;
         private VideoPlaylistItem _videoPlaylistDragItem;
+        private bool _isVideoOnlyMode;
+        private bool _isVideoStretchMode;
+        private Window _fullscreenWindow;
+        private Grid _fullscreenHost;
+        private DispatcherTimer _fullscreenTimer;
 
         public VideoViewerPage()
         {
@@ -47,7 +54,7 @@ namespace MyTools.Views
                     e.Handled = true;
                     return true;
                 case Key.Left:
-                    var previousSeconds = Math.Max(0, vm.VideoViewerPositionSeconds - 5);
+                    var previousSeconds = Math.Max(0, vm.VideoViewerPositionSeconds - VideoKeyboardSeekSeconds);
                     SeekVideoViewer(previousSeconds);
                     vm.VideoViewerPositionSeconds = previousSeconds;
                     vm.UpdateVideoViewerSubtitle(previousSeconds);
@@ -55,8 +62,8 @@ namespace MyTools.Views
                     return true;
                 case Key.Right:
                     var nextSeconds = vm.VideoViewerDurationSeconds > 0
-                        ? Math.Min(vm.VideoViewerDurationSeconds, vm.VideoViewerPositionSeconds + 5)
-                        : vm.VideoViewerPositionSeconds + 5;
+                        ? Math.Min(vm.VideoViewerDurationSeconds, vm.VideoViewerPositionSeconds + VideoKeyboardSeekSeconds)
+                        : vm.VideoViewerPositionSeconds + VideoKeyboardSeekSeconds;
                     SeekVideoViewer(nextSeconds);
                     vm.VideoViewerPositionSeconds = nextSeconds;
                     vm.UpdateVideoViewerSubtitle(nextSeconds);
@@ -70,6 +77,15 @@ namespace MyTools.Views
                     vm.VideoViewerVolume = Math.Max(0.0, vm.VideoViewerVolume - 0.05);
                     e.Handled = true;
                     return true;
+                case Key.Escape:
+                    if (_isVideoOnlyMode)
+                    {
+                        SetVideoOnlyMode(false);
+                        e.Handled = true;
+                        return true;
+                    }
+
+                    return false;
                 default:
                     return false;
             }
@@ -179,6 +195,9 @@ namespace MyTools.Views
             vm.UpdateVideoViewerSubtitle(0);
             ApplyVideoSpeed(vm.VideoViewerSpeedRatio);
             vm.VideoViewerStatusMessage = "媒体已就绪。";
+            VideoPlayer.Play();
+            vm.IsVideoViewerPlaying = true;
+            _videoProgressTimer.Start();
         }
 
         private void VideoPlayer_MediaEnded(object sender, RoutedEventArgs e)
@@ -281,6 +300,220 @@ namespace MyTools.Views
             vm.VideoViewerPositionSeconds = 0;
             vm.UpdateVideoViewerSubtitle(0);
             vm.VideoViewerStatusMessage = "已停止。";
+        }
+
+        private void VideoOnlyButton_OnClick(object sender, RoutedEventArgs e)
+        {
+            SetVideoOnlyMode(!_isVideoOnlyMode);
+        }
+
+        private void SetVideoOnlyMode(bool enabled)
+        {
+            var hasWaveform = DataContext is MainViewModel vm && vm.HasVideoViewerWaveform;
+            _isVideoOnlyMode = enabled;
+            VideoViewerHeader.Visibility = enabled ? Visibility.Collapsed : Visibility.Visible;
+            VideoControlsPanel.Visibility = Visibility.Visible;
+            VideoWaveformPanel.Visibility = enabled || !hasWaveform ? Visibility.Collapsed : Visibility.Visible;
+            VideoPlaybackButtonsPanel.Visibility = enabled ? Visibility.Collapsed : Visibility.Visible;
+            VideoVolumeSpeedPanel.Visibility = enabled ? Visibility.Collapsed : Visibility.Visible;
+            VideoStatusLinePanel.Visibility = enabled ? Visibility.Collapsed : Visibility.Visible;
+            VideoLoopActionsPanel.Visibility = enabled ? Visibility.Collapsed : Visibility.Visible;
+            VideoViewerSideCard.Visibility = enabled ? Visibility.Collapsed : Visibility.Visible;
+            VideoViewerSideColumn.Width = enabled ? new GridLength(0) : new GridLength(220);
+            VideoViewerRoot.Margin = enabled ? new Thickness(0) : new Thickness(16);
+            VideoViewerMainCard.Margin = enabled ? new Thickness(0) : new Thickness(0, 0, 12, 0);
+            VideoViewerMainCard.Padding = enabled ? new Thickness(0) : new Thickness(12);
+            VideoControlsPanel.Margin = enabled ? new Thickness(8, 6, 8, 8) : new Thickness(0, 12, 0, 0);
+            VideoSurfaceBorder.CornerRadius = enabled ? new CornerRadius(0) : new CornerRadius(6);
+            VideoOnlyButtonText.Text = enabled ? "恢复" : "纯视频";
+            Focus();
+        }
+
+        private void VideoStretchButton_OnClick(object sender, RoutedEventArgs e)
+        {
+            _isVideoStretchMode = !_isVideoStretchMode;
+            ApplyVideoStretchMode();
+        }
+
+        private void ApplyVideoStretchMode()
+        {
+            VideoPlayer.Stretch = _isVideoStretchMode ? Stretch.Fill : Stretch.Uniform;
+            VideoStretchButtonText.Text = _isVideoStretchMode ? "适应" : "拉伸";
+        }
+
+        private void VideoFullscreenButton_OnClick(object sender, RoutedEventArgs e)
+        {
+            ShowFullscreenVideo();
+        }
+
+        private void VideoSurface_OnMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (e.ClickCount == 2)
+            {
+                ShowFullscreenVideo();
+                e.Handled = true;
+            }
+        }
+
+        private void VideoViewerPage_OnPreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Escape && _isVideoOnlyMode)
+            {
+                SetVideoOnlyMode(false);
+                e.Handled = true;
+            }
+        }
+
+        private void ShowFullscreenVideo()
+        {
+            if (!(DataContext is MainViewModel vm) || !vm.HasVideoViewerVideo || _fullscreenWindow != null)
+            {
+                return;
+            }
+
+            var wasPlaying = vm.IsVideoViewerPlaying;
+            var startPosition = VideoPlayer.Position;
+            VideoSurfaceContent.Children.Remove(VideoPlayer);
+            _fullscreenHost = new Grid
+            {
+                Background = Brushes.Black
+            };
+            _fullscreenHost.Children.Add(VideoPlayer);
+
+            _fullscreenWindow = new Window
+            {
+                WindowStyle = WindowStyle.None,
+                WindowState = WindowState.Maximized,
+                ResizeMode = ResizeMode.NoResize,
+                Background = Brushes.Black,
+                Content = _fullscreenHost,
+                Topmost = true,
+                ShowInTaskbar = false,
+                Owner = Window.GetWindow(this)
+            };
+            _fullscreenWindow.KeyDown += FullscreenWindow_OnKeyDown;
+            _fullscreenWindow.MouseDoubleClick += FullscreenWindow_OnMouseDoubleClick;
+            _fullscreenWindow.Closed += FullscreenWindow_OnClosed;
+            _fullscreenTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(350) };
+            _fullscreenTimer.Tick += FullscreenTimer_OnTick;
+            _fullscreenTimer.Start();
+            _fullscreenWindow.Show();
+            _fullscreenWindow.Focus();
+            SeekVideoViewer(startPosition.TotalSeconds);
+            if (wasPlaying)
+            {
+                VideoPlayer.Play();
+                _videoProgressTimer.Start();
+            }
+        }
+
+        private void FullscreenTimer_OnTick(object sender, EventArgs e)
+        {
+            if (_fullscreenWindow == null || !(DataContext is MainViewModel vm))
+            {
+                return;
+            }
+
+            vm.VideoViewerPositionSeconds = VideoPlayer.Position.TotalSeconds;
+            vm.UpdateVideoViewerSubtitle(vm.VideoViewerPositionSeconds);
+        }
+
+        private void FullscreenWindow_OnKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Escape)
+            {
+                CloseFullscreenVideo();
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Space && DataContext is MainViewModel vm)
+            {
+                if (vm.IsVideoViewerPlaying)
+                {
+                    VideoPlayer.Pause();
+                    vm.IsVideoViewerPlaying = false;
+                    _videoProgressTimer.Stop();
+                }
+                else
+                {
+                    VideoPlayer.Play();
+                    vm.IsVideoViewerPlaying = true;
+                    _videoProgressTimer.Start();
+                }
+
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Left && DataContext is MainViewModel leftVm)
+            {
+                var previousSeconds = Math.Max(0, leftVm.VideoViewerPositionSeconds - VideoKeyboardSeekSeconds);
+                SeekVideoViewer(previousSeconds);
+                leftVm.VideoViewerPositionSeconds = previousSeconds;
+                leftVm.UpdateVideoViewerSubtitle(previousSeconds);
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Right && DataContext is MainViewModel rightVm)
+            {
+                var nextSeconds = rightVm.VideoViewerDurationSeconds > 0
+                    ? Math.Min(rightVm.VideoViewerDurationSeconds, rightVm.VideoViewerPositionSeconds + VideoKeyboardSeekSeconds)
+                    : rightVm.VideoViewerPositionSeconds + VideoKeyboardSeekSeconds;
+                SeekVideoViewer(nextSeconds);
+                rightVm.VideoViewerPositionSeconds = nextSeconds;
+                rightVm.UpdateVideoViewerSubtitle(nextSeconds);
+                e.Handled = true;
+            }
+        }
+
+        private void FullscreenWindow_OnMouseDoubleClick(object sender, MouseButtonEventArgs e)
+        {
+            CloseFullscreenVideo();
+            e.Handled = true;
+        }
+
+        private void CloseFullscreenVideo()
+        {
+            _fullscreenWindow?.Close();
+        }
+
+        private void FullscreenWindow_OnClosed(object sender, EventArgs e)
+        {
+            if (_fullscreenTimer != null)
+            {
+                _fullscreenTimer.Stop();
+                _fullscreenTimer.Tick -= FullscreenTimer_OnTick;
+                _fullscreenTimer = null;
+            }
+
+            var position = VideoPlayer.Position;
+            var shouldPlay = DataContext is MainViewModel vm && vm.IsVideoViewerPlaying;
+            if (_fullscreenHost != null)
+            {
+                _fullscreenHost.Children.Remove(VideoPlayer);
+                _fullscreenHost = null;
+            }
+
+            if (!VideoSurfaceContent.Children.Contains(VideoPlayer))
+            {
+                VideoSurfaceContent.Children.Insert(0, VideoPlayer);
+            }
+
+            _fullscreenWindow = null;
+            SeekVideoViewer(position.TotalSeconds);
+            if (DataContext is MainViewModel currentVm)
+            {
+                currentVm.VideoViewerPositionSeconds = position.TotalSeconds;
+                currentVm.UpdateVideoViewerSubtitle(position.TotalSeconds);
+                if (shouldPlay)
+                {
+                    VideoPlayer.Play();
+                    _videoProgressTimer.Start();
+                }
+                else
+                {
+                    VideoPlayer.Pause();
+                    _videoProgressTimer.Stop();
+                }
+
+                currentVm.IsVideoViewerPlaying = shouldPlay;
+            }
         }
 
         private void VideoProgressSlider_OnPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)

@@ -197,19 +197,21 @@
     <!-- 按钮样式（基于 MaterialDesign） -->
     <!-- ============================================================ -->
     <Style x:Key="PrimaryActionButton" TargetType="Button" BasedOn="{StaticResource MaterialDesignRaisedButton}">
-        <Setter Property="Height" Value="30" />
+        <Setter Property="Height" Value="34" />
         <Setter Property="MinWidth" Value="84" />
         <Setter Property="Padding" Value="10,0" />
-        <Setter Property="FontSize" Value="{StaticResource FontSizeBody}" />
+        <Setter Property="FontSize" Value="{StaticResource FontSizeBodyLarge}" />
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="materialDesign:ButtonAssist.CornerRadius" Value="6" />
+        <Setter Property="materialDesign:ElevationAssist.Elevation" Value="Dp0" />
     </Style>
 
     <Style x:Key="GhostActionButton" TargetType="Button" BasedOn="{StaticResource MaterialDesignOutlinedButton}">
-        <Setter Property="Height" Value="28" />
+        <Setter Property="Height" Value="32" />
         <Setter Property="MinWidth" Value="72" />
         <Setter Property="Padding" Value="9,0" />
-        <Setter Property="FontSize" Value="{StaticResource FontSizeBody}" />
+        <Setter Property="FontSize" Value="{StaticResource FontSizeBodyLarge}" />
+        <Setter Property="BorderThickness" Value="1.5" />
         <Setter Property="materialDesign:ButtonAssist.CornerRadius" Value="6" />
     </Style>
 
@@ -229,16 +231,17 @@
     <!-- 输入框样式 -->
     <!-- ============================================================ -->
     <Style x:Key="StandardTextBox" TargetType="TextBox" BasedOn="{StaticResource MaterialDesignOutlinedTextBox}">
-        <Setter Property="Height" Value="30" />
+        <Setter Property="Height" Value="36" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
         <Setter Property="FontSize" Value="{StaticResource FontSizeBody}" />
-        <Setter Property="materialDesign:HintAssist.FloatingScale" Value="0.85" />
+        <Setter Property="materialDesign:HintAssist.IsFloating" Value="False" />
     </Style>
 
     <Style x:Key="StandardComboBox" TargetType="ComboBox" BasedOn="{StaticResource MaterialDesignOutlinedComboBox}">
-        <Setter Property="Height" Value="30" />
+        <Setter Property="Height" Value="36" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
         <Setter Property="FontSize" Value="{StaticResource FontSizeBody}" />
+        <Setter Property="materialDesign:HintAssist.IsFloating" Value="False" />
     </Style>
 
     <!-- ============================================================ -->

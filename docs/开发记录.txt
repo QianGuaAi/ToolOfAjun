@@ -925,12 +925,13 @@
 - 验证：独立输出目录 `artifacts\verify-startup-fix\` Release 构建 0 error 0 warning；常规 `bin\Release\net48\MyTools.exe` 当前被正在运行的进程 PID 16436 锁定，未能覆盖。
 
 ## [2026-05-18] 排班机制完善 - 自动生成与导出闸门
-- ScheduleVersion 新增 `GeneratedAt`，自动设置休息日成功后写入；Excel 导出增加 `HasGenerated` 闸门，未完成自动生成时拒绝导出。
+- ScheduleVersion 新增 `GeneratedAt`，自动设置休息日成功后写入；Excel 导出增加 `HasGenerated` 闸门，未完成自动生成时拒绝导出.
 - 自动优化增加节假日年份配置校验、剩余名额 0.5 步进校验、5 连班强制休人数超过当日可自动安排休息名额拒绝；优化过程支持显式保留格集合，且保留格不会被清空、均衡交换或连续上班修复覆盖。
 - 冲突侧栏和保存硬约束调整为每日 `实休` 必须落在 `[总休-0.5, 总休]` 区间内；例如总休为 8 时，实休 7.5 和 8 均为正常。
 - 排班表和 Excel 导出改为 `实休`/`总休` 两行语义，仅当实休不在 `[总休-0.5, 总休]` 区间内时标红；Excel 导出跳过空姓名占位行。
 - 保存前增加基础校验：年份、月份、每日总休数组长度、每日总休 0.5 步进与人员单元格长度。
 - 验证：常规 Release 构建编译通过但最终 `bin\Release\net48\MyTools.exe` 被运行中进程 PID 18116 锁定未覆盖；独立输出目录 `src\MyTools\bin\ReleaseVerify\` Release 构建 0 error。
+
 ## [2026-05-18] 启动与运行性能优化
 - App 启动阶段延后 `MyTools.startup.log` 追加写入和旧系统 Warning 到主窗口显示后的 `ApplicationIdle`，减少首屏前磁盘 IO。
 - MainWindow 托盘图标提取延后到 `Loaded + ApplicationIdle`，避免构造函数同步读取 exe 图标资源。
@@ -986,3 +987,22 @@
 - 将截图历史时间和大小的 `Run.Text` 绑定显式设置为 `Mode=OneWay`，切换到“截图工具”页面时不再尝试写回只读属性。
 - 同步将主窗口内其它展示型 `Run.Text` 绑定显式设置为 `Mode=OneWay`，避免系统信息等页面的只读展示属性触发同类异常。
 - 验证：独立输出目录 `artifacts\verify-screenshot-tab\` Release 构建 0 error 0 warning。
+
+## [2026-05-21] 音视频播放 - 纯视频、拉伸与全屏
+- 音视频播放页顶部新增“纯视频”“拉伸”“全屏”按钮。
+- “纯视频”模式隐藏标题栏、控制栏和右侧信息栏，仅保留视频框；按 Esc 可恢复原布局。
+- “拉伸”模式在 `Uniform` 与 `Fill` 之间切换，支持把视频画面铺满当前视频框。
+- “全屏”使用黑底无边框窗口播放当前媒体，保留当前播放位置、音量、静音和速度；Esc 或双击退出并同步回主播放器位置。
+- 视频框支持双击进入全屏。
+- 验证：独立输出目录 `src\MyTools\bin\ReleaseVerify\` Release 构建 0 error。
+
+## [2026-05-21] 修复音视频全屏空引用
+- 修复点击“全屏”后黑屏并弹出 `NullReferenceException` 的问题：全屏播放器 `MediaOpened` 回调改为使用本地播放器引用，并在全屏窗口已关闭或播放器已切换时直接返回，避免生命周期竞争导致空引用。
+- 验证：正式目录 `src\MyTools\bin\Release\net48\` Release 构建 0 error。
+
+## [2026-05-21] 音视频全屏与快捷键体验修复
+- 全屏播放改为复用当前页面的 `MediaElement` 并临时移动到全屏黑底窗口，避免创建第二个播放器导致画面黑屏。
+- 退出全屏时将同一个播放器移回原视频框，保留当前位置与播放状态。
+- 纯视频模式不再隐藏进度条，仅隐藏波形、播放按钮、音量速度、状态文字、A/B 操作和右侧信息栏，确保仍可拖动进度。
+- 视频播放页和全屏窗口的左右方向键调整为后退/前进 7 秒。
+- 验证：正式目录 `src\MyTools\bin\Release\net48\` Release 构建 0 error。
