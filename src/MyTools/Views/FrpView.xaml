@@ -45,6 +45,7 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
@@ -235,7 +236,64 @@
                     </Grid>
                 </materialDesign:Card>
 
-                <Border Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" Padding="2,8,2,0">
+                <materialDesign:Card Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" Style="{StaticResource SectionCardOutlined}" Padding="0" Margin="0,4,0,0">
+                    <Expander>
+                        <Expander.Header>
+                            <StackPanel Orientation="Horizontal">
+                                <materialDesign:PackIcon Kind="ServerOutline" Width="15" Height="15" VerticalAlignment="Center" Margin="0,0,8,0" Foreground="{DynamicResource BrushAccentAmber}" />
+                                <TextBlock Text="服务器端配置说明（阿里云 Ubuntu）" Style="{StaticResource TextSubtitle}" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Expander.Header>
+                        <StackPanel Margin="16,4,16,16">
+
+                            <TextBlock Text="第一步：安装 frps" Style="{StaticResource TextBodyStandard}" FontWeight="SemiBold" Margin="0,0,0,6" />
+                            <TextBlock Style="{StaticResource TextHint}" TextWrapping="Wrap" Margin="0,0,0,4">
+                                <Run>SSH 登录阿里云，执行以下命令（使用 v0.50.0，与客户端版本一致）：</Run>
+                            </TextBlock>
+                            <Border Background="{DynamicResource MaterialDesignDivider}" CornerRadius="4" Padding="10,8" Margin="0,0,0,10">
+                                <TextBlock FontFamily="Consolas, Courier New" FontSize="11" Foreground="{DynamicResource MaterialDesignBody}" TextWrapping="Wrap" xml:space="preserve">wget https://github.com/fatedier/frp/releases/download/v0.50.0/frp_0.50.0_linux_amd64.tar.gz
+tar -xzf frp_0.50.0_linux_amd64.tar.gz
+sudo cp frp_0.50.0_linux_amd64/frps /usr/local/bin/</TextBlock>
+                            </Border>
+
+                            <TextBlock Text="第二步：写配置文件 /etc/frps.ini" Style="{StaticResource TextBodyStandard}" FontWeight="SemiBold" Margin="0,0,0,6" />
+                            <Border Background="{DynamicResource MaterialDesignDivider}" CornerRadius="4" Padding="10,8" Margin="0,0,0,4">
+                                <TextBlock FontFamily="Consolas, Courier New" FontSize="11" Foreground="{DynamicResource MaterialDesignBody}" TextWrapping="Wrap" xml:space="preserve">[common]
+bind_port = 7000
+token = 你自己设一个强密码</TextBlock>
+                            </Border>
+                            <TextBlock Text="⚠ token 就是上方「Token」框里要填的密码，请设为较复杂的字符串。" Style="{StaticResource TextHint}" TextWrapping="Wrap" Margin="0,0,0,10" />
+
+                            <TextBlock Text="第三步：设置开机自启（systemd）" Style="{StaticResource TextBodyStandard}" FontWeight="SemiBold" Margin="0,0,0,6" />
+                            <Border Background="{DynamicResource MaterialDesignDivider}" CornerRadius="4" Padding="10,8" Margin="0,0,0,4">
+                                <TextBlock FontFamily="Consolas, Courier New" FontSize="11" Foreground="{DynamicResource MaterialDesignBody}" TextWrapping="Wrap" xml:space="preserve">sudo tee /etc/systemd/system/frps.service &lt;&lt;'EOF'
+[Unit]
+Description=frps
+After=network.target
+[Service]
+ExecStart=/usr/local/bin/frps -c /etc/frps.ini
+Restart=always
+[Install]
+WantedBy=multi-user.target
+EOF
+sudo systemctl enable --now frps</TextBlock>
+                            </Border>
+                            <TextBlock Text="验证是否运行：sudo systemctl status frps" FontFamily="Consolas, Courier New" FontSize="11" Foreground="{DynamicResource MaterialDesignBody}" Margin="0,0,0,10" />
+
+                            <TextBlock Text="第四步：阿里云安全组放行端口" Style="{StaticResource TextBodyStandard}" FontWeight="SemiBold" Margin="0,0,0,6" />
+                            <TextBlock Style="{StaticResource TextHint}" TextWrapping="Wrap">
+                                <Run>进入阿里云控制台 → 安全组 → 入方向规则，放行以下端口（协议 TCP）：</Run>
+                            </TextBlock>
+                            <StackPanel Margin="0,6,0,0">
+                                <TextBlock Style="{StaticResource TextHint}" TextWrapping="Wrap"><Run FontWeight="SemiBold">7000</Run><Run> — frpc 客户端连接 frps 的控制端口（必须放行）</Run></TextBlock>
+                                <TextBlock Style="{StaticResource TextHint}" TextWrapping="Wrap" Margin="0,2,0,0"><Run FontWeight="SemiBold">你在「添加规则」里填的每个公网端口</Run><Run> — 如 33890、8081 等</Run></TextBlock>
+                            </StackPanel>
+
+                        </StackPanel>
+                    </Expander>
+                </materialDesign:Card>
+
+                <Border Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="3" Padding="2,8,2,0">
                     <TextBlock Text="启动成功不代表公网可访问；请确认本机服务正在监听、阿里云安全组已放行远程端口，多台电脑不要复用同一个远程端口。"
                                Style="{StaticResource TextHint}"
                                TextWrapping="Wrap" />
