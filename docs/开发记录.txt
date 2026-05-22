@@ -1041,3 +1041,13 @@
 - 桌面图标切换后增加 Shell 设置广播，提升即时刷新可靠性。
 - 新增“右键直接显示完整菜单（取消‘显示更多选项’）”开关，可写入或移除 Win11 经典右键菜单注册表项。
 - Release 构建通过，产物位置为 `src\MyTools\bin\Release\net48\MyTools.exe`。
+
+## [2026-05-22] 新增 frp 隧道穿透模块
+- 新增 `docs/功能说明.md`：记录 frp 隧道穿透模块的目标、核心步骤、涉及文件、安全边界与限制。
+- 新增 `Services/FrpService.cs`：负责 `frpc.exe` 嵌入资源解压、INI 配置生成、DPAPI Token 加解密、配置/规则异步持久化、frpc 进程启动与停止。
+- 新增 `ViewModels/FrpViewModel.cs`：负责服务器配置、端口规则列表、启动/停止命令、连接状态与公网访问地址预览。
+- 新增 `Views/FrpView.xaml(.cs)`：新增「穿透」页面，支持服务器地址、端口、Token、端口映射规则和一键启停。
+- 修改 `MainWindow.xaml`：新增左侧「穿透」导航按钮和 `views:FrpView` 内容面板，默认 `Collapsed`。
+- 修改 `MainViewModel.cs`：新增 `Frp` 懒加载属性、`ShowFrpCommand`、启动空闲期配置加载、退出时释放 frpc 进程。
+- 修改 `MyTools.csproj`：将 `NativeBinaries\frpc.exe` 从 `None` 项移除并作为 `EmbeddedResource` 嵌入，保持单 exe 分发。
+- 新增嵌入资源 `NativeBinaries\frpc.exe`（frp v0.50.0 windows_amd64，13,486,592 bytes），用于 frp 客户端内网穿透；单 exe 体积预计增加约 12.9 MB。

@@ -45,6 +45,8 @@
     <EmbeddedResource Include="$(PkgStub_System_Data_SQLite_Core_NetFramework)\build\net46\x86\SQLite.Interop.dll">
       <Link>costura32\SQLite.Interop.dll</Link>
     </EmbeddedResource>
+    <None Remove="NativeBinaries\frpc.exe" />
+    <EmbeddedResource Include="NativeBinaries\frpc.exe" />
   </ItemGroup>
 
   <ItemGroup>

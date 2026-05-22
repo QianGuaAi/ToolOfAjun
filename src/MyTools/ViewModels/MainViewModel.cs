@@ -69,6 +69,7 @@ namespace MyTools.ViewModels
         private ScheduleViewModel _schedule;
         private SystemSettingsViewModel _systemSettings;
         private MultimediaViewModel _multimedia;
+        private FrpViewModel _frp;
         private string _sqlServerAddress;
         private string _sqlPort = "1433";
         private SqlProviderKind _selectedSqlProvider = SqlProviderKind.SqlServer;
@@ -331,6 +332,7 @@ namespace MyTools.ViewModels
             ShowSystemCommand = new RelayCommand(() => ShowSystemSection("Optimization"));
             ShowUninstallCommand = new RelayCommand(() => ShowSystemSection("Uninstall"));
             ShowSqlExportCommand = new RelayCommand(() => { SwitchModule("SqlExport"); Refresh(); });
+            ShowFrpCommand = new RelayCommand(() => SwitchModule("Frp"));
             ShowCodexProfilesCommand = new RelayCommand(() => SwitchModule("CodexProfiles"));
             ShowSystemInfoCommand = new RelayCommand(() => ShowSystemSection("SystemInfo"));
             ShowFileVerifyCommand = new RelayCommand(() => SwitchModule("FileVerify"));
@@ -578,6 +580,7 @@ namespace MyTools.ViewModels
                     SafeFireAndForget(LoadOptimizationReportsAsync());
                     SafeFireAndForget(LoadWeChatRootsAsync());
                     SafeFireAndForget(LoadRecentWeChatBackupsAsync());
+                    SafeFireAndForget(Frp.LoadConfigAsync());
                 }));
         }
 
@@ -1168,6 +1171,7 @@ namespace MyTools.ViewModels
         public ICommand ShowSystemCommand { get; }
         public ICommand ShowUninstallCommand { get; }
         public ICommand ShowSqlExportCommand { get; }
+        public ICommand ShowFrpCommand { get; }
         public ICommand ShowCodexProfilesCommand { get; }
         public ICommand ShowMultimediaCommand { get; }
         public ICommand ShowImageViewerCommand { get; }
@@ -2866,6 +2870,10 @@ namespace MyTools.ViewModels
             {
                 AddHomeRecentItem("多媒体", "最近进入多媒体模块", module, string.Empty, "打开");
             }
+            else if (string.Equals(module, "Frp", StringComparison.Ordinal))
+            {
+                AddHomeRecentItem("隧道穿透", "最近进入穿透模块", module, string.Empty, "打开");
+            }
         }
 
         public void SwitchToHomeFromMultimedia()
@@ -2894,6 +2902,7 @@ namespace MyTools.ViewModels
             AddHomeCommand("多媒体", "图片查看 + 音视频播放 + 批量格式转换", "多媒体 图片 视频 音频 转换 multimedia image video audio convert", ShowMultimediaCommand);
             AddHomeCommand("截图 / 录像 / 录音", "打开截图工具、区域录像、系统声音录音", "截图 截屏 录像 录屏 录音 声音 热键 capture record audio", ShowScreenshotCommand);
             AddHomeCommand("SQL 导出 / 查询", "连接数据库、查询、导出 Excel 或 CSV", "sql 数据库 查询 导出 excel csv mysql postgresql", ShowSqlExportCommand);
+            AddHomeCommand("隧道穿透", "配置 frp 服务器和端口映射，一键启动或停止 frpc", "frp 穿透 隧道 端口 映射 公网 tunnel proxy", ShowFrpCommand);
             AddHomeCommand("排班管理", "维护人员、生成排班、冲突检查、导出 Excel", "排班 班次 人员 休息 冲突 excel schedule", ShowScheduleCommand);
             AddHomeCommand("文件哈希校验", "计算 MD5、SHA-1、SHA-256、CRC32", "哈希 校验 md5 sha crc 文件 verify hash", ShowFileVerifyCommand);
             AddHomeCommand("系统", "系统优化、当前网络、启动管理、程序卸载、系统信息、性能测试和系统设置", "系统 优化 清理 网络 启动 卸载 信息 性能 设置 backup settings network startup uninstall benchmark", ShowSystemCommand);
@@ -9997,6 +10006,19 @@ namespace MyTools.ViewModels
                 return _multimedia;
             }
         }
+        public FrpViewModel Frp
+        {
+            get
+            {
+                if (_frp == null)
+                {
+                    _frp = new FrpViewModel(this);
+                    OnPropertyChanged();
+                }
+
+                return _frp;
+            }
+        }
         public ICommand RunAllBenchmarksCommand { get; }
         public ICommand RunSingleBenchmarkCommand { get; }
         public ICommand CopyBenchmarkResultsCommand { get; }
@@ -10789,6 +10811,8 @@ namespace MyTools.ViewModels
             try { _sensorTimer.Tick -= SensorTimer_OnTick; } catch { }
             _sensorService?.Dispose();
             _sensorService = null;
+
+            _frp?.Dispose();
 
             CloseOwnedWindowsForShutdown();
             StopActiveRecordingsForShutdown();

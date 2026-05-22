@@ -30,6 +30,7 @@
         <viewModels:InverseBoolToVisibilityConverter x:Key="InverseBoolToVis" />
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
         <viewModels:StringNotEmptyToVisibilityConverter x:Key="StringNotEmptyToVisibility" />
+        <viewModels:NullOrEmptyToVisibilityConverter x:Key="NullOrEmptyToVisibility" />
         <viewModels:VideoWaveformPositionConverter x:Key="VideoWaveformPositionConverter" />
         <viewModels:VideoWaveformRangeConverter x:Key="VideoWaveformRangeConverter" />
         <DataTemplate x:Key="SystemSectionTabs">
@@ -151,7 +152,14 @@
                                 <Setter Property="Foreground" Value="{DynamicResource BrushSidebarTextActive}" />
                                 <Setter TargetName="ActiveBar" Property="Visibility" Value="Visible" />
                                 <Setter TargetName="ActiveBar" Property="Fill" Value="{DynamicResource BrushAccentTeal}" />
-                            </Trigger>                            <Trigger Property="Tag" Value="ActiveCodexProfiles">
+                            </Trigger>
+                            <Trigger Property="Tag" Value="ActiveFrp">
+                                <Setter TargetName="Root" Property="Background" Value="{DynamicResource BrushSidebarActive}" />
+                                <Setter Property="Foreground" Value="{DynamicResource BrushSidebarTextActive}" />
+                                <Setter TargetName="ActiveBar" Property="Visibility" Value="Visible" />
+                                <Setter TargetName="ActiveBar" Property="Fill" Value="{DynamicResource BrushAccentAmber}" />
+                            </Trigger>
+                            <Trigger Property="Tag" Value="ActiveCodexProfiles">
                                 <Setter TargetName="Root" Property="Background" Value="{DynamicResource BrushSidebarActive}" />
                                 <Setter Property="Foreground" Value="{DynamicResource BrushSidebarTextActive}" />
                                 <Setter TargetName="ActiveBar" Property="Visibility" Value="Visible" />
@@ -666,6 +674,21 @@
                         <StackPanel Orientation="Horizontal">
                             <materialDesign:PackIcon Kind="DatabaseArrowDown" Width="17" Height="17" Margin="0,0,9,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentBlue}" />
                             <TextBlock Text="SQL 导出" VerticalAlignment="Center" FontSize="12" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                        </StackPanel>
+                    </Button>
+                    <Button Command="{Binding ShowFrpCommand}">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource NavItemStyle}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding CurrentModule}" Value="Frp">
+                                        <Setter Property="Tag" Value="ActiveFrp" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                        <StackPanel Orientation="Horizontal">
+                            <materialDesign:PackIcon Kind="VpnKey" Width="17" Height="17" Margin="0,0,9,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentAmber}" />
+                            <TextBlock Text="穿透" VerticalAlignment="Center" FontSize="12" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                         </StackPanel>
                     </Button>
                     <Button Command="{Binding ShowMultimediaCommand}">
@@ -2402,44 +2425,72 @@
                                 <ColumnDefinition Width="1.25*" />
                             </Grid.ColumnDefinitions>
 
-                            <ComboBox Grid.Row="0"
-                                      Grid.Column="0"
-                                      Margin="0,0,8,6"
-                                      ItemsSource="{Binding SqlProviderOptions}"
-                                      SelectedValuePath="Kind"
-                                      DisplayMemberPath="DisplayName"
-                                      SelectedValue="{Binding SelectedSqlProvider, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                      Style="{StaticResource StandardComboBox}"
-                                      materialDesign:HintAssist.Hint="数据库类型" />
+                            <Grid Grid.Row="0" Grid.Column="0" Margin="0,0,8,6">
+                                <ComboBox x:Name="SqlProviderBox"
+                                          ItemsSource="{Binding SqlProviderOptions}"
+                                          SelectedValuePath="Kind"
+                                          DisplayMemberPath="DisplayName"
+                                          SelectedValue="{Binding SelectedSqlProvider, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          Style="{StaticResource StandardComboBox}" />
+                                <TextBlock Text="选择数据库类型"
+                                           Margin="12,0,28,0"
+                                           VerticalAlignment="Center"
+                                           Foreground="{DynamicResource MaterialDesignBodyLight}"
+                                           FontSize="12"
+                                           Opacity="0.72"
+                                           IsHitTestVisible="False"
+                                           Visibility="{Binding SelectedItem, ElementName=SqlProviderBox, Converter={StaticResource NullOrEmptyToVisibility}}" />
+                            </Grid>
 
-                            <ComboBox Grid.Row="0"
-                                      Grid.Column="1"
-                                      Margin="0,0,8,6"
-                                      IsEditable="True"
-                                      IsReadOnly="False"
-                                      IsTextSearchEnabled="False"
-                                      StaysOpenOnEdit="True"
-                                      ItemsSource="{Binding SqlServerAddressHistory}"
-                                      Text="{Binding SqlServerAddress, UpdateSourceTrigger=PropertyChanged}"
-                                      Style="{StaticResource StandardComboBox}"
-                                      materialDesign:HintAssist.Hint="服务器地址或 IP" />
+                            <Grid Grid.Row="0" Grid.Column="1" Margin="0,0,8,6">
+                                <ComboBox x:Name="SqlServerAddressBox"
+                                          IsEditable="True"
+                                          IsReadOnly="False"
+                                          IsTextSearchEnabled="False"
+                                          StaysOpenOnEdit="True"
+                                          ItemsSource="{Binding SqlServerAddressHistory}"
+                                          Text="{Binding SqlServerAddress, UpdateSourceTrigger=PropertyChanged}"
+                                          Style="{StaticResource StandardComboBox}" />
+                                <TextBlock Text="输入服务器地址或 IP"
+                                           Margin="12,0,28,0"
+                                           VerticalAlignment="Center"
+                                           Foreground="{DynamicResource MaterialDesignBodyLight}"
+                                           FontSize="12"
+                                           Opacity="0.72"
+                                           IsHitTestVisible="False"
+                                           Visibility="{Binding SqlServerAddress, Converter={StaticResource NullOrEmptyToVisibility}}" />
+                            </Grid>
 
-                            <TextBox Grid.Row="0"
-                                     Grid.Column="2"
-                                     Margin="0,0,8,6"
-                                     Text="{Binding SqlPort, UpdateSourceTrigger=PropertyChanged}"
-                                     Style="{StaticResource StandardTextBox}"
-                                     materialDesign:HintAssist.Hint="{Binding SqlPortHint}" />
+                            <Grid Grid.Row="0" Grid.Column="2" Margin="0,0,8,6">
+                                <TextBox Text="{Binding SqlPort, UpdateSourceTrigger=PropertyChanged}"
+                                         Style="{StaticResource StandardTextBox}" />
+                                <TextBlock Text="{Binding SqlPortHint}"
+                                           Margin="12,0,8,0"
+                                           VerticalAlignment="Center"
+                                           Foreground="{DynamicResource MaterialDesignBodyLight}"
+                                           FontSize="12"
+                                           Opacity="0.72"
+                                           IsHitTestVisible="False"
+                                           TextTrimming="CharacterEllipsis"
+                                           Visibility="{Binding SqlPort, Converter={StaticResource NullOrEmptyToVisibility}}" />
+                            </Grid>
 
-                            <ComboBox Grid.Row="0"
-                                      Grid.Column="3"
-                                      Margin="0,0,8,6"
-                                      IsEditable="True"
-                                      IsTextSearchEnabled="False"
-                                      ItemsSource="{Binding SqlUsernameHistory}"
-                                      Text="{Binding SqlUsername, UpdateSourceTrigger=PropertyChanged}"
-                                      Style="{StaticResource StandardComboBox}"
-                                      materialDesign:HintAssist.Hint="用户名" />
+                            <Grid Grid.Row="0" Grid.Column="3" Margin="0,0,8,6">
+                                <ComboBox x:Name="SqlUsernameBox"
+                                          IsEditable="True"
+                                          IsTextSearchEnabled="False"
+                                          ItemsSource="{Binding SqlUsernameHistory}"
+                                          Text="{Binding SqlUsername, UpdateSourceTrigger=PropertyChanged}"
+                                          Style="{StaticResource StandardComboBox}" />
+                                <TextBlock Text="输入数据库用户名"
+                                           Margin="12,0,28,0"
+                                           VerticalAlignment="Center"
+                                           Foreground="{DynamicResource MaterialDesignBodyLight}"
+                                           FontSize="12"
+                                           Opacity="0.72"
+                                           IsHitTestVisible="False"
+                                           Visibility="{Binding SqlUsername, Converter={StaticResource NullOrEmptyToVisibility}}" />
+                            </Grid>
 
                             <Grid Grid.Row="0"
                                   Grid.Column="4"
@@ -2447,8 +2498,15 @@
                                 <PasswordBox x:Name="SqlPasswordBox"
                                              Height="36"
                                              Style="{StaticResource MaterialDesignOutlinedPasswordBox}"
-                                             materialDesign:HintAssist.Hint="密码"
                                              PasswordChanged="SqlPasswordBox_OnPasswordChanged" />
+                                <TextBlock Text="输入数据库密码"
+                                           Margin="12,0,34,0"
+                                           VerticalAlignment="Center"
+                                           Foreground="{DynamicResource MaterialDesignBodyLight}"
+                                           FontSize="12"
+                                           Opacity="0.72"
+                                           IsHitTestVisible="False"
+                                           Visibility="{Binding SqlPassword, Converter={StaticResource NullOrEmptyToVisibility}}" />
                                 <Button x:Name="SqlPasswordHistoryButton"
                                         Width="32"
                                         Height="32"
@@ -2474,30 +2532,41 @@
                                 </Button>
                             </Grid>
 
-                            <ComboBox Grid.Row="1"
-                                      Grid.Column="0"
-                                      Grid.ColumnSpan="2"
-                                      Margin="0,0,8,6"
-                                      ItemsSource="{Binding SqlDatabaseList}"
-                                      SelectedItem="{Binding SelectedSqlDatabase}"
-                                      DisplayMemberPath="Name"
-                                      Style="{StaticResource StandardComboBox}"
-                                      materialDesign:HintAssist.Hint="数据库" />
+                            <Grid Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Margin="0,0,8,6">
+                                <ComboBox x:Name="SqlDatabaseBox"
+                                          ItemsSource="{Binding SqlDatabaseList}"
+                                          SelectedItem="{Binding SelectedSqlDatabase}"
+                                          DisplayMemberPath="Name"
+                                          Style="{StaticResource StandardComboBox}" />
+                                <TextBlock Text="测试连接后选择数据库"
+                                           Margin="12,0,28,0"
+                                           VerticalAlignment="Center"
+                                           Foreground="{DynamicResource MaterialDesignBodyLight}"
+                                           FontSize="12"
+                                           Opacity="0.72"
+                                           IsHitTestVisible="False"
+                                           Visibility="{Binding SelectedSqlDatabase, Converter={StaticResource NullOrEmptyToVisibility}}" />
+                            </Grid>
 
-                            <ComboBox Grid.Row="1"
-                                      Grid.Column="2"
-                                      Grid.ColumnSpan="3"
-                                      Margin="0,0,0,6"
-                                      IsEditable="True"
-                                      IsTextSearchEnabled="False"
-                                      StaysOpenOnEdit="True"
-                                      ItemsSource="{Binding FilteredSqlTableView}"
-                                      SelectedItem="{Binding SelectedSqlTable, UpdateSourceTrigger=PropertyChanged}"
-                                      Text="{Binding SqlTableSearchText, UpdateSourceTrigger=PropertyChanged}"
-                                      DisplayMemberPath="DisplayName"
-                                      Style="{StaticResource StandardComboBox}"
-                                      materialDesign:HintAssist.Hint="数据表" />
-
+                            <Grid Grid.Row="1" Grid.Column="2" Grid.ColumnSpan="3" Margin="0,0,0,6">
+                                <ComboBox x:Name="SqlTableBox"
+                                          IsEditable="True"
+                                          IsTextSearchEnabled="False"
+                                          StaysOpenOnEdit="True"
+                                          ItemsSource="{Binding FilteredSqlTableView}"
+                                          SelectedItem="{Binding SelectedSqlTable, UpdateSourceTrigger=PropertyChanged}"
+                                          Text="{Binding SqlTableSearchText, UpdateSourceTrigger=PropertyChanged}"
+                                          DisplayMemberPath="DisplayName"
+                                          Style="{StaticResource StandardComboBox}" />
+                                <TextBlock Text="选择或输入要导出的数据表"
+                                           Margin="12,0,28,0"
+                                           VerticalAlignment="Center"
+                                           Foreground="{DynamicResource MaterialDesignBodyLight}"
+                                           FontSize="12"
+                                           Opacity="0.72"
+                                           IsHitTestVisible="False"
+                                           Visibility="{Binding SqlTableSearchText, Converter={StaticResource NullOrEmptyToVisibility}}" />
+                            </Grid>
                             <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="5"
                                         Orientation="Horizontal" HorizontalAlignment="Right"
                                         Margin="0,0,0,6">
@@ -3226,6 +3295,19 @@
                     </TabItem>
                 </TabControl>
             </Grid>
+
+            <views:FrpView DataContext="{Binding Frp}">
+                <views:FrpView.Style>
+                    <Style TargetType="views:FrpView">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding DataContext.CurrentModule, RelativeSource={RelativeSource AncestorType=mah:MetroWindow}}" Value="Frp">
+                                <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </views:FrpView.Style>
+            </views:FrpView>
 
             <views:MultimediaPage DataContext="{Binding Multimedia}">
                 <views:MultimediaPage.Style>
