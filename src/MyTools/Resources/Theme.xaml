@@ -79,6 +79,8 @@
     <system:Double x:Key="FontSizeSubtitle">13</system:Double>
     <system:Double x:Key="FontSizeTitle">15</system:Double>
     <system:Double x:Key="FontSizeHeadline">18</system:Double>
+    <system:Double x:Key="TopMenuBarHeight">24</system:Double>
+    <system:Double x:Key="BottomStatusBarHeight">22</system:Double>
 
     <!-- ============================================================ -->
     <!-- 强调渐变（用于 Hero / Header / 重点按钮） -->
@@ -159,6 +161,45 @@
     </Style>
 
     <!-- ============================================================ -->
+    <!-- 顶部菜单与底部状态栏 -->
+    <!-- ============================================================ -->
+    <Style x:Key="TopMenuBarBorder" TargetType="Border">
+        <Setter Property="Height" Value="{StaticResource TopMenuBarHeight}" />
+        <Setter Property="Background" Value="{DynamicResource MaterialDesignPaper}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource MaterialDesignDivider}" />
+        <Setter Property="BorderThickness" Value="0,0,0,1" />
+    </Style>
+
+    <Style x:Key="TopMenuBar" TargetType="Menu">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Padding" Value="4,0" />
+        <Setter Property="FontFamily" Value="Microsoft YaHei UI" />
+        <Setter Property="FontSize" Value="{StaticResource FontSizeBody}" />
+    </Style>
+
+    <Style x:Key="TopMenuItem" TargetType="MenuItem">
+        <Setter Property="Height" Value="{StaticResource TopMenuBarHeight}" />
+        <Setter Property="FontSize" Value="{StaticResource FontSizeBody}" />
+        <Setter Property="Foreground" Value="{DynamicResource MaterialDesignBody}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Padding" Value="10,2" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+
+    <Style x:Key="BottomStatusBar" TargetType="StatusBar">
+        <Setter Property="Height" Value="{StaticResource BottomStatusBarHeight}" />
+        <Setter Property="Background" Value="{DynamicResource MaterialDesignPaper}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource MaterialDesignDivider}" />
+        <Setter Property="BorderThickness" Value="0,1,0,0" />
+        <Setter Property="Padding" Value="6,0" />
+    </Style>
+
+    <Style x:Key="StatusBarText" TargetType="TextBlock" BasedOn="{StaticResource TextCaption}">
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+
+    <!-- ============================================================ -->
     <!-- 卡片样式 -->
     <!-- ============================================================ -->
     <Style x:Key="SectionCard" TargetType="materialDesign:Card">
@@ -230,6 +271,39 @@
     <!-- ============================================================ -->
     <!-- 输入框样式 -->
     <!-- ============================================================ -->
+    <Style x:Key="HomeShortcutButtonStyle" TargetType="Button">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Stretch" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}">
+                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter Property="Opacity" Value="0.92" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter Property="Opacity" Value="0.82" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.5" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <Style x:Key="StandardTextBox" TargetType="TextBox" BasedOn="{StaticResource MaterialDesignOutlinedTextBox}">
         <Setter Property="Height" Value="36" />
         <Setter Property="VerticalContentAlignment" Value="Center" />

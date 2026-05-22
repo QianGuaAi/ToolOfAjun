@@ -1051,3 +1051,63 @@
 - 修改 `MainViewModel.cs`：新增 `Frp` 懒加载属性、`ShowFrpCommand`、启动空闲期配置加载、退出时释放 frpc 进程。
 - 修改 `MyTools.csproj`：将 `NativeBinaries\frpc.exe` 从 `None` 项移除并作为 `EmbeddedResource` 嵌入，保持单 exe 分发。
 - 新增嵌入资源 `NativeBinaries\frpc.exe`（frp v0.50.0 windows_amd64，13,486,592 bytes），用于 frp 客户端内网穿透；单 exe 体积预计增加约 12.9 MB。
+
+## [2026-05-22] 完善菜单式界面改造规划
+- 重写 `docs/规划/菜单式界面改造任务说明书.md`，按当前 `MainWindow.xaml`、`MainWindow.xaml.cs`、`MainViewModel.cs` 的真实结构校准行号、命令和模块关系。
+- 将菜单退出方案改为复用现有 `ExitCommand`，避免绕过托盘隐藏与资源释放流程。
+- 明确 `SystemSettings` 是 `System` 模块下的 `CurrentSystemSection`，不是独立 `CurrentModule`。
+- 新增顶部菜单分组建议、状态栏 `CurrentNavigationText` 方案、资源样式要求和构建验收步骤。
+- 将启动性能优化改为后续扩展任务，菜单改造本身只要求不新增启动期同步负载。
+
+## [2026-05-22] 主窗口菜单式导航
+- 将主窗口从左侧 176 px 导航栏改为顶部菜单栏 + 主操作区 + 底部状态栏。
+- 顶部菜单新增“文件、系统、工具、多媒体、日程、设置、帮助”七组，复用现有 `Show*Command`、`OpenLogFolderCommand`、`ToggleAutoStartCommand` 和 `ExitCommand`。
+- 退出菜单复用 `ExitCommand`，保持托盘退出、`App.IsExiting` 和 ViewModel 释放流程一致。
+- 新增 `CurrentNavigationText`，用于状态栏显示用户可读当前位置。
+- 删除 `MainWindow.xaml` 中左侧导航 `Border` 与 `NavItemStyle`，保留 `Theme.xaml` 中历史侧边栏资源。
+- 新增 `TopMenuBar`、`TopMenuItem`、`BottomStatusBar`、`StatusBarText` 等菜单和状态栏样式资源。
+- 构建验证：Debug 与 Release 均 0 error，仅有 NU1900；Release 启动可取得主窗口句柄，标题为“阿君的工具”。
+- 修正 `TopMenuItem` 不再继承 `MaterialDesignMenuItem`，避免顶层菜单在普通 `Menu` 中文字不可见；Release 已重新编译。
+
+## [2026-05-22] 启动性能优化
+- 定位启动慢主因：`MainWindow.InitializeComponent()` 曾达到 14,735 ms，主要来自主窗口 XAML 一次性创建托盘图标、首页和全部非首页模块控件。
+- 新增 `Views/HomeView.xaml(.cs)`，首页改为窗口显示后延迟加载。
+- 新增 `Views/MainModulesView.xaml(.cs)`，系统、SQL、截图、图片、视频、文件校验、转换、性能测试等非首页模块改为首次进入时加载。
+- `Hardcodet.NotifyIcon.Wpf` 托盘图标从 XAML 移到窗口显示后延迟创建，避免阻塞 `InitializeComponent()`。
+- `MainViewModel` 构造函数不再同步读取开机自启注册表状态，改到启动空闲阶段读取。
+- 新增 `docs/规划/启动性能基线-2026-05-22.md`：记录本机 Release 基线，`InitializeComponent` 从 14,735 ms 降至约 2,665-4,866 ms，`Show()` 返回约 501-565 ms。
+- Release 构建通过，产物位置为 `src\MyTools\bin\Release\net48\MyTools.exe`。
+
+## [2026-05-22] 移除 WireGuard 模块
+- 删除顶部菜单中的 WireGuard 入口，并移除 `MainModulesView.xaml` 中的 WireGuard 页面模板。
+- 删除 `MainViewModel` 中的 `Wg*` 状态、`ShowWireGuardCommand`、连接/导入/隧道管理命令和相关方法。
+- 删除专属服务 `Services\WireGuardService.cs` 与 `WireGuardTunnelItem` 模型。
+- 删除 `NativeBinaries\README.txt` 中仅面向 WireGuard 绿色集成的说明。
+- 系统备份/恢复范围移除 WireGuard 配置分区，保留设置与历史、排班本地数据、Codex、FFmpeg。
+- Release 构建通过，产物位置为 `src\MyTools\bin\Release\net48\MyTools.exe`。
+
+## [2026-05-22] 启动速度二次优化
+- 将 `App.xaml` 首启资源缩减为 `Resources\ShellTheme.xaml`，把 MahApps、MaterialDesign、完整主题与插画移动到 `Resources\DeferredAppResources.xaml` 按需加载。
+- 将主窗口首屏改为轻量 WPF shell，保留顶部菜单与常用入口，避免完整 HomeView 和重模块参与首帧渲染。
+- Costura 改为 `LoadAtModuleInit=false`，并在托盘、日志、重 UI 模块需要第三方依赖时再初始化。
+- 移除当前未使用的 SQLite / Dapper / FluentWPF 预留依赖，Release 单 exe 体积约从 27.9 MB 降至 21.2 MB。
+- 托盘图标改为读取嵌入 `Resources\AppIcon.ico`，不再从单 exe 提取图标；托盘初始化延后到启动后。
+- Serilog 初始化移出首帧路径，启动指标写入 `MyTools.startup.log`。
+- Release 编译通过，输出 `src\MyTools\bin\Release\net48\MyTools.exe`。
+## [2026-05-22] 启动速度三次优化
+- 启动期后台预读改为按模块懒加载，避免首页出现后继续读取 SQL、截图、视频列表、Codex、FRP、系统清理和微信数据。
+- `MainViewModel` 重型服务实例与硬件传感器计时器改为首次使用时创建。
+- `frpc.exe` 改为 gzip 压缩嵌入资源 `frpc.exe.gz`，保持单 exe 分发并将主程序体积从 21.2 MB 降至 12.9 MB。
+- Release 构建通过；窗口句柄测量为首次 2,429 ms，热启动 396 ms / 384 ms。
+
+## [2026-05-22] 系统优化新增常亮电源策略
+- 新增 `PowerPolicyService`，通过提权 `powercfg` 将当前电源计划设置为不自动关闭屏幕、不自动关闭硬盘、不睡眠/休眠，并关闭 hibernate。
+- `MainViewModel` 新增 `ApplyAlwaysOnPowerPolicyCommand`、`IsPowerPolicyBusy` 和 `PowerPolicyStatusMessage`。
+- 系统优化的“系统锁定”页新增“禁止自动关屏、关硬盘和休眠”卡片。
+- Release 构建通过；本次仅新增轻量命令对象，启动句柄测量约 2,467 ms。
+
+## [2026-05-22] 修复设置菜单延迟资源加载异常
+- 修复点击顶部“设置(P)”时因重 UI 资源尚未加载导致的 XAML 资源缺失异常。
+- 调整 `DeferredUiResourceService`，在进入非首页模块前按顺序合并 MahApps、MaterialDesign 与本项目主题资源，避免 `Theme.xaml` 查找不到 `MaterialDesignRaisedButton`、`MaterialDesignTabControl` 等样式。
+- `MainViewModel.SwitchModule` 在切换非首页模块前先确保延迟 UI 资源加载完成，避免 `CurrentModule` 触发视图显示后再补资源。
+- Release 构建通过；UI Automation 已点击“设置(P)”并确认进入“系统 / 系统设置”，未出现运行错误对话框。

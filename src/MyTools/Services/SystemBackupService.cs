@@ -25,7 +25,6 @@ namespace MyTools.Services
             BackupSection.Settings
             | BackupSection.LocalAppData
             | BackupSection.Codex
-            | BackupSection.WireGuard
             | BackupSection.NativeBinaries;
 
         public static string AppDir => AppDomain.CurrentDomain.BaseDirectory;
@@ -423,17 +422,6 @@ namespace MyTools.Services
                     forImport);
             }
 
-            if ((sections & BackupSection.WireGuard) == BackupSection.WireGuard)
-            {
-                yield return CreateTarget(
-                    BackupSection.WireGuard,
-                    "WireGuard 配置",
-                    Path.Combine(AppDir, "Configs"),
-                    Path.Combine("App", "Configs"),
-                    backupRoot,
-                    forImport);
-            }
-
             if ((sections & BackupSection.NativeBinaries) == BackupSection.NativeBinaries)
             {
                 yield return CreateTarget(
@@ -749,7 +737,6 @@ namespace MyTools.Services
                 BackupSection.Settings,
                 BackupSection.LocalAppData,
                 BackupSection.Codex,
-                BackupSection.WireGuard,
                 BackupSection.NativeBinaries
             })
             {
@@ -770,8 +757,6 @@ namespace MyTools.Services
                     return "排班与本地数据";
                 case BackupSection.Codex:
                     return "Codex 当前配置";
-                case BackupSection.WireGuard:
-                    return "WireGuard 配置";
                 case BackupSection.NativeBinaries:
                     return "FFmpeg 与依赖";
                 default:
@@ -789,10 +774,8 @@ namespace MyTools.Services
                     return 1;
                 case BackupSection.Codex:
                     return 2;
-                case BackupSection.WireGuard:
-                    return 3;
                 case BackupSection.NativeBinaries:
-                    return 4;
+                    return 3;
                 default:
                     return 99;
             }
@@ -853,8 +836,7 @@ namespace MyTools.Services
         Settings = 1,
         LocalAppData = 2,
         Codex = 4,
-        WireGuard = 8,
-        NativeBinaries = 16
+        NativeBinaries = 8
     }
 
     public class BackupManifest

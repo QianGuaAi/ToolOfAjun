@@ -98,13 +98,6 @@ namespace MyTools.ViewModels
             set { SetOption(ref _backupCodex, value); }
         }
 
-        private bool _backupWireGuard = true;
-        public bool BackupWireGuard
-        {
-            get => _backupWireGuard;
-            set { SetOption(ref _backupWireGuard, value); }
-        }
-
         private bool _backupNativeBinaries = true;
         public bool BackupNativeBinaries
         {
@@ -131,13 +124,6 @@ namespace MyTools.ViewModels
         {
             get => _restoreCodex;
             set { SetOption(ref _restoreCodex, value); }
-        }
-
-        private bool _restoreWireGuard = true;
-        public bool RestoreWireGuard
-        {
-            get => _restoreWireGuard;
-            set { SetOption(ref _restoreWireGuard, value); }
         }
 
         private bool _restoreNativeBinaries = true;
@@ -532,21 +518,20 @@ namespace MyTools.ViewModels
 
         private BackupSection BuildBackupSections()
         {
-            return BuildSections(BackupSettings, BackupLocalData, BackupCodex, BackupWireGuard, BackupNativeBinaries);
+            return BuildSections(BackupSettings, BackupLocalData, BackupCodex, BackupNativeBinaries);
         }
 
         private BackupSection BuildRestoreSections()
         {
-            return BuildSections(RestoreSettings, RestoreLocalData, RestoreCodex, RestoreWireGuard, RestoreNativeBinaries);
+            return BuildSections(RestoreSettings, RestoreLocalData, RestoreCodex, RestoreNativeBinaries);
         }
 
-        private static BackupSection BuildSections(bool settings, bool localData, bool codex, bool wireGuard, bool nativeBinaries)
+        private static BackupSection BuildSections(bool settings, bool localData, bool codex, bool nativeBinaries)
         {
             var sections = BackupSection.None;
             if (settings) sections |= BackupSection.Settings;
             if (localData) sections |= BackupSection.LocalAppData;
             if (codex) sections |= BackupSection.Codex;
-            if (wireGuard) sections |= BackupSection.WireGuard;
             if (nativeBinaries) sections |= BackupSection.NativeBinaries;
             return sections;
         }

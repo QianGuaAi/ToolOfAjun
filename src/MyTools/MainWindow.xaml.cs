@@ -11,47 +11,181 @@ using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Threading;
-using MahApps.Metro.Controls;
+using Hardcodet.Wpf.TaskbarNotification;
 using MyTools.Services;
 using MyTools.Shared;
 using MyTools.ViewModels;
+using MyTools.Views;
 
 namespace MyTools
 {
-    public partial class MainWindow : MetroWindow
+    public partial class MainWindow : Window
     {
         private const int WM_HOTKEY = 0x0312;
         private HwndSource _windowSource;
         private Point _convertQueueDragStartPoint;
         private ConvertQueueItem _convertQueueDragItem;
+        private IDisposable _trayIcon;
+        private DispatcherTimer _trayTimer;
+
+        public long InitializeComponentElapsedMilliseconds { get; private set; }
 
         public MainWindow()
         {
+            var initializeStopwatch = System.Diagnostics.Stopwatch.StartNew();
             InitializeComponent();
-            Loaded += (s, e) =>
-            {
-                Dispatcher.BeginInvoke(
-                    DispatcherPriority.ApplicationIdle,
-                    new Action(InitializeTrayIcon));
-            };
+            initializeStopwatch.Stop();
+            InitializeComponentElapsedMilliseconds = initializeStopwatch.ElapsedMilliseconds;
+            AppLogService.InformationIfInitialized("MainWindow InitializeComponent completed in {ElapsedMs} ms", InitializeComponentElapsedMilliseconds);
+            Loaded += (s, e) => ScheduleDeferredStartupUi();
             if (DataContext is MainViewModel viewModel)
             {
                 viewModel.PropertyChanged += ViewModel_OnPropertyChanged;
             }
         }
 
+        private void MenuAbout_Click(object sender, RoutedEventArgs e)
+        {
+            MessageBox.Show(
+                "阿君的工具\nMyTools - 个人实用工具集\n基于 .NET Framework 4.8 + WPF",
+                "关于",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
+
+        private void MenuOpenAgents_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var baseDirectory = AppDomain.CurrentDomain.BaseDirectory;
+                var candidates = new[]
+                {
+                    Path.Combine(baseDirectory, "AGENTS.md"),
+                    Path.GetFullPath(Path.Combine(baseDirectory, @"..\..\..\..\..\AGENTS.md")),
+                    Path.Combine(Directory.GetCurrentDirectory(), "AGENTS.md")
+                };
+
+                var path = candidates
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .FirstOrDefault(File.Exists);
+                if (path == null)
+                {
+                    return;
+                }
+
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = path,
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Warning("Open AGENTS.md failed: {Msg}", ex.Message);
+            }
+        }
+
         private void InitializeTrayIcon()
         {
-            var executablePath = System.Reflection.Assembly.GetEntryAssembly()?.Location;
-            if (string.IsNullOrWhiteSpace(executablePath))
+            if (_trayIcon != null)
             {
                 return;
             }
 
-            var icon = System.Drawing.Icon.ExtractAssociatedIcon(executablePath);
-            if (icon != null)
+            var trayIcon = new TaskbarIcon
             {
-                TrayIcon.Icon = icon;
+                ToolTipText = "阿君的工具（双击恢复窗口）",
+                Visibility = Visibility.Visible,
+                MenuActivation = PopupActivationMode.LeftOrRightClick,
+                ContextMenu = CreateTrayContextMenu()
+            };
+
+            if (DataContext is MainViewModel viewModel)
+            {
+                trayIcon.DoubleClickCommand = viewModel.RestoreCommand;
+            }
+
+            var iconInfo = Application.GetResourceStream(new Uri("pack://application:,,,/Resources/AppIcon.ico", UriKind.Absolute));
+            if (iconInfo?.Stream != null)
+            {
+                using (var icon = new System.Drawing.Icon(iconInfo.Stream))
+                {
+                    trayIcon.Icon = (System.Drawing.Icon)icon.Clone();
+                }
+            }
+
+            _trayIcon = trayIcon;
+        }
+
+        private void ScheduleDeferredStartupUi()
+        {
+            _trayTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(10)
+            };
+            _trayTimer.Tick += (sender, args) =>
+            {
+                _trayTimer.Stop();
+                CosturaBootstrap.EnsureInitialized();
+                InitializeTrayIcon();
+            };
+            _trayTimer.Start();
+        }
+
+        private void EnsureDeferredApplicationResourcesLoaded()
+        {
+            if (DeferredUiResourceService.IsLoaded)
+            {
+                return;
+            }
+
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            try
+            {
+                DeferredUiResourceService.EnsureLoaded();
+                AppLogService.InformationIfInitialized("Deferred UI resources loaded in {ElapsedMs} ms", stopwatch.ElapsedMilliseconds);
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "Loading deferred UI resources failed.");
+            }
+        }
+
+        private ContextMenu CreateTrayContextMenu()
+        {
+            var menu = new ContextMenu { DataContext = DataContext };
+            if (!(DataContext is MainViewModel viewModel))
+            {
+                return menu;
+            }
+
+            menu.Items.Add(new MenuItem { Header = "显示窗口", Command = viewModel.RestoreCommand });
+
+            var autoStartItem = new MenuItem { Command = viewModel.ToggleAutoStartCommand };
+            var autoStartStyle = new Style(typeof(MenuItem));
+            autoStartStyle.Setters.Add(new Setter(HeaderedItemsControl.HeaderProperty, "开启 开机自启"));
+            var autoStartTrigger = new DataTrigger
+            {
+                Binding = new Binding(nameof(MainViewModel.IsAutoStartEnabled)),
+                Value = true
+            };
+            autoStartTrigger.Setters.Add(new Setter(HeaderedItemsControl.HeaderProperty, "关闭 开机自启"));
+            autoStartStyle.Triggers.Add(autoStartTrigger);
+            autoStartItem.Style = autoStartStyle;
+            menu.Items.Add(autoStartItem);
+
+            menu.Items.Add(new MenuItem { Header = "打开日志目录", Command = viewModel.OpenLogFolderCommand });
+            menu.Items.Add(new Separator());
+            menu.Items.Add(new MenuItem { Header = "退出程序", Command = viewModel.ExitCommand });
+            return menu;
+        }
+
+        private void LoadHomeContent()
+        {
+            var template = TryFindResource("HomeViewTemplate") as DataTemplate;
+            if (template != null && !ReferenceEquals(HomeHost.ContentTemplate, template))
+            {
+                HomeHost.ContentTemplate = template;
             }
         }
 
@@ -60,6 +194,14 @@ namespace MyTools
             if (DataContext is MainViewModel viewModel && sender is PasswordBox passwordBox)
             {
                 viewModel.SqlPassword = passwordBox.Password;
+            }
+        }
+
+        private void SqlPasswordBox_OnLoaded(object sender, RoutedEventArgs e)
+        {
+            if (DataContext is MainViewModel viewModel && sender is PasswordBox passwordBox)
+            {
+                passwordBox.Password = viewModel.SqlPassword ?? string.Empty;
             }
         }
 
@@ -77,7 +219,11 @@ namespace MyTools
             if (DataContext is MainViewModel viewModel && sender is MenuItem menuItem && menuItem.DataContext is string password)
             {
                 viewModel.SqlPassword = password;
-                SqlPasswordBox.Password = password;
+                var passwordBox = CurrentSqlPasswordBox;
+                if (passwordBox != null)
+                {
+                    passwordBox.Password = password;
+                }
             }
         }
 
@@ -100,7 +246,8 @@ namespace MyTools
 
             try
             {
-                var text = BuildSqlQueryResultClipboardText(viewModel.SqlQueryResult, SqlQueryResultGrid);
+                var resultGrid = CurrentSqlQueryResultGrid;
+                var text = BuildSqlQueryResultClipboardText(viewModel.SqlQueryResult, resultGrid);
                 if (string.IsNullOrWhiteSpace(text))
                 {
                     MessageBox.Show("没有可复制的查询结果。", "复制结果", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -108,8 +255,8 @@ namespace MyTools
                 }
 
                 Clipboard.SetText(text);
-                viewModel.QueryStatusMessage = SqlQueryResultGrid.SelectedCells.Count > 0
-                    ? $"已复制选中结果，共 {SqlQueryResultGrid.SelectedCells.Count} 个单元格。"
+                viewModel.QueryStatusMessage = resultGrid != null && resultGrid.SelectedCells.Count > 0
+                    ? $"已复制选中结果，共 {resultGrid.SelectedCells.Count} 个单元格。"
                     : $"已复制全部查询结果，共 {viewModel.SqlQueryResult.Count} 行。";
             }
             catch (Exception ex)
@@ -304,20 +451,35 @@ namespace MyTools
 
         private void ViewModel_OnPropertyChanged(object sender, PropertyChangedEventArgs e)
         {
+            if (sender is MainViewModel navigationVm && e.PropertyName == nameof(MainViewModel.CurrentModule))
+            {
+                if (string.Equals(navigationVm.CurrentModule, "Home", StringComparison.Ordinal))
+                {
+                    if (DeferredUiResourceService.IsLoaded)
+                    {
+                        LoadHomeContent();
+                    }
+                }
+                else
+                {
+                    EnsureDeferredApplicationResourcesLoaded();
+                }
+            }
+
             if (sender is MainViewModel moduleVm && e.PropertyName == nameof(MainViewModel.CurrentModule)
                 && moduleVm.CurrentModule != "VideoViewer")
             {
-                VideoViewerPage.PauseVideoViewer();
+                CurrentVideoViewerPage?.PauseVideoViewer();
             }
 
             if (sender is MainViewModel && e.PropertyName == nameof(MainViewModel.VideoViewerSource))
             {
-                VideoViewerPage.ResetForSourceChange();
+                CurrentVideoViewerPage?.ResetForSourceChange();
             }
 
             if (sender is MainViewModel speedVm && e.PropertyName == nameof(MainViewModel.VideoViewerSpeedRatio))
             {
-                VideoViewerPage.ApplyVideoSpeed(speedVm.VideoViewerSpeedRatio);
+                CurrentVideoViewerPage?.ApplyVideoSpeed(speedVm.VideoViewerSpeedRatio);
             }
 
             if (e.PropertyName != nameof(MainViewModel.SqlPassword) || !(sender is MainViewModel viewModel))
@@ -325,9 +487,10 @@ namespace MyTools
                 return;
             }
 
-            if (SqlPasswordBox.Password != (viewModel.SqlPassword ?? string.Empty))
+            var passwordBox = CurrentSqlPasswordBox;
+            if (passwordBox != null && passwordBox.Password != (viewModel.SqlPassword ?? string.Empty))
             {
-                SqlPasswordBox.Password = viewModel.SqlPassword ?? string.Empty;
+                passwordBox.Password = viewModel.SqlPassword ?? string.Empty;
             }
         }
 
@@ -446,8 +609,14 @@ namespace MyTools
 
         private bool TryHandleVideoViewerShortcut(KeyEventArgs e)
         {
-            return VideoViewerPage != null && VideoViewerPage.HandleShortcut(e);
+            return CurrentVideoViewerPage?.HandleShortcut(e) == true;
         }
+
+        private VideoViewerPage CurrentVideoViewerPage => FindVisualChild<VideoViewerPage>(MainModulesHost);
+
+        private PasswordBox CurrentSqlPasswordBox => FindVisualChildByName<PasswordBox>(MainModulesHost, "SqlPasswordBox");
+
+        private DataGrid CurrentSqlQueryResultGrid => FindVisualChildByName<DataGrid>(MainModulesHost, "SqlQueryResultGrid");
 
         private static Key ResolveHotkeyKey(KeyEventArgs e)
         {
@@ -531,7 +700,7 @@ namespace MyTools
                 && TryGetDroppedVideoFiles(e, out var videoPaths))
             {
                 videoVm.TryOpenVideoViewerFiles(videoPaths);
-                VideoViewerPage.StopForDroppedMedia();
+                CurrentVideoViewerPage?.StopForDroppedMedia();
                 e.Handled = true;
                 return;
             }
@@ -696,7 +865,13 @@ namespace MyTools
                 return;
             }
 
-            DragDrop.DoDragDrop(ConvertQueueGrid, _convertQueueDragItem, DragDropEffects.Move);
+            var grid = sender as DataGrid ?? FindVisualChildByName<DataGrid>(MainModulesHost, "ConvertQueueGrid");
+            if (grid == null)
+            {
+                return;
+            }
+
+            DragDrop.DoDragDrop(grid, _convertQueueDragItem, DragDropEffects.Move);
             _convertQueueDragItem = null;
         }
 
@@ -733,13 +908,68 @@ namespace MyTools
             return null;
         }
 
+        private static T FindVisualChild<T>(DependencyObject current) where T : DependencyObject
+        {
+            if (current == null)
+            {
+                return null;
+            }
+
+            var childCount = System.Windows.Media.VisualTreeHelper.GetChildrenCount(current);
+            for (var index = 0; index < childCount; index++)
+            {
+                var child = System.Windows.Media.VisualTreeHelper.GetChild(current, index);
+                if (child is T match)
+                {
+                    return match;
+                }
+
+                var descendant = FindVisualChild<T>(child);
+                if (descendant != null)
+                {
+                    return descendant;
+                }
+            }
+
+            return null;
+        }
+
+        private static T FindVisualChildByName<T>(DependencyObject current, string name) where T : FrameworkElement
+        {
+            if (current == null)
+            {
+                return null;
+            }
+
+            var childCount = System.Windows.Media.VisualTreeHelper.GetChildrenCount(current);
+            for (var index = 0; index < childCount; index++)
+            {
+                var child = System.Windows.Media.VisualTreeHelper.GetChild(current, index);
+                if (child is T match && string.Equals(match.Name, name, StringComparison.Ordinal))
+                {
+                    return match;
+                }
+
+                var descendant = FindVisualChildByName<T>(child, name);
+                if (descendant != null)
+                {
+                    return descendant;
+                }
+            }
+
+            return null;
+        }
+
         protected override void OnClosed(EventArgs e)
         {
-            VideoViewerPage.StopVideoViewer();
+            CurrentVideoViewerPage?.StopVideoViewer();
+            _trayTimer?.Stop();
+            _trayTimer = null;
             _windowSource?.RemoveHook(WndProc);
             _windowSource = null;
             HotkeyService.UnregisterAll();
-            TrayIcon.Dispose();
+            _trayIcon?.Dispose();
+            _trayIcon = null;
             if (DataContext is MainViewModel viewModel)
             {
                 viewModel.PropertyChanged -= ViewModel_OnPropertyChanged;

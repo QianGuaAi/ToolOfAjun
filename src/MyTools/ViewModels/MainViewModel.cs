@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -50,19 +50,6 @@ namespace MyTools.ViewModels
         private ObservableCollection<HomeRecentItem> _homeRecentItems;
         private string _homeCommandSearchText = string.Empty;
         private ObservableCollection<ScreenshotHistoryItem> _screenshotHistoryItems;
-        private string _wgInterfaceName = "wg0";
-        private string _wgConfig;
-        private bool _isWgConnected;
-        private string _wgStatusText = "未连接";
-        private string _wgEndpoint;
-        private string _wgAddress;
-        private string _wgServerPublicKey;
-        private bool _isWgSettingsOpen;
-        private bool _isWgLogOpen;
-        private string _wgConnectionElapsedText = "本次耗时：-";
-        private string _wgLastConnectedText = "最近连接：-";
-        private ObservableCollection<string> _wgConnectionLogs;
-        private ObservableCollection<WireGuardTunnelItem> _wireGuardTunnels;
         private string _currentModule;
         private string _currentSystemSection = "Optimization";
         private int _selectedSystemSectionIndex;
@@ -95,7 +82,6 @@ namespace MyTools.ViewModels
         private bool _isDefenderEnabled = true;
         private bool _isAutoUpdateEnabled = true;
         private string _systemStatusMessage = string.Empty;
-        private bool _isWgBusy;
         private string _sqlQueryText = string.Empty;
         private DataView _sqlQueryResult;
         private bool _isQueryBusy;
@@ -110,6 +96,8 @@ namespace MyTools.ViewModels
         private WeChatRoot _selectedWeChatRoot;
         private bool _isAutoOptimizeBusy;
         private string _autoOptimizeStatusMessage = "点击“开始自动优化”执行白名单优化流程。";
+        private bool _isPowerPolicyBusy;
+        private string _powerPolicyStatusMessage = "点击应用后，当前电源计划将设置为不关闭屏幕、不关闭硬盘、不进入睡眠/休眠。";
         private bool _isJunkBusy;
         private string _junkStatusMessage = "点击“开始扫描”分析可清理项目。";
         private bool _isWeChatCleanupBusy;
@@ -152,7 +140,7 @@ namespace MyTools.ViewModels
         private bool _isScreenshotBusy;
         private ScreenshotEditorWindow _screenshotEditorWindow;
         private RecordRegionWindow _recordRegionWindow;
-        private readonly RecordingService _recordingService = new RecordingService();
+        private RecordingService _recordingService;
         private bool _isVideoRecording;
         private bool _isAudioRecording;
         private bool _isDisposed;
@@ -268,13 +256,21 @@ namespace MyTools.ViewModels
         private readonly RelayParameterCommand _showReportDetailsCommand;
         private readonly RelayCommand _copyBenchmarkResultsCommand;
         private readonly RelayCommand _exportBenchmarkResultsCommand;
+        private readonly AsyncRelayCommand _applyAlwaysOnPowerPolicyCommand;
 
-        private readonly OptimizationReportService _optimizationReportService = new OptimizationReportService();
-        private readonly SystemOptimizationService _systemOptimizationService = new SystemOptimizationService();
-        private readonly JunkCleanupService _junkCleanupService = new JunkCleanupService();
-        private readonly WeChatDataLocator _weChatDataLocator = new WeChatDataLocator();
-        private readonly WeChatCleanupService _weChatCleanupService = new WeChatCleanupService();
-        private readonly WeChatBackupService _weChatBackupService = new WeChatBackupService();
+        private OptimizationReportService _optimizationReportService;
+        private SystemOptimizationService _systemOptimizationService;
+        private JunkCleanupService _junkCleanupService;
+        private WeChatDataLocator _weChatDataLocator;
+        private WeChatCleanupService _weChatCleanupService;
+        private WeChatBackupService _weChatBackupService;
+        private bool _sqlHistoryLoadRequested;
+        private bool _screenshotStartupLoadRequested;
+        private bool _videoViewerStartupLoadRequested;
+        private bool _codexProfilesLoadRequested;
+        private bool _systemOptimizationLoadRequested;
+        private bool _weChatStartupLoadRequested;
+        private bool _frpConfigLoadRequested;
         private static readonly IReadOnlyList<SqlProviderOption> SqlProviderOptionItems = new List<SqlProviderOption>
         {
             new SqlProviderOption(SqlProviderKind.SqlServer, "SQL Server"),
@@ -282,8 +278,17 @@ namespace MyTools.ViewModels
             new SqlProviderOption(SqlProviderKind.MySql, "MySQL")
         };
 
+        private RecordingService Recording => _recordingService ?? (_recordingService = new RecordingService());
+        private OptimizationReportService OptimizationReportsStore => _optimizationReportService ?? (_optimizationReportService = new OptimizationReportService());
+        private SystemOptimizationService SystemOptimizer => _systemOptimizationService ?? (_systemOptimizationService = new SystemOptimizationService());
+        private JunkCleanupService JunkCleaner => _junkCleanupService ?? (_junkCleanupService = new JunkCleanupService());
+        private WeChatDataLocator WeChatLocator => _weChatDataLocator ?? (_weChatDataLocator = new WeChatDataLocator());
+        private WeChatCleanupService WeChatCleaner => _weChatCleanupService ?? (_weChatCleanupService = new WeChatCleanupService());
+        private WeChatBackupService WeChatBackupStore => _weChatBackupService ?? (_weChatBackupService = new WeChatBackupService());
+
         public MainViewModel()
         {
+            var constructorStopwatch = Stopwatch.StartNew();
             NetworkList = new ObservableCollection<NetworkData>();
             StartupList = new ObservableCollection<StartupItem>();
             FilteredStartupView = CollectionViewSource.GetDefaultView(StartupList);
@@ -314,8 +319,6 @@ namespace MyTools.ViewModels
             WeChatCleanupCandidates = new ObservableCollection<WeChatCleanupCandidate>();
             WeChatRoots = new ObservableCollection<WeChatRoot>();
             RecentWeChatBackups = new ObservableCollection<RecentWeChatBackupItem>();
-            WgConnectionLogs = new ObservableCollection<string>();
-            WireGuardTunnels = new ObservableCollection<WireGuardTunnelItem>();
             FilteredSqlTableView = CollectionViewSource.GetDefaultView(SqlTableList);
             FilteredSqlTableView.Filter = FilterSqlTable;
             _audioRecordingTimer = new DispatcherTimer
@@ -328,7 +331,6 @@ namespace MyTools.ViewModels
             ShowHomeCommand = new RelayCommand(() => SwitchModule("Home"));
             ShowNetworkCommand = new RelayCommand(() => ShowSystemSection("Network"));
             ShowStartupCommand = new RelayCommand(() => ShowSystemSection("Startup"));
-            ShowWireGuardCommand = new RelayCommand(() => { SwitchModule("WireGuard"); Refresh(); });
             ShowSystemCommand = new RelayCommand(() => ShowSystemSection("Optimization"));
             ShowUninstallCommand = new RelayCommand(() => ShowSystemSection("Uninstall"));
             ShowSqlExportCommand = new RelayCommand(() => { SwitchModule("SqlExport"); Refresh(); });
@@ -393,24 +395,12 @@ namespace MyTools.ViewModels
                     Refresh();
                 }
             });
-            ToggleWireGuardCommand = new AsyncRelayCommand(ToggleWireGuardAsync);
-            ToggleWgSettingsCommand = new RelayCommand(() => IsWgSettingsOpen = !IsWgSettingsOpen);
-            ToggleWgLogCommand = new RelayCommand(() => IsWgLogOpen = !IsWgLogOpen);
-            ClearWgLogCommand = new RelayCommand(ClearWgConnectionLogs, () => WgConnectionLogs.Count > 0);
-            LoadWireGuardTunnelCommand = new RelayParameterCommand(LoadWireGuardTunnel, parameter => parameter is WireGuardTunnelItem && !IsWgBusy);
-            RefreshWireGuardTunnelsCommand = new RelayCommand(RefreshWireGuardTunnels);
-            PreviewWireGuardTunnelDiffCommand = new RelayParameterCommand(PreviewWireGuardTunnelDiff, parameter => parameter is WireGuardTunnelItem && !IsWgBusy);
-            ExportWireGuardTunnelCommand = new RelayParameterCommand(ExportWireGuardTunnel, parameter => parameter is WireGuardTunnelItem && !IsWgBusy);
-            RenameWireGuardTunnelCommand = new RelayParameterCommand(RenameWireGuardTunnel, parameter => parameter is WireGuardTunnelItem && !IsWgBusy);
-            DeleteWireGuardTunnelCommand = new RelayParameterCommand(DeleteWireGuardTunnel, parameter => parameter is WireGuardTunnelItem && !IsWgBusy);
-            GenerateConfigCommand = new RelayCommand(GenerateConfigFromSettings);
-            ImportWireGuardConfigCommand = new AsyncRelayCommand(ImportWireGuardConfigAsync, () => !IsWgBusy);
             LockWin10Command = new RelayCommand(LockWin10Version);
             ExitCommand = new RelayCommand(ExitApplication);
             RestoreCommand = new RelayCommand(RestoreWindow);
             OpenLogFolderCommand = new RelayCommand(OpenLogFolder);
             ToggleAutoStartCommand = new RelayCommand(ToggleAutoStart);
-            _isAutoStartEnabled = ReadAutoStartStatus();
+            _isAutoStartEnabled = false;
 
             _toggleDefenderCommand = new AsyncRelayCommand(ToggleDefenderAsync);
             _toggleAutoUpdateCommand = new AsyncRelayCommand(ToggleAutoUpdateAsync);
@@ -419,6 +409,8 @@ namespace MyTools.ViewModels
             ToggleAutoUpdateCommand = _toggleAutoUpdateCommand;
             TriggerUpdateNowCommand = _triggerUpdateNowCommand;
             RefreshSystemStatusCommand = new RelayCommand(RefreshSystemStatus);
+            _applyAlwaysOnPowerPolicyCommand = new AsyncRelayCommand(ApplyAlwaysOnPowerPolicyAsync, () => !IsPowerPolicyBusy);
+            ApplyAlwaysOnPowerPolicyCommand = _applyAlwaysOnPowerPolicyCommand;
             _startAutoOptimizeCommand = new AsyncRelayCommand(StartAutoOptimizeAsync, () => !IsAutoOptimizeBusy);
             _startJunkScanCommand = new AsyncRelayCommand(StartJunkScanAsync, () => !IsJunkBusy);
             _runJunkCleanupCommand = new AsyncRelayCommand(RunJunkCleanupAsync, CanRunJunkCleanup);
@@ -560,28 +552,28 @@ namespace MyTools.ViewModels
 
             CurrentModule = "Home";
             ScheduleStartupBackgroundLoads();
+            constructorStopwatch.Stop();
+            AppLogService.InformationIfInitialized("MainViewModel constructed in {ElapsedMs} ms", constructorStopwatch.ElapsedMilliseconds);
         }
 
         private void ScheduleStartupBackgroundLoads()
         {
             var dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
             dispatcher.BeginInvoke(
-                DispatcherPriority.ApplicationIdle,
-                new Action(() =>
-                {
-                    SafeFireAndForget(LoadSystemInfoSnapshotAsync());
-                    SafeFireAndForget(LoadRecordingOutputFoldersAsync());
-                    LoadScreenshotHistory();
-                    SafeFireAndForget(LoadRecentVideoViewerPlaylistsAsync());
-                    SafeFireAndForget(LoadFavoriteVideoViewerPlaylistsAsync());
-                    SafeFireAndForget(LoadSqlConnectionHistoryAsync());
-                    SafeFireAndForget(LoadScreenshotSettingsAsync());
-                    SafeFireAndForget(LoadCodexProfilesAsync());
-                    SafeFireAndForget(LoadOptimizationReportsAsync());
-                    SafeFireAndForget(LoadWeChatRootsAsync());
-                    SafeFireAndForget(LoadRecentWeChatBackupsAsync());
-                    SafeFireAndForget(Frp.LoadConfigAsync());
-                }));
+                DispatcherPriority.ContextIdle,
+                new Action(() => SafeFireAndForget(LoadStartupShellStateAsync())));
+        }
+
+        private async Task LoadStartupShellStateAsync()
+        {
+            try
+            {
+                IsAutoStartEnabled = await Task.Run(() => ReadAutoStartStatus()).ConfigureAwait(true);
+            }
+            catch
+            {
+                IsAutoStartEnabled = false;
+            }
         }
 
         public ObservableCollection<NetworkData> NetworkList
@@ -820,91 +812,6 @@ namespace MyTools.ViewModels
             }
         }
 
-        public string WgInterfaceName
-        {
-            get => _wgInterfaceName;
-            set { _wgInterfaceName = value; OnPropertyChanged(); }
-        }
-
-        public string WgConfig
-        {
-            get => _wgConfig;
-            set { _wgConfig = value; OnPropertyChanged(); }
-        }
-
-        public bool IsWgConnected
-        {
-            get => _isWgConnected;
-            set { _isWgConnected = value; OnPropertyChanged(); }
-        }
-
-        public string WgStatusText
-        {
-            get => _wgStatusText;
-            set { _wgStatusText = value; OnPropertyChanged(); }
-        }
-
-        public string WgEndpoint
-        {
-            get => _wgEndpoint;
-            set { _wgEndpoint = value; OnPropertyChanged(); }
-        }
-
-        public string WgAddress
-        {
-            get => _wgAddress;
-            set { _wgAddress = value; OnPropertyChanged(); }
-        }
-
-        public string WgServerPublicKey
-        {
-            get => _wgServerPublicKey;
-            set { _wgServerPublicKey = value; OnPropertyChanged(); }
-        }
-
-        public bool IsWgSettingsOpen
-        {
-            get => _isWgSettingsOpen;
-            set { _isWgSettingsOpen = value; OnPropertyChanged(); }
-        }
-
-        public bool IsWgLogOpen
-        {
-            get => _isWgLogOpen;
-            set { _isWgLogOpen = value; OnPropertyChanged(); }
-        }
-
-        public string WgConnectionElapsedText
-        {
-            get => _wgConnectionElapsedText;
-            set { _wgConnectionElapsedText = value ?? string.Empty; OnPropertyChanged(); }
-        }
-
-        public string WgLastConnectedText
-        {
-            get => _wgLastConnectedText;
-            set { _wgLastConnectedText = value ?? string.Empty; OnPropertyChanged(); }
-        }
-
-        public ObservableCollection<string> WgConnectionLogs
-        {
-            get => _wgConnectionLogs;
-            set { _wgConnectionLogs = value; OnPropertyChanged(); }
-        }
-
-        public ObservableCollection<WireGuardTunnelItem> WireGuardTunnels
-        {
-            get => _wireGuardTunnels;
-            set
-            {
-                _wireGuardTunnels = value;
-                OnPropertyChanged();
-                OnPropertyChanged(nameof(HasWireGuardTunnels));
-            }
-        }
-
-        public bool HasWireGuardTunnels => WireGuardTunnels != null && WireGuardTunnels.Count > 0;
-
         public string CurrentModule
         {
             get => _currentModule;
@@ -914,20 +821,21 @@ namespace MyTools.ViewModels
                 var prev = _currentModule;
                 _currentModule = value;
                 OnPropertyChanged();
+                OnPropertyChanged(nameof(CurrentNavigationText));
                 NotifySystemSectionVisibilityChanged();
 
                 // Auto-pause sensor polling when leaving SystemInfo page to save CPU
-                if (prev == "SystemInfo" && _isSensorsRunning && _sensorTimer.IsEnabled)
+                if (prev == "SystemInfo" && _isSensorsRunning && SensorTimer.IsEnabled)
                 {
-                    _sensorTimer.Stop();
+                    SensorTimer.Stop();
                 }
-                else if (value == "SystemInfo" && _isSensorsRunning && !_sensorTimer.IsEnabled)
+                else if (value == "SystemInfo" && _isSensorsRunning && !SensorTimer.IsEnabled)
                 {
-                    _sensorTimer.Start();
+                    SensorTimer.Start();
                 }
-                else if (prev == "System" && value != "System" && string.Equals(CurrentSystemSection, "SystemInfo", StringComparison.Ordinal) && _isSensorsRunning && _sensorTimer.IsEnabled)
+                else if (prev == "System" && value != "System" && string.Equals(CurrentSystemSection, "SystemInfo", StringComparison.Ordinal) && _isSensorsRunning && SensorTimer.IsEnabled)
                 {
-                    _sensorTimer.Stop();
+                    SensorTimer.Stop();
                 }
             }
         }
@@ -941,14 +849,15 @@ namespace MyTools.ViewModels
                 var previous = _currentSystemSection;
                 _currentSystemSection = value;
                 OnPropertyChanged();
+                OnPropertyChanged(nameof(CurrentNavigationText));
                 NotifySystemSectionVisibilityChanged();
-                if (string.Equals(previous, "SystemInfo", StringComparison.Ordinal) && _isSensorsRunning && _sensorTimer.IsEnabled)
+                if (string.Equals(previous, "SystemInfo", StringComparison.Ordinal) && _isSensorsRunning && SensorTimer.IsEnabled)
                 {
-                    _sensorTimer.Stop();
+                    SensorTimer.Stop();
                 }
-                else if (string.Equals(value, "SystemInfo", StringComparison.Ordinal) && _isSensorsRunning && !_sensorTimer.IsEnabled)
+                else if (string.Equals(value, "SystemInfo", StringComparison.Ordinal) && _isSensorsRunning && !SensorTimer.IsEnabled)
                 {
-                    _sensorTimer.Start();
+                    SensorTimer.Start();
                 }
             }
         }
@@ -972,6 +881,7 @@ namespace MyTools.ViewModels
         public bool IsSystemBenchmarkVisible => IsSystemSectionVisible("Benchmark");
         public bool IsSystemSettingsVisible => IsSystemSectionVisible("SystemSettings");
         public string AppVersionText => BuildAppVersionText();
+        public string CurrentNavigationText => BuildCurrentNavigationText();
 
         public bool IsWindows10OrGreater => OsVersionService.IsWindows10OrGreater;
         public bool IsWindows11OrGreater => OsVersionService.IsWindows11OrGreater;
@@ -1167,7 +1077,6 @@ namespace MyTools.ViewModels
         public ICommand ShowHomeCommand { get; }
         public ICommand ShowNetworkCommand { get; }
         public ICommand ShowStartupCommand { get; }
-        public ICommand ShowWireGuardCommand { get; }
         public ICommand ShowSystemCommand { get; }
         public ICommand ShowUninstallCommand { get; }
         public ICommand ShowSqlExportCommand { get; }
@@ -1178,29 +1087,6 @@ namespace MyTools.ViewModels
         public ICommand ShowVideoViewerCommand { get; }
         public ICommand ToggleStartupCommand { get; }
         public ICommand DeleteStartupCommand { get; }
-        public ICommand ToggleWireGuardCommand { get; }
-        public ICommand ToggleWgSettingsCommand { get; }
-        public ICommand ToggleWgLogCommand { get; }
-        public ICommand ClearWgLogCommand { get; }
-        public ICommand LoadWireGuardTunnelCommand { get; }
-        public ICommand RefreshWireGuardTunnelsCommand { get; }
-        public ICommand PreviewWireGuardTunnelDiffCommand { get; }
-        public ICommand ExportWireGuardTunnelCommand { get; }
-        public ICommand RenameWireGuardTunnelCommand { get; }
-        public ICommand DeleteWireGuardTunnelCommand { get; }
-        public ICommand GenerateConfigCommand { get; }
-        public ICommand ImportWireGuardConfigCommand { get; }
-        public bool IsWgBusy
-        {
-            get => _isWgBusy;
-            set
-            {
-                _isWgBusy = value;
-                OnPropertyChanged();
-                TriggerCommandRequery();
-            }
-        }
-
         public string StartupSearchText
         {
             get => _startupSearchText;
@@ -1301,8 +1187,6 @@ namespace MyTools.ViewModels
             ? "未选择"
             : $"已选 {SelectedInstalledProgramsCount} 个";
 
-        public bool WgExeFound => WireGuardService.IsExeAvailable;
-        public bool WgExeNotFound => !WireGuardService.IsExeAvailable;
 
         public string SqlQueryText
         {
@@ -1402,6 +1286,28 @@ namespace MyTools.ViewModels
         {
             get => _autoOptimizeStatusMessage;
             set { _autoOptimizeStatusMessage = value; OnPropertyChanged(); }
+        }
+
+        public bool IsPowerPolicyBusy
+        {
+            get => _isPowerPolicyBusy;
+            set
+            {
+                if (_isPowerPolicyBusy == value)
+                {
+                    return;
+                }
+
+                _isPowerPolicyBusy = value;
+                OnPropertyChanged();
+                TriggerCommandRequery();
+            }
+        }
+
+        public string PowerPolicyStatusMessage
+        {
+            get => _powerPolicyStatusMessage;
+            set { _powerPolicyStatusMessage = value; OnPropertyChanged(); }
         }
 
         public bool IsJunkBusy
@@ -2769,6 +2675,7 @@ namespace MyTools.ViewModels
         public ICommand ToggleAutoUpdateCommand { get; }
         public ICommand TriggerUpdateNowCommand { get; }
         public ICommand RefreshSystemStatusCommand { get; }
+        public ICommand ApplyAlwaysOnPowerPolicyCommand { get; }
         public ICommand RefreshInstalledProgramsCommand { get; }
         public ICommand UninstallProgramCommand { get; }
         public ICommand SelectFilteredInstalledProgramsCommand { get; }
@@ -2818,6 +2725,58 @@ namespace MyTools.ViewModels
             return "Optimization";
         }
 
+        private string BuildCurrentNavigationText()
+        {
+            if (string.Equals(CurrentModule, "System", StringComparison.Ordinal))
+            {
+                switch (CurrentSystemSection)
+                {
+                    case "Network":
+                        return "系统 / 当前网络";
+                    case "Startup":
+                        return "系统 / 启动管理";
+                    case "Uninstall":
+                        return "系统 / 程序卸载";
+                    case "SystemInfo":
+                        return "系统 / 系统信息";
+                    case "Benchmark":
+                        return "系统 / 性能测试";
+                    case "SystemSettings":
+                        return "系统 / 系统设置";
+                    default:
+                        return "系统 / 系统优化";
+                }
+            }
+
+            switch (CurrentModule)
+            {
+                case "Home":
+                    return "首页";
+                case "SqlExport":
+                    return "SQL 导出";
+                case "Frp":
+                    return "内网穿透";
+                case "Multimedia":
+                    return "多媒体";
+                case "Screenshot":
+                    return "截图录屏";
+                case "CodexProfiles":
+                    return "Codex 配置";
+                case "FileVerify":
+                    return "文件校验";
+                case "Schedule":
+                    return "排班管理";
+                case "ImageViewer":
+                    return "图片查看";
+                case "VideoViewer":
+                    return "音视频播放";
+                case "Convert":
+                    return "格式转换";
+                default:
+                    return string.IsNullOrWhiteSpace(CurrentModule) ? "首页" : CurrentModule;
+            }
+        }
+
         private bool IsSystemSectionVisible(string section)
         {
             return string.Equals(CurrentModule, "System", StringComparison.Ordinal)
@@ -2851,15 +2810,112 @@ namespace MyTools.ViewModels
             }
             else if (string.Equals(section, "SystemInfo", StringComparison.Ordinal))
             {
+                EnsureSystemInfoSnapshotLoading();
                 SafeFireAndForget(LoadSystemInfoAsync());
             }
             else if (string.Equals(section, "Optimization", StringComparison.Ordinal))
             {
+                EnsureSystemOptimizationDataLoading();
+                EnsureWeChatStartupDataLoading();
                 RefreshSystemStatus();
             }
         }
+
+        private void EnsureSqlStartupDataLoading()
+        {
+            if (_sqlHistoryLoadRequested)
+            {
+                return;
+            }
+
+            _sqlHistoryLoadRequested = true;
+            SafeFireAndForget(LoadSqlConnectionHistoryAsync());
+        }
+
+        private void EnsureScreenshotStartupDataLoading()
+        {
+            if (_screenshotStartupLoadRequested)
+            {
+                return;
+            }
+
+            _screenshotStartupLoadRequested = true;
+            SafeFireAndForget(LoadRecordingOutputFoldersAsync());
+            SafeFireAndForget(LoadScreenshotSettingsAsync());
+            Application.Current?.Dispatcher.BeginInvoke(
+                DispatcherPriority.Background,
+                new Action(LoadScreenshotHistory));
+        }
+
+        private void EnsureVideoViewerStartupDataLoading()
+        {
+            if (_videoViewerStartupLoadRequested)
+            {
+                return;
+            }
+
+            _videoViewerStartupLoadRequested = true;
+            SafeFireAndForget(LoadRecentVideoViewerPlaylistsAsync());
+            SafeFireAndForget(LoadFavoriteVideoViewerPlaylistsAsync());
+        }
+
+        private void EnsureCodexProfilesLoading()
+        {
+            if (_codexProfilesLoadRequested)
+            {
+                return;
+            }
+
+            _codexProfilesLoadRequested = true;
+            SafeFireAndForget(LoadCodexProfilesAsync());
+        }
+
+        private void EnsureSystemOptimizationDataLoading()
+        {
+            if (_systemOptimizationLoadRequested)
+            {
+                return;
+            }
+
+            _systemOptimizationLoadRequested = true;
+            SafeFireAndForget(LoadOptimizationReportsAsync());
+        }
+
+        private void EnsureWeChatStartupDataLoading()
+        {
+            if (_weChatStartupLoadRequested)
+            {
+                return;
+            }
+
+            _weChatStartupLoadRequested = true;
+            SafeFireAndForget(LoadWeChatRootsAsync());
+            SafeFireAndForget(LoadRecentWeChatBackupsAsync());
+        }
+
+        private void EnsureFrpConfigLoading()
+        {
+            if (_frpConfigLoadRequested)
+            {
+                return;
+            }
+
+            _frpConfigLoadRequested = true;
+            SafeFireAndForget(Frp.LoadConfigAsync());
+        }
+
+        private void EnsureSystemInfoSnapshotLoading()
+        {
+            SafeFireAndForget(LoadSystemInfoSnapshotAsync());
+        }
+
         private void SwitchModule(string module)
         {
+            if (!string.Equals(module, "Home", StringComparison.Ordinal))
+            {
+                DeferredUiResourceService.EnsureLoaded();
+            }
+
             CurrentModule = module;
 
             if (string.Equals(module, "Schedule", StringComparison.Ordinal))
@@ -2874,6 +2930,22 @@ namespace MyTools.ViewModels
             {
                 AddHomeRecentItem("隧道穿透", "最近进入穿透模块", module, string.Empty, "打开");
             }
+            if (string.Equals(module, "Frp", StringComparison.Ordinal))
+            {
+                EnsureFrpConfigLoading();
+            }
+            else if (string.Equals(module, "SqlExport", StringComparison.Ordinal))
+            {
+                EnsureSqlStartupDataLoading();
+            }
+            else if (string.Equals(module, "Screenshot", StringComparison.Ordinal))
+            {
+                EnsureScreenshotStartupDataLoading();
+            }
+            else if (string.Equals(module, "CodexProfiles", StringComparison.Ordinal))
+            {
+                EnsureCodexProfilesLoading();
+            }
         }
 
         public void SwitchToHomeFromMultimedia()
@@ -2884,6 +2956,11 @@ namespace MyTools.ViewModels
         private void ShowMultimedia(MultimediaPreferredFilter preferredFilter)
         {
             SwitchModule("Multimedia");
+            if (preferredFilter == MultimediaPreferredFilter.AudioVideo)
+            {
+                EnsureVideoViewerStartupDataLoading();
+            }
+
             Multimedia.PreferredFilter = preferredFilter;
             if (preferredFilter == MultimediaPreferredFilter.All)
             {
@@ -2906,7 +2983,6 @@ namespace MyTools.ViewModels
             AddHomeCommand("排班管理", "维护人员、生成排班、冲突检查、导出 Excel", "排班 班次 人员 休息 冲突 excel schedule", ShowScheduleCommand);
             AddHomeCommand("文件哈希校验", "计算 MD5、SHA-1、SHA-256、CRC32", "哈希 校验 md5 sha crc 文件 verify hash", ShowFileVerifyCommand);
             AddHomeCommand("系统", "系统优化、当前网络、启动管理、程序卸载、系统信息、性能测试和系统设置", "系统 优化 清理 网络 启动 卸载 信息 性能 设置 backup settings network startup uninstall benchmark", ShowSystemCommand);
-            AddHomeCommand("WireGuard", "导入配置、生成配置、连接或断开隧道", "wireguard vpn 隧道 配置 连接", ShowWireGuardCommand);
             AddHomeCommand("Codex 配置", "导入、切换、备份 Codex 配置资料", "codex 配置 profile config auth", ShowCodexProfilesCommand);
         }
 
@@ -6782,7 +6858,7 @@ namespace MyTools.ViewModels
 
                 var gifMode = IsGifRecordingMode;
                 _activeVideoOutputPath = BuildRecordingOutputPath(outputFolder, gifMode ? "GIF录像" : "录像", gifMode ? ".gif" : ".mp4");
-                await _recordingService.StartVideoRecordingAsync(region, _activeVideoOutputPath, gifMode, BuildRecordingOptions(), CancellationToken.None);
+                await Recording.StartVideoRecordingAsync(region, _activeVideoOutputPath, gifMode, BuildRecordingOptions(), CancellationToken.None);
                 IsVideoRecording = true;
                 window.SetRecordingState(true);
             }
@@ -6848,7 +6924,7 @@ namespace MyTools.ViewModels
             try
             {
                 _activeAudioOutputPath = BuildRecordingOutputPath(outputFolder, "录音", ".m4a");
-                await _recordingService.StartAudioOnlyAsync(_activeAudioOutputPath, CancellationToken.None);
+                await Recording.StartAudioOnlyAsync(_activeAudioOutputPath, CancellationToken.None);
                 _audioRecordingStartedAt = DateTime.Now;
                 IsAudioRecording = true;
                 UpdateAudioRecordingIndicator();
@@ -6865,7 +6941,7 @@ namespace MyTools.ViewModels
         {
             try
             {
-                var result = await _recordingService.StopVideoRecordingAsync();
+                var result = await Recording.StopVideoRecordingAsync();
                 IsVideoRecording = false;
                 if (!showMessage)
                 {
@@ -6921,7 +6997,7 @@ namespace MyTools.ViewModels
         {
             try
             {
-                var result = await _recordingService.StopAudioOnlyAsync();
+                var result = await Recording.StopAudioOnlyAsync();
                 _audioRecordingTimer.Stop();
                 IsAudioRecording = false;
                 AudioRecordingIndicator = string.Empty;
@@ -6979,12 +7055,12 @@ namespace MyTools.ViewModels
 
         private bool EnsureFfmpegAvailable()
         {
-            if (_recordingService.TryGetFfmpegPath(out _))
+            if (Recording.TryGetFfmpegPath(out _))
             {
                 return true;
             }
 
-            var expectedPath = _recordingService.ExpectedFfmpegPath;
+            var expectedPath = Recording.ExpectedFfmpegPath;
             var expectedFolder = Path.GetDirectoryName(expectedPath) ?? AppDomain.CurrentDomain.BaseDirectory;
             var result = MessageBox.Show(
                 "录像和录音需要 ffmpeg.exe。\n\n"
@@ -7242,16 +7318,6 @@ namespace MyTools.ViewModels
                 FilteredStartupView?.Refresh();
                 OnPropertyChanged(nameof(HasNoStartupItems));
             }
-            else if (CurrentModule == "WireGuard")
-            {
-                RefreshWireGuardTunnels();
-                UpdateWgStatus();
-                if (string.IsNullOrWhiteSpace(WgConfig))
-                {
-                    var saved = WireGuardService.GetSavedConfig(WgInterfaceName);
-                    if (saved != null) WgConfig = saved;
-                }
-            }
             else if (CurrentModule == "SqlExport")
             {
                 if (SelectedSqlDatabase != null && SqlTableList.Count == 0)
@@ -7285,314 +7351,6 @@ namespace MyTools.ViewModels
                 {
                     RefreshSystemStatus();
                 }
-            }
-        }
-
-        private void GenerateConfigFromSettings()
-        {
-            string config = "[Interface]\n";
-            config += "PrivateKey = <请手动填写您的私钥>\n";
-            config += $"Address = {WgAddress}\n";
-            config += "DNS = 8.8.8.8\n\n";
-            config += "[Peer]\n";
-            config += $"PublicKey = {WgServerPublicKey}\n";
-            config += $"Endpoint = {WgEndpoint}\n";
-            config += "AllowedIPs = 0.0.0.0/0\n";
-            config += "PersistentKeepalive = 25";
-
-            WgConfig = config;
-            IsWgSettingsOpen = false;
-        }
-
-        private async Task ImportWireGuardConfigAsync()
-        {
-            var dialog = new OpenFileDialog
-            {
-                Title = "导入 WireGuard 配置",
-                Filter = "WireGuard 配置 (*.conf)|*.conf|所有文件 (*.*)|*.*"
-            };
-
-            if (dialog.ShowDialog() != true || string.IsNullOrWhiteSpace(dialog.FileName))
-            {
-                return;
-            }
-
-            try
-            {
-                var bytes = await ReadAllBytesAsync(dialog.FileName, CancellationToken.None);
-                WgConfig = Encoding.UTF8.GetString(bytes);
-                var name = Path.GetFileNameWithoutExtension(dialog.FileName);
-                if (!string.IsNullOrWhiteSpace(name))
-                {
-                    WgInterfaceName = name;
-                }
-
-                IsWgSettingsOpen = false;
-                WgStatusText = "已导入配置：" + Path.GetFileName(dialog.FileName);
-                AddWgConnectionLog("已导入配置：" + dialog.FileName);
-                RefreshWireGuardTunnels();
-                AppLogService.Information("Imported WireGuard config from {File}", dialog.FileName);
-            }
-            catch (Exception ex)
-            {
-                AppLogService.Error(ex, "Importing WireGuard config failed");
-                MessageBox.Show(ex.Message, "导入 WireGuard 配置失败", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
-        private void UpdateWgStatus()
-        {
-            var status = WireGuardService.GetCurrentStatus(WgInterfaceName);
-            IsWgConnected = status.IsConnected;
-            WgStatusText = IsWgConnected ? $"已连接 {status.IpAddress}" : "未连接";
-            AddWgConnectionLog(IsWgConnected
-                ? $"状态检查：{WgInterfaceName} 已连接，IP {status.IpAddress ?? "-"}"
-                : $"状态检查：{WgInterfaceName} 未连接");
-        }
-
-        private async Task ToggleWireGuardAsync()
-        {
-            IsWgBusy = true;
-            var stopwatch = Stopwatch.StartNew();
-            try
-            {
-                if (IsWgConnected)
-                {
-                    WgStatusText = "正在断开...";
-                    AddWgConnectionLog("开始断开隧道：" + WgInterfaceName);
-                    var disconnected = await WireGuardService.DisconnectAsync(WgInterfaceName);
-                    WgConnectionElapsedText = "本次耗时：" + FormatDuration(stopwatch.Elapsed);
-                    AddWgConnectionLog(disconnected
-                        ? $"断开完成，耗时 {FormatDuration(stopwatch.Elapsed)}"
-                        : $"断开命令失败或被取消，耗时 {FormatDuration(stopwatch.Elapsed)}");
-                }
-                else
-                {
-                    if (string.IsNullOrWhiteSpace(WgConfig)) return;
-                    WgStatusText = "正在连接...";
-                    AddWgConnectionLog("开始连接隧道：" + WgInterfaceName);
-                    var status = await WireGuardService.ConnectAsync(WgInterfaceName, WgConfig);
-                    WgConnectionElapsedText = "本次耗时：" + FormatDuration(stopwatch.Elapsed);
-                    if (!string.IsNullOrEmpty(status.ErrorMessage))
-                    {
-                        AddWgConnectionLog("连接失败：" + status.ErrorMessage);
-                        MessageBox.Show(status.ErrorMessage, "WireGuard 连接失败", MessageBoxButton.OK, MessageBoxImage.Error);
-                    }
-                    else if (status.IsConnected)
-                    {
-                        WgLastConnectedText = "最近连接：" + DateTime.Now.ToString("MM-dd HH:mm:ss");
-                        AddWgConnectionLog($"连接完成，IP {status.IpAddress ?? "-"}，耗时 {FormatDuration(stopwatch.Elapsed)}");
-                        RefreshWireGuardTunnels();
-                    }
-                    else
-                    {
-                        AddWgConnectionLog($"连接命令完成但未检测到网卡上线，耗时 {FormatDuration(stopwatch.Elapsed)}");
-                    }
-                }
-            }
-            finally
-            {
-                stopwatch.Stop();
-                IsWgBusy = false;
-                UpdateWgStatus();
-            }
-        }
-
-        private void AddWgConnectionLog(string message)
-        {
-            var line = DateTime.Now.ToString("HH:mm:ss") + "  " + (message ?? string.Empty);
-            WgConnectionLogs.Insert(0, line);
-            while (WgConnectionLogs.Count > 80)
-            {
-                WgConnectionLogs.RemoveAt(WgConnectionLogs.Count - 1);
-            }
-
-            (ClearWgLogCommand as RelayCommand)?.RaiseCanExecuteChanged();
-        }
-
-        private void ClearWgConnectionLogs()
-        {
-            WgConnectionLogs.Clear();
-            (ClearWgLogCommand as RelayCommand)?.RaiseCanExecuteChanged();
-        }
-
-        private void RefreshWireGuardTunnels()
-        {
-            var items = WireGuardService.GetSavedTunnels()
-                .Select(info => new WireGuardTunnelItem(info))
-                .ToList();
-
-            ReplaceItems(WireGuardTunnels, items);
-            OnPropertyChanged(nameof(HasWireGuardTunnels));
-        }
-
-        private void LoadWireGuardTunnel(object parameter)
-        {
-            var item = parameter as WireGuardTunnelItem;
-            if (item == null)
-            {
-                return;
-            }
-
-            var config = WireGuardService.GetSavedConfig(item.InterfaceName);
-            if (string.IsNullOrWhiteSpace(config))
-            {
-                AddWgConnectionLog("隧道配置不存在或为空：" + item.InterfaceName);
-                RefreshWireGuardTunnels();
-                return;
-            }
-
-            WgInterfaceName = item.InterfaceName;
-            WgConfig = config;
-            AddWgConnectionLog("已加载隧道配置：" + item.InterfaceName);
-            UpdateWgStatus();
-        }
-
-        private void PreviewWireGuardTunnelDiff(object parameter)
-        {
-            var item = parameter as WireGuardTunnelItem;
-            if (item == null)
-            {
-                return;
-            }
-
-            try
-            {
-                var savedConfig = WireGuardService.GetSavedConfig(item.InterfaceName) ?? string.Empty;
-                var currentConfig = WgConfig ?? string.Empty;
-                var savedLines = SplitLines(savedConfig);
-                var currentLines = SplitLines(currentConfig);
-                var changed = CountChangedLinePositions(savedLines, currentLines);
-                var builder = new StringBuilder();
-                builder.AppendLine("WireGuard 隧道差异预览");
-                builder.AppendLine("隧道：" + item.InterfaceName);
-                builder.AppendLine("保存文件：" + item.FilePath);
-                builder.AppendLine();
-                if (string.Equals(savedConfig, currentConfig, StringComparison.Ordinal))
-                {
-                    builder.AppendLine("当前编辑区内容与保存文件一致。");
-                }
-                else
-                {
-                    builder.AppendLine("当前编辑区内容与保存文件不同。");
-                    builder.AppendLine($"保存文件：{savedLines.Length} 行 / {FileSizeFormatter.Format(Encoding.UTF8.GetByteCount(savedConfig))}");
-                    builder.AppendLine($"编辑区：{currentLines.Length} 行 / {FileSizeFormatter.Format(Encoding.UTF8.GetByteCount(currentConfig))}");
-                    builder.AppendLine($"不同位置：{changed} 行。");
-                }
-
-                MessageBox.Show(builder.ToString(), "WireGuard 差异", MessageBoxButton.OK, MessageBoxImage.Information);
-            }
-            catch (Exception ex)
-            {
-                AppLogService.Error(ex, "Previewing WireGuard tunnel diff failed for {Name}", item.InterfaceName ?? string.Empty);
-                MessageBox.Show(ex.Message, "差异预览失败", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
-        private void ExportWireGuardTunnel(object parameter)
-        {
-            var item = parameter as WireGuardTunnelItem;
-            if (item == null)
-            {
-                return;
-            }
-
-            try
-            {
-                if (string.IsNullOrWhiteSpace(item.FilePath) || !File.Exists(item.FilePath))
-                {
-                    MessageBox.Show("隧道配置文件不存在。", "导出 WireGuard 隧道", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    RefreshWireGuardTunnels();
-                    return;
-                }
-
-                var dialog = new SaveFileDialog
-                {
-                    Title = "导出 WireGuard 配置",
-                    Filter = "WireGuard 配置 (*.conf)|*.conf|所有文件|*.*",
-                    FileName = item.FileName
-                };
-                if (dialog.ShowDialog() != true)
-                {
-                    return;
-                }
-
-                File.Copy(item.FilePath, dialog.FileName, true);
-                AddWgConnectionLog("已导出隧道配置：" + dialog.FileName);
-                MessageBox.Show("已导出到：\n" + dialog.FileName, "导出完成", MessageBoxButton.OK, MessageBoxImage.Information);
-            }
-            catch (Exception ex)
-            {
-                AppLogService.Error(ex, "Exporting WireGuard tunnel failed for {Name}", item.InterfaceName ?? string.Empty);
-                MessageBox.Show(ex.Message, "导出失败", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
-        private void RenameWireGuardTunnel(object parameter)
-        {
-            var item = parameter as WireGuardTunnelItem;
-            if (item == null)
-            {
-                return;
-            }
-
-            var newName = Interaction.InputBox("请输入新的隧道名称", "重命名 WireGuard 隧道", item.InterfaceName);
-            if (string.IsNullOrWhiteSpace(newName))
-            {
-                return;
-            }
-
-            try
-            {
-                WireGuardService.RenameSavedTunnel(item.InterfaceName, newName);
-                if (string.Equals(WgInterfaceName, item.InterfaceName, StringComparison.OrdinalIgnoreCase))
-                {
-                    WgInterfaceName = newName.Trim();
-                }
-
-                AddWgConnectionLog($"已重命名隧道：{item.InterfaceName} -> {newName.Trim()}");
-                RefreshWireGuardTunnels();
-            }
-            catch (Exception ex)
-            {
-                AppLogService.Error(ex, "Renaming WireGuard tunnel failed for {Name}", item.InterfaceName ?? string.Empty);
-                MessageBox.Show(ex.Message, "重命名失败", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
-        private void DeleteWireGuardTunnel(object parameter)
-        {
-            var item = parameter as WireGuardTunnelItem;
-            if (item == null)
-            {
-                return;
-            }
-
-            var confirm = MessageBox.Show(
-                $"确定删除隧道配置 \"{item.InterfaceName}\" 吗？\n\n只删除本地 .conf 文件，不会主动断开已安装的 WireGuard 隧道服务。",
-                "删除 WireGuard 隧道",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Warning);
-            if (confirm != MessageBoxResult.Yes)
-            {
-                return;
-            }
-
-            try
-            {
-                WireGuardService.DeleteSavedTunnel(item.InterfaceName);
-                if (string.Equals(WgInterfaceName, item.InterfaceName, StringComparison.OrdinalIgnoreCase))
-                {
-                    WgConfig = string.Empty;
-                }
-
-                AddWgConnectionLog("已删除隧道配置：" + item.InterfaceName);
-                RefreshWireGuardTunnels();
-            }
-            catch (Exception ex)
-            {
-                AppLogService.Error(ex, "Deleting WireGuard tunnel failed for {Name}", item.InterfaceName ?? string.Empty);
-                MessageBox.Show(ex.Message, "删除失败", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -8623,7 +8381,7 @@ namespace MyTools.ViewModels
         private string _systemInfoStatusMessage = "点击下方刷新读取硬件信息。";
         private bool _isSensorsRunning;
         private string _sensorStatusMessage = "点击启用传感器后实时显示 CPU/GPU/主板温度、风扇转速、电压等。";
-        private readonly DispatcherTimer _sensorTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+        private DispatcherTimer _sensorTimer;
         private HardwareSensorService _sensorService;
         private string _sensorRefreshMode = "2 秒";
         private string _homeSensorRiskText = "传感器未启用，进入“系统信息”后可开启采集。";
@@ -8634,6 +8392,19 @@ namespace MyTools.ViewModels
         public ICommand RefreshSensorsOnceCommand { get; }
 
         public ObservableCollection<SensorReading> SensorReadings { get; } = new ObservableCollection<SensorReading>();
+
+        private DispatcherTimer SensorTimer
+        {
+            get
+            {
+                if (_sensorTimer == null)
+                {
+                    _sensorTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+                }
+
+                return _sensorTimer;
+            }
+        }
 
         public HardwareSummary HardwareSummaryInfo
         {
@@ -8720,8 +8491,8 @@ namespace MyTools.ViewModels
         {
             if (_isSensorsRunning)
             {
-                _sensorTimer.Stop();
-                _sensorTimer.Tick -= SensorTimer_OnTick;
+                SensorTimer.Stop();
+                SensorTimer.Tick -= SensorTimer_OnTick;
                 _sensorService?.Dispose();
                 _sensorService = null;
                 IsSensorsRunning = false;
@@ -8741,7 +8512,7 @@ namespace MyTools.ViewModels
                 return;
             }
 
-            _sensorTimer.Tick += SensorTimer_OnTick;
+            SensorTimer.Tick += SensorTimer_OnTick;
             ApplySensorRefreshMode();
             SensorTimer_OnTick(this, EventArgs.Empty);
             IsSensorsRunning = true;
@@ -8768,7 +8539,7 @@ namespace MyTools.ViewModels
         {
             if (string.Equals(SensorRefreshMode, "手动", StringComparison.Ordinal))
             {
-                _sensorTimer.Stop();
+                SensorTimer.Stop();
                 if (_isSensorsRunning)
                 {
                     SensorStatusMessage = $"已切换为手动刷新 · {SensorReadings.Count} 项";
@@ -8776,12 +8547,12 @@ namespace MyTools.ViewModels
                 return;
             }
 
-            _sensorTimer.Interval = string.Equals(SensorRefreshMode, "5 秒", StringComparison.Ordinal)
+            SensorTimer.Interval = string.Equals(SensorRefreshMode, "5 秒", StringComparison.Ordinal)
                 ? TimeSpan.FromSeconds(5)
                 : TimeSpan.FromSeconds(2);
             if (_isSensorsRunning || _sensorService != null)
             {
-                _sensorTimer.Start();
+                SensorTimer.Start();
             }
         }
 
@@ -10807,8 +10578,11 @@ namespace MyTools.ViewModels
             _audioRecordingTimer.Stop();
             _audioRecordingTimer.Tick -= AudioRecordingTimer_OnTick;
 
-            _sensorTimer.Stop();
-            try { _sensorTimer.Tick -= SensorTimer_OnTick; } catch { }
+            if (_sensorTimer != null)
+            {
+                _sensorTimer.Stop();
+                try { _sensorTimer.Tick -= SensorTimer_OnTick; } catch { }
+            }
             _sensorService?.Dispose();
             _sensorService = null;
 
@@ -10841,13 +10615,13 @@ namespace MyTools.ViewModels
             {
                 if (IsVideoRecording)
                 {
-                    _recordingService.StopVideoRecordingAsync().GetAwaiter().GetResult();
+                    Recording.StopVideoRecordingAsync().GetAwaiter().GetResult();
                     IsVideoRecording = false;
                 }
 
                 if (IsAudioRecording)
                 {
-                    _recordingService.StopAudioOnlyAsync().GetAwaiter().GetResult();
+                    Recording.StopAudioOnlyAsync().GetAwaiter().GetResult();
                     IsAudioRecording = false;
                     AudioRecordingIndicator = string.Empty;
                 }
@@ -10925,6 +10699,43 @@ namespace MyTools.ViewModels
             {
                 SystemStatusMessage = "操作失败：" + ex.Message;
                 MessageBox.Show(ex.Message, "操作失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private async Task ApplyAlwaysOnPowerPolicyAsync()
+        {
+            var confirm = MessageBox.Show(
+                "将把当前电源计划设置为：不自动关闭屏幕、不自动关闭硬盘、不自动睡眠/休眠，并关闭系统休眠文件。交流电和电池模式都会生效。\n\n是否继续？",
+                "应用常亮电源策略",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+
+            if (confirm != MessageBoxResult.Yes)
+            {
+                PowerPolicyStatusMessage = "已取消应用常亮电源策略。";
+                return;
+            }
+
+            IsPowerPolicyBusy = true;
+            PowerPolicyStatusMessage = "正在应用常亮电源策略，请在 UAC 弹窗中确认...";
+            try
+            {
+                await PowerPolicyService.ApplyAlwaysOnPolicyAsync(CancellationToken.None).ConfigureAwait(true);
+                PowerPolicyStatusMessage = "已应用：屏幕、硬盘、睡眠和休眠均已设置为不自动关闭。";
+            }
+            catch (OperationCanceledException)
+            {
+                PowerPolicyStatusMessage = "操作已取消（UAC 未授权）。";
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "Applying always-on power policy failed.");
+                PowerPolicyStatusMessage = "应用常亮电源策略失败：" + ex.Message;
+                MessageBox.Show(ex.Message, "应用失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                IsPowerPolicyBusy = false;
             }
         }
 
@@ -11115,7 +10926,7 @@ namespace MyTools.ViewModels
         {
             try
             {
-                var reports = await _optimizationReportService.LoadAllAsync();
+                var reports = await OptimizationReportsStore.LoadAllAsync();
                 await Application.Current.Dispatcher.InvokeAsync(() =>
                 {
                     foreach (var existing in OptimizationReports)
@@ -11143,7 +10954,7 @@ namespace MyTools.ViewModels
         {
             try
             {
-                var roots = await Task.Run(() => _weChatDataLocator.LocateRoots());
+                var roots = await Task.Run(() => WeChatLocator.LocateRoots());
                 await Application.Current.Dispatcher.InvokeAsync(() =>
                 {
                     WeChatRoots.Clear();
@@ -11182,10 +10993,10 @@ namespace MyTools.ViewModels
             IsAutoOptimizeBusy = true;
             try
             {
-                _systemOptimizationService.AllowExplorerRestartForThumbnailCleanup = restartExplorerResult == MessageBoxResult.Yes;
+                SystemOptimizer.AllowExplorerRestartForThumbnailCleanup = restartExplorerResult == MessageBoxResult.Yes;
                 var progress = new Progress<string>(message => AutoOptimizeStatusMessage = message);
-                var report = await Task.Run(() => _systemOptimizationService.RunAsync(progress, CancellationToken.None));
-                await _optimizationReportService.SaveAsync(report);
+                var report = await Task.Run(() => SystemOptimizer.RunAsync(progress, CancellationToken.None));
+                await OptimizationReportsStore.SaveAsync(report);
 
                 await Application.Current.Dispatcher.InvokeAsync(() =>
                 {
@@ -11214,7 +11025,7 @@ namespace MyTools.ViewModels
             try
             {
                 var progress = new Progress<string>(message => JunkStatusMessage = message);
-                var scanned = await Task.Run(() => _junkCleanupService.ScanAsync(progress, CancellationToken.None));
+                var scanned = await Task.Run(() => JunkCleaner.ScanAsync(progress, CancellationToken.None));
                 await Application.Current.Dispatcher.InvokeAsync(() =>
                 {
                     foreach (var candidate in JunkCandidates)
@@ -11350,7 +11161,7 @@ namespace MyTools.ViewModels
             try
             {
                 var progress = new Progress<string>(message => JunkStatusMessage = message);
-                var execution = await Task.Run(() => _junkCleanupService.CleanupAsync(selected, progress, CancellationToken.None));
+                var execution = await Task.Run(() => JunkCleaner.CleanupAsync(selected, progress, CancellationToken.None));
                 JunkStatusMessage = $"已清理 {execution.DeletedCount} 项，释放空间 {FileSizeFormatter.Format(execution.FreedBytes)}。";
 
                 var report = new OptimizationReportItem
@@ -11364,7 +11175,7 @@ namespace MyTools.ViewModels
                     Summary = $"垃圾清理：成功 {execution.DeletedCount} 项。"
                 };
 
-                await _optimizationReportService.SaveAsync(report);
+                await OptimizationReportsStore.SaveAsync(report);
                 await Application.Current.Dispatcher.InvokeAsync(() =>
                 {
                     report.PropertyChanged += OptimizationReport_OnPropertyChanged;
@@ -11412,7 +11223,7 @@ namespace MyTools.ViewModels
                     WeChatCleanupIncludeCache);
 
                 var progress = new Progress<string>(message => WeChatCleanupStatusMessage = message);
-                var scanResult = await Task.Run(() => _weChatCleanupService.ScanAsync(
+                var scanResult = await Task.Run(() => WeChatCleaner.ScanAsync(
                     new[] { SelectedWeChatRoot },
                     options,
                     progress,
@@ -11486,7 +11297,7 @@ namespace MyTools.ViewModels
             try
             {
                 var progress = new Progress<string>(message => WeChatCleanupStatusMessage = message);
-                var execution = await Task.Run(() => _weChatCleanupService.CleanupAsync(
+                var execution = await Task.Run(() => WeChatCleaner.CleanupAsync(
                     selected,
                     new[] { SelectedWeChatRoot },
                     progress,
@@ -11503,7 +11314,7 @@ namespace MyTools.ViewModels
                     Summary = $"微信清理：成功 {execution.DeletedCount} 项。"
                 };
 
-                await _optimizationReportService.SaveAsync(report);
+                await OptimizationReportsStore.SaveAsync(report);
                 await Application.Current.Dispatcher.InvokeAsync(() =>
                 {
                     report.PropertyChanged += OptimizationReport_OnPropertyChanged;
@@ -11572,7 +11383,7 @@ namespace MyTools.ViewModels
                     WeChatBackupStatusMessage = $"备份中：{p.RelativePath}（{p.Current}/{p.Total}）";
                 });
 
-                var backupResult = await Task.Run(() => _weChatBackupService.BackupAsync(options, progress, CancellationToken.None));
+                var backupResult = await Task.Run(() => WeChatBackupStore.BackupAsync(options, progress, CancellationToken.None));
                 await AddRecentWeChatBackupAsync(backupResult.ZipPath, backupResult.FileCount, backupResult.TotalBytes);
                 WeChatBackupStatusMessage = $"备份完成：{backupResult.FileCount} 个文件，{FileSizeFormatter.Format(backupResult.TotalBytes)}。";
                 MessageBox.Show(
@@ -11633,7 +11444,7 @@ namespace MyTools.ViewModels
             IsWeChatRestoreBusy = true;
             try
             {
-                var restoreResult = await Task.Run(() => _weChatBackupService.RestoreAsync(
+                var restoreResult = await Task.Run(() => WeChatBackupStore.RestoreAsync(
                     new WeChatRestoreOptions
                     {
                         ZipPath = WeChatRestoreZipPath,
@@ -11804,7 +11615,7 @@ namespace MyTools.ViewModels
         {
             try
             {
-                var manifest = await _weChatBackupService.ReadManifestAsync(zipPath, CancellationToken.None);
+                var manifest = await WeChatBackupStore.ReadManifestAsync(zipPath, CancellationToken.None);
                 var count = manifest.Entries?.Count ?? 0;
                 var total = manifest.Entries?.Sum(x => x.Size) ?? 0L;
                 var categories = manifest.Categories == null || manifest.Categories.Count == 0
@@ -11911,7 +11722,7 @@ namespace MyTools.ViewModels
 
             try
             {
-                await _optimizationReportService.DeleteAsync(selected.Select(x => x.Id));
+                await OptimizationReportsStore.DeleteAsync(selected.Select(x => x.Id));
                 await Application.Current.Dispatcher.InvokeAsync(() =>
                 {
                     foreach (var item in selected)
@@ -12057,7 +11868,6 @@ namespace MyTools.ViewModels
             _selectWeChatRestoreTargetRootCommand?.RaiseCanExecuteChanged();
             _openRecordRegionCommand?.RaiseCanExecuteChanged();
             _toggleAudioRecordingCommand?.RaiseCanExecuteChanged();
-            (ImportWireGuardConfigCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
             (RefreshSensorsOnceCommand as RelayCommand)?.RaiseCanExecuteChanged();
             _refreshInstalledProgramsCommand?.RaiseCanExecuteChanged();
             _uninstallProgramCommand?.RaiseCanExecuteChanged();
@@ -12098,12 +11908,6 @@ namespace MyTools.ViewModels
             (AddVideoViewerBookmarkCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (OpenVideoViewerBookmarkCommand as RelayParameterCommand)?.RaiseCanExecuteChanged();
             (RemoveVideoViewerBookmarkCommand as RelayParameterCommand)?.RaiseCanExecuteChanged();
-            (LoadWireGuardTunnelCommand as RelayParameterCommand)?.RaiseCanExecuteChanged();
-            (RefreshWireGuardTunnelsCommand as RelayCommand)?.RaiseCanExecuteChanged();
-            (PreviewWireGuardTunnelDiffCommand as RelayParameterCommand)?.RaiseCanExecuteChanged();
-            (ExportWireGuardTunnelCommand as RelayParameterCommand)?.RaiseCanExecuteChanged();
-            (RenameWireGuardTunnelCommand as RelayParameterCommand)?.RaiseCanExecuteChanged();
-            (DeleteWireGuardTunnelCommand as RelayParameterCommand)?.RaiseCanExecuteChanged();
             CommandManager.InvalidateRequerySuggested();
         }
 
@@ -12446,28 +12250,6 @@ namespace MyTools.ViewModels
         public string TimeText => LastUsedAt == default(DateTime)
             ? string.Empty
             : LastUsedAt.ToString("MM-dd HH:mm");
-    }
-
-    public class WireGuardTunnelItem
-    {
-        public WireGuardTunnelItem(WireGuardTunnelInfo info)
-        {
-            InterfaceName = info?.InterfaceName ?? string.Empty;
-            FilePath = info?.FilePath ?? string.Empty;
-            LastModified = info?.LastModified ?? default(DateTime);
-            SizeBytes = info?.SizeBytes ?? 0;
-        }
-
-        public string InterfaceName { get; }
-        public string FilePath { get; }
-        public DateTime LastModified { get; }
-        public long SizeBytes { get; }
-        public string FileName => string.IsNullOrWhiteSpace(FilePath) ? InterfaceName + ".conf" : Path.GetFileName(FilePath);
-        public string DirectoryPath => string.IsNullOrWhiteSpace(FilePath) ? string.Empty : Path.GetDirectoryName(FilePath) ?? string.Empty;
-        public string TimeText => LastModified == default(DateTime)
-            ? string.Empty
-            : LastModified.ToString("MM-dd HH:mm");
-        public string SizeText => FileSizeFormatter.Format(SizeBytes);
     }
 
     public class FavoritePlaylistItem : INotifyPropertyChanged

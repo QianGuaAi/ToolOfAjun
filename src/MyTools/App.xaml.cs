@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Threading;
@@ -30,6 +31,7 @@ namespace MyTools
 
         protected override void OnStartup(StartupEventArgs e)
         {
+            var onStartupStopwatch = Stopwatch.StartNew();
             try
             {
                 bool isNewInstance;
@@ -80,20 +82,22 @@ namespace MyTools
                 }) { IsBackground = true, Name = "ActivationListener" };
                 listenerThread.Start();
 
-                AppLogService.Initialize();
-                AppLogService.Information("Application starting on {Os}, 64bit={Is64}, Framework={Fx}",
-                    OsVersionService.DisplayName,
-                    Environment.Is64BitOperatingSystem,
-                    System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription);
-
                 base.OnStartup(e);
 
                 var mainWindow = new MainWindow();
                 MainWindow = mainWindow;
+                var showStopwatch = Stopwatch.StartNew();
                 mainWindow.Show();
-                mainWindow.Dispatcher.BeginInvoke(
-                    DispatcherPriority.ApplicationIdle,
-                    new Action(WriteStartupDiagnostics));
+                showStopwatch.Stop();
+                onStartupStopwatch.Stop();
+                var initializeComponentMs = mainWindow.InitializeComponentElapsedMilliseconds;
+                var showMs = showStopwatch.ElapsedMilliseconds;
+                var onStartupMs = onStartupStopwatch.ElapsedMilliseconds;
+                Task.Run(async () =>
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(2)).ConfigureAwait(false);
+                    WriteStartupDiagnostics(initializeComponentMs, showMs, onStartupMs);
+                });
                 TryOpenStartupPath(mainWindow, e.Args);
             }
             catch (Exception ex)
@@ -162,12 +166,19 @@ namespace MyTools
         {
             try
             {
-                AppLogService.Error(ex, "{Title}", title);
                 Directory.CreateDirectory(Path.GetDirectoryName(LogPath) ?? AppDomain.CurrentDomain.BaseDirectory);
                 File.AppendAllText(
                     LogPath,
                     $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {title}{Environment.NewLine}{ex}{Environment.NewLine}{Environment.NewLine}",
                     Encoding.UTF8);
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                AppLogService.Error(ex, "{Title}", title);
             }
             catch
             {
@@ -241,24 +252,18 @@ namespace MyTools
             return null;
         }
 
-        private static void WriteStartupDiagnostics()
+        private static void WriteStartupDiagnostics(long initializeComponentMs, long showMs, long onStartupMs)
         {
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(LogPath) ?? AppDomain.CurrentDomain.BaseDirectory);
                 File.AppendAllText(
                     LogPath,
-                    $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] 启动 — OS={OsVersionService.DisplayName}, 64bit={Environment.Is64BitOperatingSystem}, .NET={System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription}{Environment.NewLine}",
+                    $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Startup - OS={OsVersionService.DisplayName}, 64bit={Environment.Is64BitOperatingSystem}, .NET={System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription}, OnStartup={onStartupMs} ms, InitializeComponent={initializeComponentMs} ms, Show={showMs} ms{Environment.NewLine}",
                     Encoding.UTF8);
             }
             catch
             {
-            }
-
-            if (!OsVersionService.IsWindows10OrGreater)
-            {
-                AppLogService.Warning("Running on legacy Windows ({Os}). Some modules (Lock Win10 22H2 / Defender / Auto Update / DXGI capture) will be hidden or unavailable.",
-                    OsVersionService.DisplayName);
             }
         }
     }

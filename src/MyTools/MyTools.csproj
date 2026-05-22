@@ -8,7 +8,6 @@
     <AssemblyName>MyTools</AssemblyName>
     <RootNamespace>MyTools</RootNamespace>
     <ApplicationIcon>Resources\AppIcon.ico</ApplicationIcon>
-    <CopySQLiteInteropFiles>false</CopySQLiteInteropFiles>
     <LangVersion>9.0</LangVersion>
     <ServerGarbageCollection>true</ServerGarbageCollection>
   </PropertyGroup>
@@ -17,10 +16,7 @@
     <PackageReference Include="Hardcodet.NotifyIcon.Wpf" Version="1.1.0" />
     <PackageReference Include="MaterialDesignThemes" Version="4.9.0" />
     <PackageReference Include="MahApps.Metro" Version="2.4.10" />
-    <PackageReference Include="FluentWPF" Version="0.10.2" />
-    <PackageReference Include="Dapper" Version="2.1.24" />
     <PackageReference Include="NAudio" Version="2.2.1" />
-    <PackageReference Include="System.Data.SQLite" Version="1.0.118" />
     <PackageReference Include="Npgsql" Version="4.1.13" />
     <PackageReference Include="MySqlConnector" Version="2.3.7" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
@@ -29,7 +25,6 @@
     <PackageReference Include="Costura.Fody" Version="5.7.0">
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Stub.System.Data.SQLite.Core.NetFramework" Version="1.0.118" GeneratePathProperty="true" />
     <PackageReference Include="Microsoft.Windows.SDK.Contracts" Version="10.0.22000.194" />
     <PackageReference Include="LibreHardwareMonitorLib" Version="0.9.4" />
   </ItemGroup>
@@ -39,14 +34,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="$(PkgStub_System_Data_SQLite_Core_NetFramework)\build\net46\x64\SQLite.Interop.dll">
-      <Link>costura64\SQLite.Interop.dll</Link>
-    </EmbeddedResource>
-    <EmbeddedResource Include="$(PkgStub_System_Data_SQLite_Core_NetFramework)\build\net46\x86\SQLite.Interop.dll">
-      <Link>costura32\SQLite.Interop.dll</Link>
-    </EmbeddedResource>
     <None Remove="NativeBinaries\frpc.exe" />
-    <EmbeddedResource Include="NativeBinaries\frpc.exe" />
+    <None Remove="NativeBinaries\frpc.exe.gz" />
+    <EmbeddedResource Include="NativeBinaries\frpc.exe.gz" />
   </ItemGroup>
 
   <ItemGroup>

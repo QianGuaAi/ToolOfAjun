@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Runtime.CompilerServices;
 using Serilog;
 
 namespace MyTools.Services
@@ -8,6 +9,8 @@ namespace MyTools.Services
     {
         private static readonly object SyncRoot = new object();
         private static bool _initialized;
+
+        public static bool IsInitialized => _initialized;
 
         public static void Initialize()
         {
@@ -25,20 +28,9 @@ namespace MyTools.Services
 
                 var logDirectory = AppDomain.CurrentDomain.BaseDirectory;
                 Directory.CreateDirectory(logDirectory);
+                CosturaBootstrap.EnsureInitialized();
 
-                Log.Logger = new LoggerConfiguration()
-                    .MinimumLevel.Information()
-                    .WriteTo.File(
-                        Path.Combine(logDirectory, "MyTools.log"),
-                        rollingInterval: RollingInterval.Day,
-                        retainedFileCountLimit: 14,
-                        fileSizeLimitBytes: 5 * 1024 * 1024,
-                        rollOnFileSizeLimit: true,
-                        shared: false,
-                        buffered: true,
-                        flushToDiskInterval: TimeSpan.FromSeconds(2),
-                        encoding: System.Text.Encoding.UTF8)
-                    .CreateLogger();
+                ConfigureLogger(logDirectory);
 
                 _initialized = true;
             }
@@ -47,25 +39,35 @@ namespace MyTools.Services
         public static void Information(string messageTemplate, params object[] propertyValues)
         {
             Initialize();
-            Log.Information(messageTemplate, propertyValues);
+            WriteInformation(messageTemplate, propertyValues);
+        }
+
+        public static void InformationIfInitialized(string messageTemplate, params object[] propertyValues)
+        {
+            if (!_initialized)
+            {
+                return;
+            }
+
+            WriteInformation(messageTemplate, propertyValues);
         }
 
         public static void Warning(string messageTemplate, params object[] propertyValues)
         {
             Initialize();
-            Log.Warning(messageTemplate, propertyValues);
+            WriteWarning(messageTemplate, propertyValues);
         }
 
         public static void Error(Exception exception, string messageTemplate, params object[] propertyValues)
         {
             Initialize();
-            Log.Error(exception, messageTemplate, propertyValues);
+            WriteError(exception, messageTemplate, propertyValues);
         }
 
         public static void Error(string messageTemplate, params object[] propertyValues)
         {
             Initialize();
-            Log.Error(messageTemplate, propertyValues);
+            WriteError(messageTemplate, propertyValues);
         }
 
         public static void CloseAndFlush()
@@ -75,6 +77,54 @@ namespace MyTools.Services
                 return;
             }
 
+            FlushLogger();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static void ConfigureLogger(string logDirectory)
+        {
+            Log.Logger = new LoggerConfiguration()
+                .MinimumLevel.Information()
+                .WriteTo.File(
+                    Path.Combine(logDirectory, "MyTools.log"),
+                    rollingInterval: RollingInterval.Day,
+                    retainedFileCountLimit: 14,
+                    fileSizeLimitBytes: 5 * 1024 * 1024,
+                    rollOnFileSizeLimit: true,
+                    shared: false,
+                    buffered: true,
+                    flushToDiskInterval: TimeSpan.FromSeconds(2),
+                    encoding: System.Text.Encoding.UTF8)
+                .CreateLogger();
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static void WriteInformation(string messageTemplate, params object[] propertyValues)
+        {
+            Log.Information(messageTemplate, propertyValues);
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static void WriteWarning(string messageTemplate, params object[] propertyValues)
+        {
+            Log.Warning(messageTemplate, propertyValues);
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static void WriteError(Exception exception, string messageTemplate, params object[] propertyValues)
+        {
+            Log.Error(exception, messageTemplate, propertyValues);
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static void WriteError(string messageTemplate, params object[] propertyValues)
+        {
+            Log.Error(messageTemplate, propertyValues);
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static void FlushLogger()
+        {
             Log.CloseAndFlush();
         }
     }

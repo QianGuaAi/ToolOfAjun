@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Reflection;
 using System.Security.Cryptography;
@@ -115,19 +116,12 @@ namespace MyTools.Services
                 }
 
                 var assembly = Assembly.GetExecutingAssembly();
-                var resourceName = "MyTools.NativeBinaries.frpc.exe";
-                var resourceStream = assembly.GetManifestResourceStream(resourceName);
-
+                var compressedResource = true;
+                var resourceStream = OpenFrpcResource(assembly, ".frpc.exe.gz");
                 if (resourceStream == null)
                 {
-                    resourceName = assembly
-                        .GetManifestResourceNames()
-                        .FirstOrDefault(name => name.EndsWith(".frpc.exe", StringComparison.OrdinalIgnoreCase));
-
-                    if (!string.IsNullOrEmpty(resourceName))
-                    {
-                        resourceStream = assembly.GetManifestResourceStream(resourceName);
-                    }
+                    compressedResource = false;
+                    resourceStream = OpenFrpcResource(assembly, ".frpc.exe");
                 }
 
                 if (resourceStream == null)
@@ -135,10 +129,23 @@ namespace MyTools.Services
                     throw new InvalidOperationException("frpc.exe 解压失败：未找到嵌入资源。");
                 }
 
-                using (resourceStream)
                 using (var output = new FileStream(targetPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true))
                 {
-                    await resourceStream.CopyToAsync(output).ConfigureAwait(false);
+                    if (compressedResource)
+                    {
+                        using (resourceStream)
+                        using (var gzip = new GZipStream(resourceStream, CompressionMode.Decompress))
+                        {
+                            await gzip.CopyToAsync(output).ConfigureAwait(false);
+                        }
+                    }
+                    else
+                    {
+                        using (resourceStream)
+                        {
+                            await resourceStream.CopyToAsync(output).ConfigureAwait(false);
+                        }
+                    }
                 }
 
                 return targetPath;
@@ -147,6 +154,24 @@ namespace MyTools.Services
             {
                 throw new InvalidOperationException("frpc.exe 解压失败：" + ex.Message, ex);
             }
+        }
+
+        private static Stream OpenFrpcResource(Assembly assembly, string suffix)
+        {
+            var resourceName = "MyTools.NativeBinaries" + suffix;
+            var resourceStream = assembly.GetManifestResourceStream(resourceName);
+            if (resourceStream != null)
+            {
+                return resourceStream;
+            }
+
+            resourceName = assembly
+                .GetManifestResourceNames()
+                .FirstOrDefault(name => name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase));
+
+            return string.IsNullOrEmpty(resourceName)
+                ? null
+                : assembly.GetManifestResourceStream(resourceName);
         }
 
         public static string BuildFrpcIni(FrpServerConfig config, string plainToken, IEnumerable<FrpTunnelRule> rules)

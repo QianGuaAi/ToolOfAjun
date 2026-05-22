@@ -95,7 +95,6 @@
                             <CheckBox Content="设置与历史" IsChecked="{Binding BackupSettings}" Margin="0,0,10,4" />
                             <CheckBox Content="排班本地数据" IsChecked="{Binding BackupLocalData}" Margin="0,0,10,4" />
                             <CheckBox Content="Codex" IsChecked="{Binding BackupCodex}" Margin="0,0,10,4" />
-                            <CheckBox Content="WireGuard" IsChecked="{Binding BackupWireGuard}" Margin="0,0,10,4" />
                             <CheckBox Content="FFmpeg" IsChecked="{Binding BackupNativeBinaries}" Margin="0,0,10,4" />
                         </WrapPanel>
                     </StackPanel>
@@ -145,7 +144,6 @@
                             <CheckBox Content="设置与历史" IsChecked="{Binding RestoreSettings}" Margin="0,0,10,4" />
                             <CheckBox Content="排班本地数据" IsChecked="{Binding RestoreLocalData}" Margin="0,0,10,4" />
                             <CheckBox Content="Codex" IsChecked="{Binding RestoreCodex}" Margin="0,0,10,4" />
-                            <CheckBox Content="WireGuard" IsChecked="{Binding RestoreWireGuard}" Margin="0,0,10,4" />
                             <CheckBox Content="FFmpeg" IsChecked="{Binding RestoreNativeBinaries}" Margin="0,0,10,4" />
                         </WrapPanel>
                     </StackPanel>
