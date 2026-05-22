@@ -20,6 +20,8 @@ namespace MyTools.Services
         private const string KeyHideNew = @"Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel";
         private const string KeyHideClassic = @"Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\ClassicStartMenu";
         private const string KeyNotifyIconSettings = @"Control Panel\NotifyIconSettings";
+        private const string KeyClassicContextMenuRoot = @"Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}";
+        private const string KeyClassicContextMenuServer = KeyClassicContextMenuRoot + @"\InprocServer32";
 
         // ===== 桌面图标 CLSID =====
         public const string ClsidComputer = "{20D04FE0-3AEA-1069-A2D8-08002B30309D}";
@@ -37,8 +39,8 @@ namespace MyTools.Services
 
         // ===== 系统版本 =====
         /// <summary>Win11 = Build &gt;= 22000；时钟秒功能需 22H2(22621)+</summary>
-        public static bool IsWindows11 => Environment.OSVersion.Version.Major >= 10
-            && Environment.OSVersion.Version.Build >= 22000;
+        public static bool IsWindows11 => OsVersionService.IsWindows11OrGreater;
+        public static bool SupportsSecondsInClock => OsVersionService.IsWindows11OrGreater && OsVersionService.BuildNumber >= 22621;
 
         // ===================== 时钟秒 =====================
         public static bool GetShowSecondsInClock()
@@ -84,6 +86,39 @@ namespace MyTools.Services
             WriteDword(Registry.CurrentUser, KeyAdvanced, "MMTaskbarGlomLevel", (int)level);
         }
 
+        public static bool GetUseClassicContextMenu()
+        {
+            if (!IsWindows11) return false;
+            using (var key = Registry.CurrentUser.OpenSubKey(KeyClassicContextMenuServer))
+            {
+                return key != null;
+            }
+        }
+
+        public static void SetUseClassicContextMenu(bool useClassic)
+        {
+            if (!IsWindows11) return;
+
+            if (useClassic)
+            {
+                using (var key = Registry.CurrentUser.CreateSubKey(KeyClassicContextMenuServer, writable: true))
+                {
+                    if (key == null) throw new InvalidOperationException("打开注册表项失败：" + KeyClassicContextMenuServer);
+                    key.SetValue(string.Empty, string.Empty, RegistryValueKind.String);
+                }
+            }
+            else
+            {
+                try
+                {
+                    Registry.CurrentUser.DeleteSubKeyTree(KeyClassicContextMenuRoot);
+                }
+                catch (ArgumentException)
+                {
+                }
+            }
+        }
+
         // ===================== 桌面图标 =====================
         public static bool GetDesktopIconVisible(string clsid)
         {
@@ -97,8 +132,7 @@ namespace MyTools.Services
             WriteDword(Registry.CurrentUser, KeyHideNew, clsid, v);
             WriteDword(Registry.CurrentUser, KeyHideClassic, clsid, v);
             // 即时刷新桌面图标
-            try { SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, IntPtr.Zero, IntPtr.Zero); }
-            catch { /* swallow */ }
+            NotifyShellChanged();
         }
 
         // ===================== 重启 Explorer =====================
@@ -109,13 +143,33 @@ namespace MyTools.Services
             {
                 foreach (var p in Process.GetProcessesByName("explorer"))
                 {
-                    try { p.Kill(); } catch { /* 单个失败继续 */ }
+                    try
+                    {
+                        p.CloseMainWindow();
+                        if (!p.WaitForExit(1200))
+                        {
+                            p.Kill();
+                            p.WaitForExit(3000);
+                        }
+                    }
+                    catch
+                    {
+                        try
+                        {
+                            if (!p.HasExited) p.Kill();
+                        }
+                        catch { /* 单个失败继续 */ }
+                    }
+                    finally
+                    {
+                        p.Dispose();
+                    }
                 }
             }
             catch { /* swallow */ }
 
             // 等系统短暂稳定（部分 Windows 版本 explorer 会自动复活）
-            Thread.Sleep(800);
+            Thread.Sleep(1200);
 
             try
             {
@@ -124,7 +178,7 @@ namespace MyTools.Services
                     Process.Start(new ProcessStartInfo
                     {
                         FileName = "explorer.exe",
-                        UseShellExecute = false
+                        UseShellExecute = true
                     });
                 }
             }
@@ -225,11 +279,30 @@ namespace MyTools.Services
             return defVal;
         }
 
+        private static void NotifyShellChanged()
+        {
+            try { SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, IntPtr.Zero, IntPtr.Zero); }
+            catch { /* swallow */ }
+
+            try
+            {
+                IntPtr result;
+                SendMessageTimeout(HWND_BROADCAST, WM_SETTINGCHANGE, IntPtr.Zero, "ShellState", SMTO_ABORTIFHUNG, 1000, out result);
+            }
+            catch { /* swallow */ }
+        }
+
         // ===================== Win32 互操作 =====================
         private const uint SHCNE_ASSOCCHANGED = 0x08000000;
         private const uint SHCNF_IDLIST = 0x0000;
+        private const uint WM_SETTINGCHANGE = 0x001A;
+        private const uint SMTO_ABORTIFHUNG = 0x0002;
+        private static readonly IntPtr HWND_BROADCAST = new IntPtr(0xffff);
 
         [DllImport("shell32.dll", CharSet = CharSet.Auto)]
         private static extern void SHChangeNotify(uint wEventId, uint uFlags, IntPtr dwItem1, IntPtr dwItem2);
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        private static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint msg, IntPtr wParam, string lParam, uint flags, uint timeout, out IntPtr result);
     }
 }

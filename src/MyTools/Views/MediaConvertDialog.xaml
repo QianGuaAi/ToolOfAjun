@@ -1,0 +1,81 @@
+<mah:MetroWindow x:Class="MyTools.Views.MediaConvertDialog"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:mah="http://metro.mahapps.com/winfx/xaml/controls"
+                 xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+                 Title="格式转换"
+                 Width="520"
+                 SizeToContent="Height"
+                 ResizeMode="NoResize"
+                 WindowStartupLocation="CenterOwner"
+                 TitleCharacterCasing="Normal">
+    <Border Padding="18" Background="{DynamicResource MaterialDesignPaper}">
+        <StackPanel>
+            <DockPanel Margin="0,0,0,12">
+                <Border Width="34" Height="34" CornerRadius="8" Background="{StaticResource BrushAccentGradient}" Margin="0,0,10,0">
+                    <materialDesign:PackIcon Kind="SwapHorizontal" Width="18" Height="18" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+                <StackPanel>
+                    <TextBlock Text="格式转换" Style="{StaticResource TextHeadline}" />
+                    <TextBlock x:Name="TargetCountText" Style="{StaticResource TextCaption}" Margin="0,2,0,0" />
+                </StackPanel>
+            </DockPanel>
+
+            <TextBlock x:Name="ValidationText" Foreground="{DynamicResource MaterialDesignValidationErrorBrush}" TextWrapping="Wrap" Margin="0,0,0,8" Visibility="Collapsed" />
+            <TextBlock x:Name="FfmpegWarningText" Foreground="{DynamicResource MaterialDesignValidationErrorBrush}" Text="未检测到 ffmpeg.exe，音视频转换不可用。" TextWrapping="Wrap" Margin="0,0,0,8" Visibility="Collapsed" />
+
+            <Expander x:Name="ImageSection" Header="图片转换参数" IsExpanded="True" Margin="0,0,0,8">
+                <StackPanel Margin="0,8,0,0">
+                    <ComboBox x:Name="ImageFormatBox" SelectedIndex="0" materialDesign:HintAssist.Hint="图片输出格式" Margin="0,0,0,8">
+                        <ComboBoxItem Content="jpg" />
+                        <ComboBoxItem Content="png" />
+                        <ComboBoxItem Content="bmp" />
+                        <ComboBoxItem Content="gif" />
+                        <ComboBoxItem Content="tiff" />
+                        <ComboBoxItem Content="webp" />
+                    </ComboBox>
+                    <UniformGrid Columns="2" Margin="0,0,0,8">
+                        <TextBox x:Name="ImageMaxWidthBox" Text="0" materialDesign:HintAssist.Hint="最大宽度，0 表示不限" Margin="0,0,6,0" />
+                        <TextBox x:Name="ImageMaxHeightBox" Text="0" materialDesign:HintAssist.Hint="最大高度，0 表示不限" Margin="6,0,0,0" />
+                    </UniformGrid>
+                    <TextBlock Text="图片质量" Style="{StaticResource TextCaption}" />
+                    <Slider x:Name="ImageQualitySlider" Minimum="1" Maximum="100" Value="85" TickFrequency="1" IsSnapToTickEnabled="True" />
+                </StackPanel>
+            </Expander>
+
+            <Expander x:Name="MediaSection" Header="音视频转换参数" IsExpanded="True" Margin="0,0,0,8">
+                <StackPanel Margin="0,8,0,0">
+                    <ComboBox x:Name="MediaFormatBox" SelectedIndex="0" materialDesign:HintAssist.Hint="媒体输出格式" Margin="0,0,0,8">
+                        <ComboBoxItem Content="mp4" />
+                        <ComboBoxItem Content="mkv" />
+                        <ComboBoxItem Content="mov" />
+                        <ComboBoxItem Content="avi" />
+                        <ComboBoxItem Content="mp3" />
+                        <ComboBoxItem Content="wav" />
+                        <ComboBoxItem Content="aac" />
+                        <ComboBoxItem Content="flac" />
+                    </ComboBox>
+                    <TextBox x:Name="MediaExtraArgsBox" materialDesign:HintAssist.Hint="FFmpeg 附加参数（可空）" />
+                </StackPanel>
+            </Expander>
+
+            <GroupBox Header="输出目录" Margin="0,0,0,12">
+                <StackPanel Margin="0,8,0,0">
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                        <RadioButton x:Name="SameFolderRadio" Content="原目录" IsChecked="True" Margin="0,0,18,0" />
+                        <RadioButton x:Name="CustomFolderRadio" Content="指定目录" />
+                    </StackPanel>
+                    <DockPanel>
+                        <Button DockPanel.Dock="Right" Content="浏览" Style="{StaticResource GhostActionButton}" Padding="12,0" Height="30" Click="BrowseOutputFolder_OnClick" />
+                        <TextBox x:Name="OutputFolderBox" materialDesign:HintAssist.Hint="输出目录" Margin="0,0,8,0" />
+                    </DockPanel>
+                </StackPanel>
+            </GroupBox>
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="取消" Style="{StaticResource GhostActionButton}" Width="86" Margin="0,0,8,0" Click="Cancel_OnClick" />
+                <Button x:Name="OkButton" Content="确定" Style="{StaticResource PrimaryActionButton}" Width="86" Click="Ok_OnClick" />
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</mah:MetroWindow>

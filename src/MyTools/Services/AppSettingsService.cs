@@ -106,6 +106,18 @@ namespace MyTools.Services
             Key = 0x5A,
             DisplayText = "Ctrl+Shift+Z"
         };
+        public HotkeySettings VideoRecordHotkey { get; set; } = new HotkeySettings
+        {
+            Modifiers = 0,
+            Key = 0,
+            DisplayText = "未设置"
+        };
+        public HotkeySettings AudioRecordHotkey { get; set; } = new HotkeySettings
+        {
+            Modifiers = 0,
+            Key = 0,
+            DisplayText = "未设置"
+        };
         public bool ShowEditorAfterCapture { get; set; } = true;
         /// <summary>截图模式：FullScreen / Region / Window。</summary>
         public string ScreenshotMode { get; set; } = "FullScreen";

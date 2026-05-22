@@ -373,11 +373,26 @@ namespace MyTools
 
         private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
         {
-            if (msg == WM_HOTKEY && (int)wParam == HotkeyService.ScreenshotHotkeyId)
+            if (msg == WM_HOTKEY)
             {
-                if (DataContext is MainViewModel vm)
-                    _ = vm.TriggerScreenshotAsync();
-                handled = true;
+                var id = (int)wParam;
+                if (id == HotkeyService.ScreenshotHotkeyId)
+                {
+                    if (DataContext is MainViewModel vm) _ = vm.TriggerScreenshotAsync();
+                    handled = true;
+                }
+                else if (id == HotkeyService.VideoRecordHotkeyId)
+                {
+                    if (DataContext is MainViewModel vm && vm.StartVideoRecordingCommand.CanExecute(null))
+                        vm.StartVideoRecordingCommand.Execute(null);
+                    handled = true;
+                }
+                else if (id == HotkeyService.AudioRecordHotkeyId)
+                {
+                    if (DataContext is MainViewModel vm && vm.ToggleAudioRecordingCommand.CanExecute(null))
+                        vm.ToggleAudioRecordingCommand.Execute(null);
+                    handled = true;
+                }
             }
             return IntPtr.Zero;
         }
@@ -389,7 +404,9 @@ namespace MyTools
                 return;
             }
 
-            if (!(DataContext is MainViewModel vm) || !vm.IsCapturingHotkey) return;
+            if (!(DataContext is MainViewModel vm)) return;
+            var isCapturing = vm.IsCapturingHotkey || vm.IsCapturingVideoRecordHotkey || vm.IsCapturingAudioRecordHotkey;
+            if (!isCapturing) return;
 
             var key = ResolveHotkeyKey(e);
 
@@ -401,10 +418,11 @@ namespace MyTools
             {
                 if (key == Key.Escape)
                 {
-                    vm.IsCapturingHotkey = false;
+                    if (vm.IsCapturingVideoRecordHotkey) vm.IsCapturingVideoRecordHotkey = false;
+                    else if (vm.IsCapturingAudioRecordHotkey) vm.IsCapturingAudioRecordHotkey = false;
+                    else vm.IsCapturingHotkey = false;
                     e.Handled = true;
                 }
-
                 return;
             }
 
@@ -415,20 +433,14 @@ namespace MyTools
             if ((modifiers & ModifierKeys.Alt)     != 0) fsModifiers |= 0x0001;
             if ((modifiers & ModifierKeys.Windows) != 0) fsModifiers |= 0x0008;
 
-            if (fsModifiers == 0)
-            {
-                e.Handled = true;
-                return;
-            }
+            if (fsModifiers == 0) { e.Handled = true; return; }
 
             var vk = (uint)KeyInterop.VirtualKeyFromKey(key);
-            if (vk == 0)
-            {
-                e.Handled = true;
-                return;
-            }
+            if (vk == 0) { e.Handled = true; return; }
 
-            vm.ApplyPendingHotkey(fsModifiers, vk);
+            if (vm.IsCapturingVideoRecordHotkey) vm.ApplyPendingVideoRecordHotkey(fsModifiers, vk);
+            else if (vm.IsCapturingAudioRecordHotkey) vm.ApplyPendingAudioRecordHotkey(fsModifiers, vk);
+            else vm.ApplyPendingHotkey(fsModifiers, vk);
             e.Handled = true;
         }
 
@@ -726,7 +738,7 @@ namespace MyTools
             VideoViewerPage.StopVideoViewer();
             _windowSource?.RemoveHook(WndProc);
             _windowSource = null;
-            HotkeyService.Unregister();
+            HotkeyService.UnregisterAll();
             TrayIcon.Dispose();
             if (DataContext is MainViewModel viewModel)
             {

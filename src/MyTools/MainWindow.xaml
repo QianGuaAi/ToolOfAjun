@@ -32,6 +32,23 @@
         <viewModels:StringNotEmptyToVisibilityConverter x:Key="StringNotEmptyToVisibility" />
         <viewModels:VideoWaveformPositionConverter x:Key="VideoWaveformPositionConverter" />
         <viewModels:VideoWaveformRangeConverter x:Key="VideoWaveformRangeConverter" />
+        <DataTemplate x:Key="SystemSectionTabs">
+            <TabControl SelectedIndex="{Binding SelectedSystemSectionIndex, Mode=TwoWay}"
+                        Style="{StaticResource MaterialDesignTabControl}"
+                        HorizontalContentAlignment="Stretch"
+                        VerticalContentAlignment="Stretch"
+                        materialDesign:ColorZoneAssist.Mode="PrimaryMid"
+                        Height="34"
+                        Margin="0,0,0,8">
+                <TabItem Header="系统优化" />
+                <TabItem Header="当前网络" />
+                <TabItem Header="启动管理" />
+                <TabItem Header="程序卸载" />
+                <TabItem Header="系统信息" />
+                <TabItem Header="性能测试" />
+                <TabItem Header="系统设置" />
+            </TabControl>
+        </DataTemplate>
 
         <Style x:Key="NavItemStyle" TargetType="Button">
             <Setter Property="HorizontalContentAlignment" Value="Left" />
@@ -129,7 +146,12 @@
                                 <Setter TargetName="ActiveBar" Property="Visibility" Value="Visible" />
                                 <Setter TargetName="ActiveBar" Property="Fill" Value="{DynamicResource BrushAccentAmber}" />
                             </Trigger>
-                            <Trigger Property="Tag" Value="ActiveCodexProfiles">
+                            <Trigger Property="Tag" Value="ActiveMultimedia">
+                                <Setter TargetName="Root" Property="Background" Value="{DynamicResource BrushSidebarActive}" />
+                                <Setter Property="Foreground" Value="{DynamicResource BrushSidebarTextActive}" />
+                                <Setter TargetName="ActiveBar" Property="Visibility" Value="Visible" />
+                                <Setter TargetName="ActiveBar" Property="Fill" Value="{DynamicResource BrushAccentTeal}" />
+                            </Trigger>                            <Trigger Property="Tag" Value="ActiveCodexProfiles">
                                 <Setter TargetName="Root" Property="Background" Value="{DynamicResource BrushSidebarActive}" />
                                 <Setter Property="Foreground" Value="{DynamicResource BrushSidebarTextActive}" />
                                 <Setter TargetName="ActiveBar" Property="Visibility" Value="Visible" />
@@ -245,14 +267,14 @@
 
                     <!-- Shortcut buttons -->
                     <UniformGrid Rows="1" Columns="4" Margin="0,0,0,8">
-                        <Button Command="{Binding ShowNetworkCommand}" Margin="0,0,8,0" Style="{StaticResource HomeShortcutButtonStyle}">
+                        <Button Command="{Binding ShowMultimediaCommand}" Margin="0,0,8,0" Style="{StaticResource HomeShortcutButtonStyle}">
                             <materialDesign:Card Padding="10,10" Margin="0">
                                 <StackPanel>
-                                    <Border Width="28" Height="28" Background="{StaticResource BrushBlueGradient}" CornerRadius="7">
-                                        <materialDesign:PackIcon Kind="LanConnect" Width="15" Height="15" Foreground="White" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                    <Border Width="28" Height="28" Background="{StaticResource BrushTealGradient}" CornerRadius="7">
+                                        <materialDesign:PackIcon Kind="ImageMultipleOutline" Width="15" Height="15" Foreground="White" VerticalAlignment="Center" HorizontalAlignment="Center" />
                                     </Border>
-                                    <TextBlock Text="当前网络" Style="{StaticResource TextSubtitle}" Margin="0,7,0,1" />
-                                    <TextBlock Text="网卡 · 网关 · DNS 状态" Style="{StaticResource TextHint}" TextWrapping="Wrap" />
+                                    <TextBlock Text="多媒体" Style="{StaticResource TextSubtitle}" Margin="0,7,0,1" />
+                                    <TextBlock Text="图片 · 音视频 · 转换" Style="{StaticResource TextHint}" TextWrapping="Wrap" />
                                 </StackPanel>
                             </materialDesign:Card>
                         </Button>
@@ -269,8 +291,8 @@
                                         </Border.Background>
                                         <materialDesign:PackIcon Kind="Tools" Width="15" Height="15" Foreground="White" VerticalAlignment="Center" HorizontalAlignment="Center" />
                                     </Border>
-                                    <TextBlock Text="系统优化" Style="{StaticResource TextSubtitle}" Margin="0,7,0,1" />
-                                    <TextBlock Text="清理 · 加固 · 自动化" Style="{StaticResource TextHint}" TextWrapping="Wrap" />
+                                    <TextBlock Text="系统" Style="{StaticResource TextSubtitle}" Margin="0,7,0,1" />
+                                    <TextBlock Text="优化 · 网络 · 启动 · 卸载" Style="{StaticResource TextHint}" TextWrapping="Wrap" />
                                 </StackPanel>
                             </materialDesign:Card>
                         </Button>
@@ -615,38 +637,6 @@
 
                     <Border Height="1" Background="{DynamicResource BrushSidebarDivider}" Margin="14,4,14,4" Opacity="0.5" />
 
-                    <Button Command="{Binding ShowNetworkCommand}">
-                        <Button.Style>
-                            <Style TargetType="Button" BasedOn="{StaticResource NavItemStyle}">
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding CurrentModule}" Value="Network">
-                                        <Setter Property="Tag" Value="ActiveNetwork" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Button.Style>
-                        <StackPanel Orientation="Horizontal">
-                            <materialDesign:PackIcon Kind="LanConnect" Width="17" Height="17" Margin="0,0,9,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentBlue}" />
-                            <TextBlock Text="当前网络" VerticalAlignment="Center" FontSize="12" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
-                        </StackPanel>
-                    </Button>
-
-                    <Button Command="{Binding ShowStartupCommand}">
-                        <Button.Style>
-                            <Style TargetType="Button" BasedOn="{StaticResource NavItemStyle}">
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding CurrentModule}" Value="Startup">
-                                        <Setter Property="Tag" Value="ActiveStartup" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Button.Style>
-                        <StackPanel Orientation="Horizontal">
-                            <materialDesign:PackIcon Kind="RocketLaunchOutline" Width="17" Height="17" Margin="0,0,9,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentAmber}" />
-                            <TextBlock Text="启动管理" VerticalAlignment="Center" FontSize="12" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
-                        </StackPanel>
-                    </Button>
-
                     <Button Command="{Binding ShowSystemCommand}">
                         <Button.Style>
                             <Style TargetType="Button" BasedOn="{StaticResource NavItemStyle}">
@@ -659,23 +649,7 @@
                         </Button.Style>
                         <StackPanel Orientation="Horizontal">
                             <materialDesign:PackIcon Kind="Tools" Width="17" Height="17" Margin="0,0,9,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentRose}" />
-                            <TextBlock Text="系统优化" VerticalAlignment="Center" FontSize="12" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
-                        </StackPanel>
-                    </Button>
-
-                    <Button Command="{Binding ShowUninstallCommand}">
-                        <Button.Style>
-                            <Style TargetType="Button" BasedOn="{StaticResource NavItemStyle}">
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding CurrentModule}" Value="Uninstall">
-                                        <Setter Property="Tag" Value="ActiveUninstall" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Button.Style>
-                        <StackPanel Orientation="Horizontal">
-                            <materialDesign:PackIcon Kind="PackageVariantRemove" Width="17" Height="17" Margin="0,0,9,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentLime}" />
-                            <TextBlock Text="程序卸载" VerticalAlignment="Center" FontSize="12" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                            <TextBlock Text="系统" VerticalAlignment="Center" FontSize="12" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                         </StackPanel>
                     </Button>
 
@@ -692,6 +666,21 @@
                         <StackPanel Orientation="Horizontal">
                             <materialDesign:PackIcon Kind="DatabaseArrowDown" Width="17" Height="17" Margin="0,0,9,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentBlue}" />
                             <TextBlock Text="SQL 导出" VerticalAlignment="Center" FontSize="12" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                        </StackPanel>
+                    </Button>
+                    <Button Command="{Binding ShowMultimediaCommand}">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource NavItemStyle}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding DataContext.CurrentModule, RelativeSource={RelativeSource AncestorType=mah:MetroWindow}}" Value="Multimedia">
+                                        <Setter Property="Tag" Value="ActiveMultimedia" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                        <StackPanel Orientation="Horizontal">
+                            <materialDesign:PackIcon Kind="ImageMultipleOutline" Width="17" Height="17" Margin="0,0,9,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentTeal}" />
+                            <TextBlock Text="多媒体" VerticalAlignment="Center" FontSize="12" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                         </StackPanel>
                     </Button>
 
@@ -711,38 +700,6 @@
                         </StackPanel>
                     </Button>
 
-                    <Button Command="{Binding ShowImageViewerCommand}">
-                        <Button.Style>
-                            <Style TargetType="Button" BasedOn="{StaticResource NavItemStyle}">
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding CurrentModule}" Value="ImageViewer">
-                                        <Setter Property="Tag" Value="ActiveImageViewer" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Button.Style>
-                        <StackPanel Orientation="Horizontal">
-                            <materialDesign:PackIcon Kind="Image" Width="17" Height="17" Margin="0,0,9,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentTeal}" />
-                            <TextBlock Text="图片查看" VerticalAlignment="Center" FontSize="12" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
-                        </StackPanel>
-                    </Button>
-
-                    <Button Command="{Binding ShowVideoViewerCommand}">
-                        <Button.Style>
-                            <Style TargetType="Button" BasedOn="{StaticResource NavItemStyle}">
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding CurrentModule}" Value="VideoViewer">
-                                        <Setter Property="Tag" Value="ActiveVideoViewer" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Button.Style>
-                        <StackPanel Orientation="Horizontal">
-                            <materialDesign:PackIcon Kind="VideoOutline" Width="17" Height="17" Margin="0,0,9,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentAmber}" />
-                            <TextBlock Text="音视频播放" VerticalAlignment="Center" FontSize="12" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
-                        </StackPanel>
-                    </Button>
-
                     <Button Command="{Binding ShowCodexProfilesCommand}">
                         <Button.Style>
                             <Style TargetType="Button" BasedOn="{StaticResource NavItemStyle}">
@@ -756,22 +713,6 @@
                         <StackPanel Orientation="Horizontal">
                             <materialDesign:PackIcon Kind="FolderCogOutline" Width="17" Height="17" Margin="0,0,9,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentTeal}" />
                             <TextBlock Text="Codex 配置" VerticalAlignment="Center" FontSize="12" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
-                        </StackPanel>
-                    </Button>
-
-                    <Button Command="{Binding ShowSystemInfoCommand}">
-                        <Button.Style>
-                            <Style TargetType="Button" BasedOn="{StaticResource NavItemStyle}">
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding CurrentModule}" Value="SystemInfo">
-                                        <Setter Property="Tag" Value="ActiveNetwork" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Button.Style>
-                        <StackPanel Orientation="Horizontal">
-                            <materialDesign:PackIcon Kind="Chip" Width="17" Height="17" Margin="0,0,9,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentBlue}" />
-                            <TextBlock Text="系统信息" VerticalAlignment="Center" FontSize="12" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                         </StackPanel>
                     </Button>
 
@@ -791,38 +732,6 @@
                         </StackPanel>
                     </Button>
 
-                    <Button Command="{Binding ShowConvertCommand}">
-                        <Button.Style>
-                            <Style TargetType="Button" BasedOn="{StaticResource NavItemStyle}">
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding CurrentModule}" Value="Convert">
-                                        <Setter Property="Tag" Value="ActiveNetwork" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Button.Style>
-                        <StackPanel Orientation="Horizontal">
-                            <materialDesign:PackIcon Kind="SwapHorizontal" Width="17" Height="17" Margin="0,0,9,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentAmber}" />
-                            <TextBlock Text="格式转换" VerticalAlignment="Center" FontSize="12" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
-                        </StackPanel>
-                    </Button>
-
-                    <Button Command="{Binding ShowBenchmarkCommand}">
-                        <Button.Style>
-                            <Style TargetType="Button" BasedOn="{StaticResource NavItemStyle}">
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding CurrentModule}" Value="Benchmark">
-                                        <Setter Property="Tag" Value="ActiveNetwork" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Button.Style>
-                        <StackPanel Orientation="Horizontal">
-                            <materialDesign:PackIcon Kind="SpeedometerMedium" Width="17" Height="17" Margin="0,0,9,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentRose}" />
-                            <TextBlock Text="性能测试" VerticalAlignment="Center" FontSize="12" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
-                        </StackPanel>
-                    </Button>
-
                     <Button Command="{Binding ShowScheduleCommand}">
                         <Button.Style>
                             <Style TargetType="Button" BasedOn="{StaticResource NavItemStyle}">
@@ -836,22 +745,6 @@
                         <StackPanel Orientation="Horizontal">
                             <materialDesign:PackIcon Kind="CalendarMonth" Width="17" Height="17" Margin="0,0,9,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentTeal}" />
                             <TextBlock Text="排班" VerticalAlignment="Center" FontSize="12" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
-                        </StackPanel>
-                    </Button>
-
-                    <Button Command="{Binding ShowSystemSettingsCommand}">
-                        <Button.Style>
-                            <Style TargetType="Button" BasedOn="{StaticResource NavItemStyle}">
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding CurrentModule}" Value="SystemSettings">
-                                        <Setter Property="Tag" Value="ActiveNetwork" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Button.Style>
-                        <StackPanel Orientation="Horizontal">
-                            <materialDesign:PackIcon Kind="CogOutline" Width="17" Height="17" Margin="0,0,9,0" VerticalAlignment="Center" Foreground="{DynamicResource BrushAccentBlue}" />
-                            <TextBlock Text="系统设置" VerticalAlignment="Center" FontSize="12" Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                         </StackPanel>
                     </Button>
 
@@ -882,13 +775,29 @@
                     </Style>
                 </ContentControl.Style>
             </ContentControl>
+            <ContentControl Content="{Binding}"
+                            ContentTemplate="{StaticResource SystemSectionTabs}"
+                            Panel.ZIndex="10"
+                            VerticalAlignment="Top"
+                            Margin="16,12,16,0">
+                <ContentControl.Style>
+                    <Style TargetType="ContentControl">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding CurrentModule}" Value="System">
+                                <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </ContentControl.Style>
+            </ContentControl>
 
-            <Grid Margin="16">
+            <Grid Margin="16,58,16,16">
                 <Grid.Style>
                     <Style TargetType="Grid">
                         <Setter Property="Visibility" Value="Collapsed" />
                         <Style.Triggers>
-                            <DataTrigger Binding="{Binding CurrentModule}" Value="Network">
+                            <DataTrigger Binding="{Binding IsSystemNetworkVisible}" Value="True">
                                 <Setter Property="Visibility" Value="Visible" />
                             </DataTrigger>
                         </Style.Triggers>
@@ -1016,12 +925,12 @@
                 </Grid>
             </Grid>
 
-            <Grid Margin="16">
+            <Grid Margin="16,58,16,16">
                 <Grid.Style>
                     <Style TargetType="Grid">
                         <Setter Property="Visibility" Value="Collapsed" />
                         <Style.Triggers>
-                            <DataTrigger Binding="{Binding CurrentModule}" Value="Uninstall">
+                            <DataTrigger Binding="{Binding IsSystemUninstallVisible}" Value="True">
                                 <Setter Property="Visibility" Value="Visible" />
                             </DataTrigger>
                         </Style.Triggers>
@@ -1243,7 +1152,7 @@
                     <Style TargetType="Grid">
                         <Setter Property="Visibility" Value="Collapsed" />
                         <Style.Triggers>
-                            <DataTrigger Binding="{Binding CurrentModule}" Value="Startup">
+                            <DataTrigger Binding="{Binding IsSystemStartupVisible}" Value="True">
                                 <Setter Property="Visibility" Value="Visible" />
                             </DataTrigger>
                         </Style.Triggers>
@@ -1454,7 +1363,7 @@
                 </Grid>
             </Grid>
 
-            <Grid Margin="20">
+            <Grid Margin="20,62,20,20">
                 <Grid.Style>
                     <Style TargetType="Grid">
                         <Setter Property="Visibility" Value="Collapsed" />
@@ -1757,12 +1666,12 @@
                 </Grid>
             </Grid>
 
-            <Grid Margin="16">
+            <Grid Margin="16,58,16,16">
                 <Grid.Style>
                     <Style TargetType="Grid">
                         <Setter Property="Visibility" Value="Collapsed" />
                         <Style.Triggers>
-                            <DataTrigger Binding="{Binding CurrentModule}" Value="System">
+                            <DataTrigger Binding="{Binding IsSystemOptimizationVisible}" Value="True">
                                 <Setter Property="Visibility" Value="Visible" />
                             </DataTrigger>
                         </Style.Triggers>
@@ -3318,6 +3227,18 @@
                 </TabControl>
             </Grid>
 
+            <views:MultimediaPage DataContext="{Binding Multimedia}">
+                <views:MultimediaPage.Style>
+                    <Style TargetType="views:MultimediaPage">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding DataContext.CurrentModule, RelativeSource={RelativeSource AncestorType=mah:MetroWindow}}" Value="Multimedia">
+                                <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </views:MultimediaPage.Style>
+            </views:MultimediaPage>
             <!-- Image viewer panel -->
             <Grid Margin="16">
                 <Grid.Style>
@@ -3998,12 +3919,12 @@
             </Grid>
 
             <!-- System Info module -->
-            <Grid Margin="16">
+            <Grid Margin="16,58,16,16">
                 <Grid.Style>
                     <Style TargetType="Grid">
                         <Setter Property="Visibility" Value="Collapsed" />
                         <Style.Triggers>
-                            <DataTrigger Binding="{Binding CurrentModule}" Value="SystemInfo">
+                            <DataTrigger Binding="{Binding IsSystemInfoVisible}" Value="True">
                                 <Setter Property="Visibility" Value="Visible" />
                             </DataTrigger>
                         </Style.Triggers>
@@ -4954,12 +4875,12 @@
             </Grid>
 
             <!-- Benchmark module -->
-            <Grid Margin="16">
+            <Grid Margin="16,58,16,16">
                 <Grid.Style>
                     <Style TargetType="Grid">
                         <Setter Property="Visibility" Value="Collapsed" />
                         <Style.Triggers>
-                            <DataTrigger Binding="{Binding CurrentModule}" Value="Benchmark">
+                            <DataTrigger Binding="{Binding IsSystemBenchmarkVisible}" Value="True">
                                 <Setter Property="Visibility" Value="Visible" />
                             </DataTrigger>
                         </Style.Triggers>
@@ -5132,12 +5053,12 @@
             </views:SchedulePage>
 
             <!-- ============== System Settings module ============== -->
-            <views:SystemSettingsPage DataContext="{Binding SystemSettings}">
+            <views:SystemSettingsPage Margin="16,58,16,16" DataContext="{Binding SystemSettings}">
                 <views:SystemSettingsPage.Style>
                     <Style TargetType="views:SystemSettingsPage">
                         <Setter Property="Visibility" Value="Collapsed" />
                         <Style.Triggers>
-                            <DataTrigger Binding="{Binding DataContext.CurrentModule, RelativeSource={RelativeSource AncestorType=mah:MetroWindow}}" Value="SystemSettings">
+                            <DataTrigger Binding="{Binding DataContext.IsSystemSettingsVisible, RelativeSource={RelativeSource AncestorType=mah:MetroWindow}}" Value="True">
                                 <Setter Property="Visibility" Value="Visible" />
                             </DataTrigger>
                         </Style.Triggers>

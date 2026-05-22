@@ -64,8 +64,11 @@ namespace MyTools.ViewModels
         private ObservableCollection<string> _wgConnectionLogs;
         private ObservableCollection<WireGuardTunnelItem> _wireGuardTunnels;
         private string _currentModule;
+        private string _currentSystemSection = "Optimization";
+        private int _selectedSystemSectionIndex;
         private ScheduleViewModel _schedule;
         private SystemSettingsViewModel _systemSettings;
+        private MultimediaViewModel _multimedia;
         private string _sqlServerAddress;
         private string _sqlPort = "1433";
         private SqlProviderKind _selectedSqlProvider = SqlProviderKind.SqlServer;
@@ -164,6 +167,14 @@ namespace MyTools.ViewModels
         private readonly DispatcherTimer _audioRecordingTimer;
         private uint _pendingModifiers = 0x0006;
         private uint _pendingKey = 0x5A;
+        private uint _pendingVideoRecordModifiers;
+        private uint _pendingVideoRecordKey;
+        private string _videoRecordHotkeyText = "\u672a\u8bbe\u7f6e";
+        private bool _isCapturingVideoRecordHotkey;
+        private uint _pendingAudioRecordModifiers;
+        private uint _pendingAudioRecordKey;
+        private string _audioRecordHotkeyText = "\u672a\u8bbe\u7f6e";
+        private bool _isCapturingAudioRecordHotkey;
         private string _codexProfilesStatusMessage = "拖入包含 config.toml 和 auth.json 的文件夹，生成可应用的 Codex 配置记录。";
         private bool _isAutoStartEnabled;
         private FileHashResult _currentFileHashResult;
@@ -314,21 +325,22 @@ namespace MyTools.ViewModels
 
             RefreshCommand = new RelayCommand(Refresh);
             ShowHomeCommand = new RelayCommand(() => SwitchModule("Home"));
-            ShowNetworkCommand = new RelayCommand(() => { SwitchModule("Network"); Refresh(); });
-            ShowStartupCommand = new RelayCommand(() => { SwitchModule("Startup"); Refresh(); });
+            ShowNetworkCommand = new RelayCommand(() => ShowSystemSection("Network"));
+            ShowStartupCommand = new RelayCommand(() => ShowSystemSection("Startup"));
             ShowWireGuardCommand = new RelayCommand(() => { SwitchModule("WireGuard"); Refresh(); });
-            ShowSystemCommand = new RelayCommand(() => { SwitchModule("System"); Refresh(); });
-            ShowUninstallCommand = new RelayCommand(() => { SwitchModule("Uninstall"); SafeFireAndForget(LoadInstalledProgramsAsync()); });
+            ShowSystemCommand = new RelayCommand(() => ShowSystemSection("Optimization"));
+            ShowUninstallCommand = new RelayCommand(() => ShowSystemSection("Uninstall"));
             ShowSqlExportCommand = new RelayCommand(() => { SwitchModule("SqlExport"); Refresh(); });
             ShowCodexProfilesCommand = new RelayCommand(() => SwitchModule("CodexProfiles"));
-            ShowSystemInfoCommand = new RelayCommand(() => { SwitchModule("SystemInfo"); SafeFireAndForget(LoadSystemInfoAsync()); });
+            ShowSystemInfoCommand = new RelayCommand(() => ShowSystemSection("SystemInfo"));
             ShowFileVerifyCommand = new RelayCommand(() => SwitchModule("FileVerify"));
-            ShowConvertCommand = new RelayCommand(() => { SwitchModule("Convert"); DetectFfmpeg(); });
-            ShowImageViewerCommand = new RelayCommand(() => SwitchModule("ImageViewer"));
-            ShowVideoViewerCommand = new RelayCommand(() => SwitchModule("VideoViewer"));
-            ShowBenchmarkCommand = new RelayCommand(() => SwitchModule("Benchmark"));
+            ShowMultimediaCommand = new RelayCommand(() => ShowMultimedia(MultimediaPreferredFilter.All));
+            ShowConvertCommand = new RelayCommand(() => ShowMultimedia(MultimediaPreferredFilter.All));
+            ShowImageViewerCommand = new RelayCommand(() => ShowMultimedia(MultimediaPreferredFilter.Image));
+            ShowVideoViewerCommand = new RelayCommand(() => ShowMultimedia(MultimediaPreferredFilter.AudioVideo));
+            ShowBenchmarkCommand = new RelayCommand(() => ShowSystemSection("Benchmark"));
             ShowScheduleCommand = new RelayCommand(() => SwitchModule("Schedule"));
-            ShowSystemSettingsCommand = new RelayCommand(() => SwitchModule("SystemSettings"));
+            ShowSystemSettingsCommand = new RelayCommand(() => ShowSystemSection("SystemSettings"));
             LoadSystemInfoCommand = new AsyncRelayCommand(LoadSystemInfoAsync, () => !_isSystemInfoBusy);
             ToggleHardwareSensorsCommand = new RelayCommand(ToggleHardwareSensors);
             RefreshSensorsOnceCommand = new RelayCommand(() => SensorTimer_OnTick(this, EventArgs.Empty), () => _sensorService != null);
@@ -467,6 +479,11 @@ namespace MyTools.ViewModels
             StartCaptureHotkeyCommand = new RelayCommand(() => IsCapturingHotkey = true);
             CancelCaptureHotkeyCommand = new RelayCommand(() => IsCapturingHotkey = false);
             SaveScreenshotSettingsCommand = new AsyncRelayCommand(SaveScreenshotSettingsAsync);
+            StartCaptureVideoRecordHotkeyCommand = new RelayCommand(() => IsCapturingVideoRecordHotkey = true);
+            CancelCaptureVideoRecordHotkeyCommand = new RelayCommand(() => IsCapturingVideoRecordHotkey = false);
+            StartCaptureAudioRecordHotkeyCommand = new RelayCommand(() => IsCapturingAudioRecordHotkey = true);
+            CancelCaptureAudioRecordHotkeyCommand = new RelayCommand(() => IsCapturingAudioRecordHotkey = false);
+            SaveRecordingHotkeySettingsCommand = new AsyncRelayCommand(SaveRecordingHotkeySettingsAsync);
             EditClipboardImageCommand = new RelayCommand(EditClipboardImage);
             OcrClipboardImageCommand = new AsyncRelayCommand(OcrClipboardImageAsync, () => OcrService.IsSupported);
             ComputeFileHashCommand = new AsyncRelayCommand(ComputeFileHashAsync, () => !_isFileHashBusy);
@@ -894,6 +911,7 @@ namespace MyTools.ViewModels
                 var prev = _currentModule;
                 _currentModule = value;
                 OnPropertyChanged();
+                NotifySystemSectionVisibilityChanged();
 
                 // Auto-pause sensor polling when leaving SystemInfo page to save CPU
                 if (prev == "SystemInfo" && _isSensorsRunning && _sensorTimer.IsEnabled)
@@ -904,9 +922,52 @@ namespace MyTools.ViewModels
                 {
                     _sensorTimer.Start();
                 }
+                else if (prev == "System" && value != "System" && string.Equals(CurrentSystemSection, "SystemInfo", StringComparison.Ordinal) && _isSensorsRunning && _sensorTimer.IsEnabled)
+                {
+                    _sensorTimer.Stop();
+                }
             }
         }
 
+        public string CurrentSystemSection
+        {
+            get => _currentSystemSection;
+            private set
+            {
+                if (string.Equals(_currentSystemSection, value, StringComparison.Ordinal)) return;
+                var previous = _currentSystemSection;
+                _currentSystemSection = value;
+                OnPropertyChanged();
+                NotifySystemSectionVisibilityChanged();
+                if (string.Equals(previous, "SystemInfo", StringComparison.Ordinal) && _isSensorsRunning && _sensorTimer.IsEnabled)
+                {
+                    _sensorTimer.Stop();
+                }
+                else if (string.Equals(value, "SystemInfo", StringComparison.Ordinal) && _isSensorsRunning && !_sensorTimer.IsEnabled)
+                {
+                    _sensorTimer.Start();
+                }
+            }
+        }
+
+        public int SelectedSystemSectionIndex
+        {
+            get => _selectedSystemSectionIndex;
+            set
+            {
+                if (value < 0 || value >= SystemSectionKeys.Length) return;
+                if (_selectedSystemSectionIndex == value && string.Equals(CurrentModule, "System", StringComparison.Ordinal)) return;
+                ShowSystemSection(SystemSectionKeys[value]);
+            }
+        }
+
+        public bool IsSystemOptimizationVisible => IsSystemSectionVisible("Optimization");
+        public bool IsSystemNetworkVisible => IsSystemSectionVisible("Network");
+        public bool IsSystemStartupVisible => IsSystemSectionVisible("Startup");
+        public bool IsSystemUninstallVisible => IsSystemSectionVisible("Uninstall");
+        public bool IsSystemInfoVisible => IsSystemSectionVisible("SystemInfo");
+        public bool IsSystemBenchmarkVisible => IsSystemSectionVisible("Benchmark");
+        public bool IsSystemSettingsVisible => IsSystemSectionVisible("SystemSettings");
         public string AppVersionText => BuildAppVersionText();
 
         public bool IsWindows10OrGreater => OsVersionService.IsWindows10OrGreater;
@@ -1108,6 +1169,7 @@ namespace MyTools.ViewModels
         public ICommand ShowUninstallCommand { get; }
         public ICommand ShowSqlExportCommand { get; }
         public ICommand ShowCodexProfilesCommand { get; }
+        public ICommand ShowMultimediaCommand { get; }
         public ICommand ShowImageViewerCommand { get; }
         public ICommand ShowVideoViewerCommand { get; }
         public ICommand ToggleStartupCommand { get; }
@@ -1678,6 +1740,30 @@ namespace MyTools.ViewModels
             set { _isCapturingHotkey = value; OnPropertyChanged(); }
         }
 
+        public string VideoRecordHotkeyText
+        {
+            get => _videoRecordHotkeyText;
+            set { _videoRecordHotkeyText = value; OnPropertyChanged(); }
+        }
+
+        public bool IsCapturingVideoRecordHotkey
+        {
+            get => _isCapturingVideoRecordHotkey;
+            set { _isCapturingVideoRecordHotkey = value; OnPropertyChanged(); }
+        }
+
+        public string AudioRecordHotkeyText
+        {
+            get => _audioRecordHotkeyText;
+            set { _audioRecordHotkeyText = value; OnPropertyChanged(); }
+        }
+
+        public bool IsCapturingAudioRecordHotkey
+        {
+            get => _isCapturingAudioRecordHotkey;
+            set { _isCapturingAudioRecordHotkey = value; OnPropertyChanged(); }
+        }
+
         public bool IsGifRecordingMode
         {
             get => _isGifRecordingMode;
@@ -1745,6 +1831,11 @@ namespace MyTools.ViewModels
         public ICommand SelectAudioOutputFolderCommand { get; }
         public ICommand StartCaptureHotkeyCommand { get; }
         public ICommand CancelCaptureHotkeyCommand { get; }
+        public ICommand StartCaptureVideoRecordHotkeyCommand { get; }
+        public ICommand CancelCaptureVideoRecordHotkeyCommand { get; }
+        public ICommand StartCaptureAudioRecordHotkeyCommand { get; }
+        public ICommand CancelCaptureAudioRecordHotkeyCommand { get; }
+        public ICommand SaveRecordingHotkeySettingsCommand { get; }
         public ICommand SaveScreenshotSettingsCommand { get; }
         public ICommand EditClipboardImageCommand { get; }
         public ICommand OcrClipboardImageCommand { get; }
@@ -2699,6 +2790,70 @@ namespace MyTools.ViewModels
             SafeFireAndForget(AddCodexProfileFoldersAsync(folderPaths));
         }
 
+        private static readonly string[] SystemSectionKeys = { "Optimization", "Network", "Startup", "Uninstall", "SystemInfo", "Benchmark", "SystemSettings" };
+
+        private void ShowSystemSection(string section)
+        {
+            var normalized = NormalizeSystemSection(section);
+            SwitchModule("System");
+            CurrentSystemSection = normalized;
+            var index = Array.IndexOf(SystemSectionKeys, normalized);
+            if (index < 0) index = 0;
+            if (_selectedSystemSectionIndex != index)
+            {
+                _selectedSystemSectionIndex = index;
+                OnPropertyChanged(nameof(SelectedSystemSectionIndex));
+            }
+
+            LoadSystemSection(normalized);
+        }
+
+        private static string NormalizeSystemSection(string section)
+        {
+            if (SystemSectionKeys.Contains(section)) return section;
+            return "Optimization";
+        }
+
+        private bool IsSystemSectionVisible(string section)
+        {
+            return string.Equals(CurrentModule, "System", StringComparison.Ordinal)
+                   && string.Equals(CurrentSystemSection, section, StringComparison.Ordinal);
+        }
+
+        private void NotifySystemSectionVisibilityChanged()
+        {
+            OnPropertyChanged(nameof(IsSystemOptimizationVisible));
+            OnPropertyChanged(nameof(IsSystemNetworkVisible));
+            OnPropertyChanged(nameof(IsSystemStartupVisible));
+            OnPropertyChanged(nameof(IsSystemUninstallVisible));
+            OnPropertyChanged(nameof(IsSystemInfoVisible));
+            OnPropertyChanged(nameof(IsSystemBenchmarkVisible));
+            OnPropertyChanged(nameof(IsSystemSettingsVisible));
+        }
+
+        private void LoadSystemSection(string section)
+        {
+            if (string.Equals(section, "Network", StringComparison.Ordinal))
+            {
+                Refresh();
+            }
+            else if (string.Equals(section, "Startup", StringComparison.Ordinal))
+            {
+                Refresh();
+            }
+            else if (string.Equals(section, "Uninstall", StringComparison.Ordinal))
+            {
+                SafeFireAndForget(LoadInstalledProgramsAsync());
+            }
+            else if (string.Equals(section, "SystemInfo", StringComparison.Ordinal))
+            {
+                SafeFireAndForget(LoadSystemInfoAsync());
+            }
+            else if (string.Equals(section, "Optimization", StringComparison.Ordinal))
+            {
+                RefreshSystemStatus();
+            }
+        }
         private void SwitchModule(string module)
         {
             CurrentModule = module;
@@ -2707,27 +2862,42 @@ namespace MyTools.ViewModels
             {
                 AddHomeRecentItem("排班管理", "最近进入排班模块", module, string.Empty, "打开");
             }
+            else if (string.Equals(module, "Multimedia", StringComparison.Ordinal))
+            {
+                AddHomeRecentItem("多媒体", "最近进入多媒体模块", module, string.Empty, "打开");
+            }
         }
 
+        public void SwitchToHomeFromMultimedia()
+        {
+            SwitchModule("Home");
+        }
+
+        private void ShowMultimedia(MultimediaPreferredFilter preferredFilter)
+        {
+            SwitchModule("Multimedia");
+            Multimedia.PreferredFilter = preferredFilter;
+            if (preferredFilter == MultimediaPreferredFilter.All)
+            {
+                DetectFfmpeg();
+            }
+
+            Application.Current?.Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() =>
+            {
+                SafeFireAndForget(Multimedia.InitializeOnEnterAsync());
+            }));
+        }
         private void InitializeHomeCommandItems()
         {
             HomeCommandItems.Clear();
 
+            AddHomeCommand("多媒体", "图片查看 + 音视频播放 + 批量格式转换", "多媒体 图片 视频 音频 转换 multimedia image video audio convert", ShowMultimediaCommand);
             AddHomeCommand("截图 / 录像 / 录音", "打开截图工具、区域录像、系统声音录音", "截图 截屏 录像 录屏 录音 声音 热键 capture record audio", ShowScreenshotCommand);
-            AddHomeCommand("图片查看与编辑", "打开图片、缩放、旋转、翻转、灰度、标注", "图片 照片 看图 编辑 旋转 标注 image photo", ShowImageViewerCommand);
-            AddHomeCommand("音视频播放", "播放视频、音频、播放列表和外部打开", "视频 音频 播放 电影 mp4 mp3 player video audio", ShowVideoViewerCommand);
-            AddHomeCommand("格式转换", "批量转换图片、视频、音频，查看输出队列", "转换 格式 压缩 mp4 mp3 jpg png ffmpeg convert", ShowConvertCommand);
             AddHomeCommand("SQL 导出 / 查询", "连接数据库、查询、导出 Excel 或 CSV", "sql 数据库 查询 导出 excel csv mysql postgresql", ShowSqlExportCommand);
             AddHomeCommand("排班管理", "维护人员、生成排班、冲突检查、导出 Excel", "排班 班次 人员 休息 冲突 excel schedule", ShowScheduleCommand);
             AddHomeCommand("文件哈希校验", "计算 MD5、SHA-1、SHA-256、CRC32", "哈希 校验 md5 sha crc 文件 verify hash", ShowFileVerifyCommand);
-            AddHomeCommand("当前网络", "查看网卡、网关、DNS、MAC 和速率", "网络 网卡 ip dns mac 网关 network", ShowNetworkCommand);
-            AddHomeCommand("系统优化与清理", "系统优化、垃圾扫描、微信清理和备份", "系统 优化 清理 垃圾 微信 备份 restore cleanup", ShowSystemCommand);
-            AddHomeCommand("启动项管理", "查看、搜索、启停启动项和签名状态", "启动项 开机 自启动 autoruns startup", ShowStartupCommand);
-            AddHomeCommand("程序卸载", "搜索、筛选、导出和启动卸载程序", "卸载 软件 程序 列表 uninstall app", ShowUninstallCommand);
-            AddHomeCommand("系统信息 / 传感器", "硬件信息、传感器状态和设备概览", "系统信息 硬件 传感器 cpu 内存 磁盘 gpu", ShowSystemInfoCommand);
-            AddHomeCommand("性能测试", "CPU、内存、GPU 信息测试和结果导出", "性能 测试 跑分 cpu 内存 gpu benchmark", ShowBenchmarkCommand);
+            AddHomeCommand("系统", "系统优化、当前网络、启动管理、程序卸载、系统信息、性能测试和系统设置", "系统 优化 清理 网络 启动 卸载 信息 性能 设置 backup settings network startup uninstall benchmark", ShowSystemCommand);
             AddHomeCommand("WireGuard", "导入配置、生成配置、连接或断开隧道", "wireguard vpn 隧道 配置 连接", ShowWireGuardCommand);
-            AddHomeCommand("系统设置与备份", "备份恢复配置、关联音视频文件", "设置 备份 恢复 关联 默认程序 settings backup", ShowSystemSettingsCommand);
             AddHomeCommand("Codex 配置", "导入、切换、备份 Codex 配置资料", "codex 配置 profile config auth", ShowCodexProfilesCommand);
         }
 
@@ -5889,12 +6059,46 @@ namespace MyTools.ViewModels
 
         public void ReRegisterHotkey()
         {
-            if (_pendingKey == 0)
-            {
-                return;
-            }
+            if (_pendingKey != 0)
+                SafeFireAndForget(TryRegisterHotkeyAsync(_pendingModifiers, _pendingKey, false));
+            if (_pendingVideoRecordKey != 0)
+                SafeFireAndForget(TryRegisterHotkeyByIdAsync(HotkeyService.VideoRecordHotkeyId, _pendingVideoRecordModifiers, _pendingVideoRecordKey, false));
+            if (_pendingAudioRecordKey != 0)
+                SafeFireAndForget(TryRegisterHotkeyByIdAsync(HotkeyService.AudioRecordHotkeyId, _pendingAudioRecordModifiers, _pendingAudioRecordKey, false));
+        }
 
-            SafeFireAndForget(TryRegisterHotkeyAsync(_pendingModifiers, _pendingKey, false));
+        public void ApplyPendingVideoRecordHotkey(uint modifiers, uint key)
+        {
+            var prevMod = _pendingVideoRecordModifiers;
+            var prevKey = _pendingVideoRecordKey;
+            var prevText = VideoRecordHotkeyText;
+            _pendingVideoRecordModifiers = modifiers;
+            _pendingVideoRecordKey = key;
+            VideoRecordHotkeyText = HotkeyService.BuildDisplayText(modifiers, key);
+            SafeFireAndForget(TryRegisterHotkeyByIdAsync(HotkeyService.VideoRecordHotkeyId, modifiers, key, true, () =>
+            {
+                _pendingVideoRecordModifiers = prevMod;
+                _pendingVideoRecordKey = prevKey;
+                VideoRecordHotkeyText = prevText;
+            }));
+            IsCapturingVideoRecordHotkey = false;
+        }
+
+        public void ApplyPendingAudioRecordHotkey(uint modifiers, uint key)
+        {
+            var prevMod = _pendingAudioRecordModifiers;
+            var prevKey = _pendingAudioRecordKey;
+            var prevText = AudioRecordHotkeyText;
+            _pendingAudioRecordModifiers = modifiers;
+            _pendingAudioRecordKey = key;
+            AudioRecordHotkeyText = HotkeyService.BuildDisplayText(modifiers, key);
+            SafeFireAndForget(TryRegisterHotkeyByIdAsync(HotkeyService.AudioRecordHotkeyId, modifiers, key, true, () =>
+            {
+                _pendingAudioRecordModifiers = prevMod;
+                _pendingAudioRecordKey = prevKey;
+                AudioRecordHotkeyText = prevText;
+            }));
+            IsCapturingAudioRecordHotkey = false;
         }
 
         public void ApplyPendingHotkey(uint modifiers, uint key)
@@ -6382,9 +6586,29 @@ namespace MyTools.ViewModels
                     ScreenshotHotkeyText = string.IsNullOrWhiteSpace(settings.ScreenshotHotkey.DisplayText)
                         ? HotkeyService.BuildDisplayText(_pendingModifiers, _pendingKey)
                         : settings.ScreenshotHotkey.DisplayText;
+
+                    _pendingVideoRecordModifiers = settings.VideoRecordHotkey.Modifiers;
+                    _pendingVideoRecordKey = settings.VideoRecordHotkey.Key;
+                    VideoRecordHotkeyText = _pendingVideoRecordKey != 0
+                        ? (string.IsNullOrWhiteSpace(settings.VideoRecordHotkey.DisplayText)
+                            ? HotkeyService.BuildDisplayText(_pendingVideoRecordModifiers, _pendingVideoRecordKey)
+                            : settings.VideoRecordHotkey.DisplayText)
+                        : "未设置";
+
+                    _pendingAudioRecordModifiers = settings.AudioRecordHotkey.Modifiers;
+                    _pendingAudioRecordKey = settings.AudioRecordHotkey.Key;
+                    AudioRecordHotkeyText = _pendingAudioRecordKey != 0
+                        ? (string.IsNullOrWhiteSpace(settings.AudioRecordHotkey.DisplayText)
+                            ? HotkeyService.BuildDisplayText(_pendingAudioRecordModifiers, _pendingAudioRecordKey)
+                            : settings.AudioRecordHotkey.DisplayText)
+                        : "未设置";
                 });
 
                 await TryRegisterHotkeyAsync(_pendingModifiers, _pendingKey, false);
+                if (_pendingVideoRecordKey != 0)
+                    await TryRegisterHotkeyByIdAsync(HotkeyService.VideoRecordHotkeyId, _pendingVideoRecordModifiers, _pendingVideoRecordKey, false);
+                if (_pendingAudioRecordKey != 0)
+                    await TryRegisterHotkeyByIdAsync(HotkeyService.AudioRecordHotkeyId, _pendingAudioRecordModifiers, _pendingAudioRecordKey, false);
             }
             catch (Exception ex)
             {
@@ -6916,7 +7140,7 @@ namespace MyTools.ViewModels
 
             return await dispatcher.InvokeAsync(() =>
             {
-                var registered = HotkeyService.Register(modifiers, key);
+                var registered = HotkeyService.Register(HotkeyService.ScreenshotHotkeyId, modifiers, key);
                 if (registered || !showMessageOnFailure)
                 {
                     return registered;
@@ -6930,6 +7154,45 @@ namespace MyTools.ViewModels
                     MessageBoxImage.Warning);
                 return false;
             });
+        }
+
+        private Task<bool> TryRegisterHotkeyByIdAsync(int id, uint modifiers, uint key, bool showMessageOnFailure, Action onRegisterFailed = null)
+        {
+            var dispatcher = Application.Current?.Dispatcher;
+            if (dispatcher == null) return System.Threading.Tasks.Task.FromResult(false);
+            return dispatcher.InvokeAsync(() =>
+            {
+                var registered = HotkeyService.Register(id, modifiers, key);
+                if (registered || !showMessageOnFailure) return registered;
+                onRegisterFailed?.Invoke();
+                MessageBox.Show(
+                    BuildHotkeyRegistrationErrorMessage(modifiers, key, HotkeyService.LastWin32ErrorCode),
+                    "快捷键不可用",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                return false;
+            }).Task;
+        }
+
+        private async System.Threading.Tasks.Task SaveRecordingHotkeySettingsAsync()
+        {
+            try
+            {
+                await AppSettingsService.UpdateAsync(settings =>
+                {
+                    settings.VideoRecordHotkey = new HotkeySettings { Modifiers = _pendingVideoRecordModifiers, Key = _pendingVideoRecordKey, DisplayText = VideoRecordHotkeyText };
+                    settings.AudioRecordHotkey = new HotkeySettings { Modifiers = _pendingAudioRecordModifiers, Key = _pendingAudioRecordKey, DisplayText = AudioRecordHotkeyText };
+                });
+                if (_pendingVideoRecordKey != 0)
+                    await TryRegisterHotkeyByIdAsync(HotkeyService.VideoRecordHotkeyId, _pendingVideoRecordModifiers, _pendingVideoRecordKey, true);
+                if (_pendingAudioRecordKey != 0)
+                    await TryRegisterHotkeyByIdAsync(HotkeyService.AudioRecordHotkeyId, _pendingAudioRecordModifiers, _pendingAudioRecordKey, true);
+                Application.Current?.Dispatcher.Invoke(() => MessageBox.Show("设置已保存", "完成", MessageBoxButton.OK, MessageBoxImage.Information));
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "SaveRecordingHotkeySettings failed");
+            }
         }
 
         private static string BuildHotkeyRegistrationErrorMessage(uint modifiers, uint key, int errorCode)
@@ -6989,7 +7252,30 @@ namespace MyTools.ViewModels
             }
             else if (CurrentModule == "System")
             {
-                RefreshSystemStatus();
+                if (string.Equals(CurrentSystemSection, "Network", StringComparison.Ordinal))
+                {
+                    var data = NetworkService.GetAllNetworkDetails();
+                    NetworkList.Clear();
+                    foreach (var item in data)
+                    {
+                        NetworkList.Add(item);
+                    }
+                }
+                else if (string.Equals(CurrentSystemSection, "Startup", StringComparison.Ordinal))
+                {
+                    var data = StartupService.GetStartupItems();
+                    StartupList.Clear();
+                    foreach (var item in data)
+                    {
+                        StartupList.Add(item);
+                    }
+                    FilteredStartupView?.Refresh();
+                    OnPropertyChanged(nameof(HasNoStartupItems));
+                }
+                else
+                {
+                    RefreshSystemStatus();
+                }
             }
         }
 
@@ -9364,6 +9650,90 @@ namespace MyTools.ViewModels
             ConvertStatusMessage = "已应用预设：音频转 MP3。";
         }
 
+        public async Task ConvertMultimediaFilesAsync(IList<MediaFileItem> targets, MediaConvertParameters parameters)
+        {
+            if (targets == null || targets.Count == 0 || parameters == null)
+            {
+                ConvertStatusMessage = "没有可转换的媒体文件。";
+                return;
+            }
+
+            ImageOutputFormat = parameters.ImageFormat;
+            ImageMaxWidth = parameters.ImageMaxWidth;
+            ImageMaxHeight = parameters.ImageMaxHeight;
+            ImageQuality = parameters.ImageQuality;
+            MediaOutputFormat = parameters.MediaFormat;
+            MediaExtraArgs = parameters.MediaExtraArgs ?? string.Empty;
+            ConvertOutputMode = parameters.OutputMode;
+            ConvertCustomOutputFolder = parameters.OutputFolder;
+
+            var imageTargets = targets.Where(item => item.Kind == MediaKind.Image && File.Exists(item.Path)).ToList();
+            var mediaTargets = targets.Where(item => (item.Kind == MediaKind.Audio || item.Kind == MediaKind.Video) && File.Exists(item.Path)).ToList();
+            var outputDirectory = ResolveConvertOutputDirectory();
+            var results = new List<ConvertResult>();
+
+            if (mediaTargets.Count > 0 && !_isFfmpegAvailable)
+            {
+                DetectFfmpeg();
+                if (!_isFfmpegAvailable)
+                {
+                    ConvertStatusMessage = "FFmpeg 未检测到，无法转换音视频。";
+                    return;
+                }
+            }
+
+            var allPaths = imageTargets.Select(item => item.Path).Concat(mediaTargets.Select(item => item.Path)).ToList();
+            PrepareConvertQueue(allPaths, imageTargets.Count > 0 && mediaTargets.Count == 0 ? "图片" : mediaTargets.Count > 0 && imageTargets.Count == 0 ? "音视频" : "多媒体");
+            var cancellationTokenSource = BeginConvertOperation();
+            var cancellationToken = cancellationTokenSource.Token;
+            ConvertResult = string.Empty;
+            SetConvertOutputPath(string.Empty);
+
+            try
+            {
+                var queueSnapshot = ConvertQueueItems.ToList();
+                for (var i = 0; i < queueSnapshot.Count; i++)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    await WaitIfConvertPausedAsync(cancellationToken);
+                    var queueItem = queueSnapshot[i];
+                    if (queueItem == null) continue;
+                    MarkConvertQueueItemRunning(queueItem);
+                    var sourceKind = MediaFileTypeHelper.Classify(Path.GetExtension(queueItem.SourcePath));
+                    ConvertStatusMessage = $"正在转换 {i + 1}/{queueSnapshot.Count}：{queueItem.FileName}";
+                    ConvertResult result;
+                    if (sourceKind == MediaKind.Image)
+                    {
+                        result = await MediaConvertService.ConvertImageAsync(queueItem.SourcePath, _imageOutputFormat, _imageMaxWidth, _imageMaxHeight, _imageQuality, outputDirectory, cancellationToken);
+                    }
+                    else
+                    {
+                        var index = i + 1;
+                        var progress = new Progress<string>(msg => ConvertStatusMessage = $"音视频 {index}/{queueSnapshot.Count}：{msg}");
+                        result = await MediaConvertService.ConvertMediaAsync(_ffmpegPath, queueItem.SourcePath, _mediaOutputFormat, _mediaExtraArgs ?? string.Empty, outputDirectory, progress, cancellationToken);
+                    }
+                    results.Add(result);
+                    ApplyConvertQueueResult(queueItem, result);
+                }
+
+                ApplyConvertResults(results, "多媒体转换");
+            }
+            catch (OperationCanceledException)
+            {
+                ConvertStatusMessage = "已取消转换。";
+                ConvertResult = "转换已取消。";
+                MarkWaitingConvertQueueCancelled();
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "Multimedia convert failed");
+                ConvertStatusMessage = "转换失败：" + ex.Message;
+            }
+            finally
+            {
+                EndConvertOperation(cancellationTokenSource);
+            }
+        }
         private async Task ConvertImageAsync()
         {
             var dialog = new Microsoft.Win32.OpenFileDialog
@@ -9612,6 +9982,19 @@ namespace MyTools.ViewModels
                 }
 
                 return _systemSettings;
+            }
+        }
+        public MultimediaViewModel Multimedia
+        {
+            get
+            {
+                if (_multimedia == null)
+                {
+                    _multimedia = new MultimediaViewModel(this);
+                    OnPropertyChanged();
+                }
+
+                return _multimedia;
             }
         }
         public ICommand RunAllBenchmarksCommand { get; }

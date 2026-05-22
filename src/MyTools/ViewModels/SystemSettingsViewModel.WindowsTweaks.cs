@@ -15,9 +15,10 @@ namespace MyTools.ViewModels
         public ICommand RefreshTweaksCommand { get; private set; }
 
         public bool IsWindows11 => WindowsTweaksService.IsWindows11;
+        public bool SupportsSecondsInClock => WindowsTweaksService.SupportsSecondsInClock;
         public string TweaksHint => IsWindows11
-            ? "时钟秒、任务栏合并、托盘图标改动需重启资源管理器后生效；Win11 托盘开关会同步当前已记录的图标。"
-            : "当前不是 Windows 11（22H2+），「时钟显示秒」开关无效。其余项 Win10/11 均可。";
+            ? "当前系统：" + OsVersionService.DisplayName + "。任务栏、托盘和右键菜单改动需重启资源管理器后生效。"
+            : "当前系统：" + OsVersionService.DisplayName + "。Win11 专属项在当前系统不可用，其余项 Win10/11 均可。";
 
         // ========== 时钟秒 ==========
         private bool _showSecondsInClock;
@@ -77,6 +78,19 @@ namespace MyTools.ViewModels
         {
             get => _taskbarGlom == WindowsTweaksService.TaskbarGlom.NeverCombine;
             set { if (value) TaskbarGlom = WindowsTweaksService.TaskbarGlom.NeverCombine; }
+        }
+
+        private bool _useClassicContextMenu;
+        public bool UseClassicContextMenu
+        {
+            get => _useClassicContextMenu;
+            set
+            {
+                if (_useClassicContextMenu == value) return;
+                _useClassicContextMenu = value;
+                OnPropertyChanged();
+                if (!_tweaksLoading) TryWriteTweak(() => WindowsTweaksService.SetUseClassicContextMenu(value), nameof(UseClassicContextMenu));
+            }
         }
 
         // ========== 桌面图标 ==========
@@ -144,6 +158,7 @@ namespace MyTools.ViewModels
                 ShowControlPanel = WindowsTweaksService.GetDesktopIconVisible(WindowsTweaksService.ClsidControlPanel);
                 ShowUserFiles = WindowsTweaksService.GetDesktopIconVisible(WindowsTweaksService.ClsidUserFiles);
                 ShowNetwork = WindowsTweaksService.GetDesktopIconVisible(WindowsTweaksService.ClsidNetwork);
+                UseClassicContextMenu = WindowsTweaksService.GetUseClassicContextMenu();
                 TweaksStatusMessage = "已读取当前注册表状态。";
             }
             catch (Exception ex)
@@ -159,15 +174,50 @@ namespace MyTools.ViewModels
             try
             {
                 write();
-                TweaksStatusMessage = fieldName == nameof(TrayShowAll)
-                    ? "已写入托盘图标设置。请点「重启资源管理器」使任务栏重新加载。"
-                    : $"已写入：{fieldName}。如未生效，请点「重启资源管理器」。";
+                TweaksStatusMessage = NeedsExplorerRestart(fieldName)
+                    ? "已写入：" + GetTweakDisplayName(fieldName) + "。请点「重启资源管理器」后生效。"
+                    : "已写入：" + GetTweakDisplayName(fieldName) + "。";
             }
             catch (Exception ex)
             {
                 AppLogService.Error(ex, "Write Windows tweak failed: " + fieldName);
                 TweaksStatusMessage = "写入失败：" + ex.Message;
                 MessageBox.Show(ex.Message, "写入失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private static bool NeedsExplorerRestart(string fieldName)
+        {
+            return fieldName == nameof(ShowSecondsInClock)
+                   || fieldName == nameof(TrayShowAll)
+                   || fieldName == nameof(TaskbarGlom)
+                   || fieldName == nameof(UseClassicContextMenu);
+        }
+
+        private static string GetTweakDisplayName(string fieldName)
+        {
+            switch (fieldName)
+            {
+                case nameof(ShowSecondsInClock):
+                    return "任务栏时钟显示秒";
+                case nameof(TrayShowAll):
+                    return "显示所有托盘图标";
+                case nameof(TaskbarGlom):
+                    return "任务栏按钮合并方式";
+                case nameof(UseClassicContextMenu):
+                    return "右键直接显示完整菜单";
+                case nameof(ShowComputer):
+                    return "桌面图标：计算机";
+                case nameof(ShowRecycleBin):
+                    return "桌面图标：回收站";
+                case nameof(ShowControlPanel):
+                    return "桌面图标：控制面板";
+                case nameof(ShowUserFiles):
+                    return "桌面图标：用户的文件";
+                case nameof(ShowNetwork):
+                    return "桌面图标：网络";
+                default:
+                    return fieldName;
             }
         }
 
