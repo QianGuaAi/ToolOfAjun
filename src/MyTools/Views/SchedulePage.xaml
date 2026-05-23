@@ -86,6 +86,7 @@
                         <Button Content="新建" Style="{StaticResource ToolbarButton}" Command="{Binding NewCommand}" />
                         <Button Content="{Binding EditButtonLabel}" Style="{StaticResource ToolbarButton}" Command="{Binding EditCommand}" />
                         <Button Content="设置休息日" Style="{StaticResource ToolbarButton}" Command="{Binding AutoOptimizeCommand}" ToolTip="开始设置休息日" />
+                        <Button Content="清空" Style="{StaticResource ToolbarButton}" Command="{Binding ClearAllCellsCommand}" ToolTip="清空所有班次格子，恢复初始状态" />
                         <Button Content="-" Style="{StaticResource ToolbarButton}" MinWidth="34" Width="34" Padding="0" Click="ZoomOut_Click" ToolTip="缩小排班表" />
                         <TextBlock x:Name="ZoomText" Text="100%" Width="42" Height="28" TextAlignment="Center" VerticalAlignment="Center" FontSize="12" />
                         <Button Content="+" Style="{StaticResource ToolbarButton}" MinWidth="34" Width="34" Padding="0" Click="ZoomIn_Click" ToolTip="放大排班表" />

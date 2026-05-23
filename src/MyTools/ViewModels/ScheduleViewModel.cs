@@ -31,11 +31,12 @@ namespace MyTools.ViewModels
         public ScheduleViewModel()
         {
             NewCommand = new RelayCommand(NewSchedule);
-            EditCommand = new RelayCommand(EnterEditMode, () => Current != null && !IsEditing);
+            EditCommand = new RelayCommand(ToggleEditMode, () => Current != null);
             SaveCommand = new AsyncRelayCommand(SaveAsync, () => Current != null && IsEditing);
             DeleteVersionCommand = new RelayParameterCommand(DeleteVersion);
             RefreshVersionsCommand = new RelayCommand(LoadVersions);
             AutoOptimizeCommand = new RelayCommand(AutoOptimize, () => Current != null && IsEditing);
+            ClearAllCellsCommand = new RelayCommand(ClearAllCells, () => Current != null && IsEditing);
             LoadVersionCommand = new AsyncRelayParameterCommand(LoadVersionAsync);
             ExportExcelCommand = new AsyncRelayCommand(ExportExcelAsync, () => Current != null);
             ImportEmployeeTemplateCommand = new AsyncRelayCommand(ImportEmployeeTemplateAsync, () => Current != null && IsEditing);
@@ -101,7 +102,7 @@ namespace MyTools.ViewModels
             }
         }
 
-        public string EditButtonLabel => IsEditing ? "编辑中" : "编辑";
+        public string EditButtonLabel => IsEditing ? "退出编辑" : "编辑";
 
         private string _statusMessage = "尚未加载排班表，点击【新建】开始。";
         public string StatusMessage
@@ -152,6 +153,7 @@ namespace MyTools.ViewModels
         public ICommand DeleteVersionCommand { get; }
         public ICommand RefreshVersionsCommand { get; }
         public ICommand AutoOptimizeCommand { get; }
+        public ICommand ClearAllCellsCommand { get; }
         public ICommand LoadVersionCommand { get; }
         public ICommand ExportExcelCommand { get; }
         public ICommand ImportEmployeeTemplateCommand { get; }
@@ -471,11 +473,31 @@ namespace MyTools.ViewModels
         }
 
         // ============================ Edit ============================
+        private void ToggleEditMode()
+        {
+            if (Current == null) return;
+            if (IsEditing)
+            {
+                ExitEditMode();
+            }
+            else
+            {
+                EnterEditMode();
+            }
+        }
+
         private void EnterEditMode()
         {
             if (Current == null) return;
             IsEditing = true;
             StatusMessage = "已进入编辑模式：可单击班次格子选择班次，也可修改姓名和每日需休人数。";
+        }
+
+        private void ExitEditMode()
+        {
+            if (Current == null) return;
+            IsEditing = false;
+            StatusMessage = "已退出编辑模式；未保存的修改仍在内存中，重新加载版本会丢失。";
         }
 
         // ============================ Save ============================
@@ -497,24 +519,6 @@ namespace MyTools.ViewModels
                     MessageBox.Show(
                         "排班基础数据不完整，不能保存：\n\n" + detail,
                         "排班保存校验",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Warning);
-                    return;
-                }
-
-                var hardIssues = BuildHardConstraintIssues(Current).ToList();
-                if (hardIssues.Count > 0)
-                {
-                    var detail = string.Join(Environment.NewLine, hardIssues.Take(12).Select(item => "· " + item));
-                    if (hardIssues.Count > 12)
-                    {
-                        detail += Environment.NewLine + $"· 另有 {hardIssues.Count - 12} 项未显示";
-                    }
-
-                    StatusMessage = $"保存被阻止：{hardIssues.Count} 项硬约束未满足。";
-                    MessageBox.Show(
-                        "排班未满足硬性规则，不能保存：\n\n" + detail,
-                        "排班规则不满足",
                         MessageBoxButton.OK,
                         MessageBoxImage.Warning);
                     return;
@@ -578,6 +582,34 @@ namespace MyTools.ViewModels
                     foreach (var w in r.Warnings) AppLogService.Warning("Schedule warning: {W}", w);
                 }
             }
+        }
+
+        // ============================ Clear all cells ============================
+        private void ClearAllCells()
+        {
+            if (Current == null || !IsEditing) return;
+            if (Current.Employees == null || Current.Employees.Count == 0) return;
+
+            var resp = MessageBox.Show(
+                "确认清空当前排班表的所有班次格子？此操作不可撤销。",
+                "清空排班",
+                MessageBoxButton.OKCancel,
+                MessageBoxImage.Warning);
+            if (resp != MessageBoxResult.OK) return;
+
+            foreach (var emp in Current.Employees)
+            {
+                if (emp.Cells == null) continue;
+                foreach (var cell in emp.Cells)
+                {
+                    cell.Code = string.Empty;
+                    cell.IsManual = false;
+                }
+            }
+
+            Current.GeneratedAt = null;
+            NotifyScheduleDataChanged();
+            StatusMessage = "已清空所有班次格子，可重新编辑。";
         }
 
         // ============================ Cell update / shortcuts ============================

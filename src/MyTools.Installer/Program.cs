@@ -52,8 +52,7 @@ namespace MyTools.Installer
                 var installDirectory = options.InstallDirectory ?? GetDefaultInstallDirectory();
                 installDirectory = Path.GetFullPath(installDirectory);
 
-                RunPreviousUninstaller(installDirectory);
-                StopInstalledApplication(installDirectory);
+                PrepareInstallDirectory(installDirectory);
                 Directory.CreateDirectory(installDirectory);
 
                 ExtractPayload(installDirectory);
@@ -119,39 +118,23 @@ namespace MyTools.Installer
             return Path.Combine(programFiles, "AjunTools", "MyTools");
         }
 
-        private static void RunPreviousUninstaller(string targetInstallDirectory)
+        /// <summary>
+        /// 升级覆盖安装的准备步骤：不再调用旧版卸载器，仅停止占用进程并清理可执行文件，
+        /// 让接下来的 payload 解压可以直接覆盖。用户数据（日志、配置、历史）保留不动。
+        /// </summary>
+        private static void PrepareInstallDirectory(string targetInstallDirectory)
         {
-            var entries = FindInstalledProducts()
-                .Concat(FindLocalInstalledProduct(targetInstallDirectory))
-                .GroupBy(entry => entry.UninstallString ?? entry.InstallLocation ?? string.Empty, StringComparer.OrdinalIgnoreCase)
-                .Select(group => group.First())
-                .ToList();
-
-            var ranUninstaller = false;
-            foreach (var entry in entries)
+            if (string.IsNullOrWhiteSpace(targetInstallDirectory))
             {
-                var command = BuildUninstallCommand(entry);
-                if (command == null)
-                {
-                    continue;
-                }
-
-                var exitCode = RunAndWait(command.FileName, command.Arguments, 300000);
-                if (exitCode != 0)
-                {
-                    throw new InvalidOperationException($"旧版本卸载失败，退出码：{exitCode}");
-                }
-
-                ranUninstaller = true;
+                return;
             }
 
-            if (!ranUninstaller && File.Exists(Path.Combine(targetInstallDirectory, AppExeName)))
+            if (Directory.Exists(targetInstallDirectory))
             {
                 StopInstalledApplication(targetInstallDirectory);
                 RemoveKnownInstalledFiles(targetInstallDirectory);
+                WaitForDirectoryUnlock(targetInstallDirectory);
             }
-
-            WaitForDirectoryUnlock(targetInstallDirectory);
         }
 
         private static IEnumerable<InstalledProduct> FindLocalInstalledProduct(string targetInstallDirectory)
@@ -566,6 +549,24 @@ namespace MyTools.Installer
                 string.Empty,
                 installDirectory,
                 "卸载阿君的工具");
+
+            try
+            {
+                var desktopDirectory = Environment.GetFolderPath(Environment.SpecialFolder.CommonDesktopDirectory);
+                if (!string.IsNullOrWhiteSpace(desktopDirectory) && Directory.Exists(desktopDirectory))
+                {
+                    CreateShortcut(
+                        Path.Combine(desktopDirectory, ProductName + ".lnk"),
+                        appPath,
+                        string.Empty,
+                        installDirectory,
+                        "打开阿君的工具");
+                }
+            }
+            catch
+            {
+                // 桌面快捷方式失败不影响整体安装结果。
+            }
         }
 
         private static void CreateShortcut(string shortcutPath, string targetPath, string arguments, string workingDirectory, string description)

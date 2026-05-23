@@ -1,4 +1,21 @@
 # 开发记录
+## [2026-05-23] 排班序号显示与"退出编辑"按钮
+- `SchedulePage.xaml.cs` 在员工行（首行 = 表格第 5 行）的姓名单元格左侧加 18px 的浅灰序号 TextBlock（`IsHitTestVisible=false`，不抢编辑焦点），1 起算，方便清点人数。
+- `ScheduleViewModel.EditCommand` 改为切换式 `ToggleEditMode`：未编辑显示「编辑」，编辑中显示「退出编辑」；新增 `ExitEditMode` 仅置 `IsEditing = false`，不回滚内存中的未保存修改，状态栏提示"重新加载版本会丢失"。
+- 重新打包安装程序：`artifacts\installer\MyToolsSetup.exe` 41.15 MB，SHA256 = `636824F29E2A9B94502E54C5FE6676E440E2E2B5DF5AB5CD5A95C1DD7AD2D29C`。
+
+## [2026-05-23] 安装行为简化、桌面快捷方式、排班清空与无条件保存
+- `MyTools.Installer\Program.cs` 将原先的 `RunPreviousUninstaller`（注册表扫描+调用旧卸载器）替换为 `PrepareInstallDirectory`：仅停止已安装目录内运行中的 `MyTools.exe`，删除已知可执行文件后等待目录解锁，由 payload 直接覆盖；不再依赖旧版本卸载流程，覆盖安装更稳健。
+- 安装器 `CreateShortcuts` 在创建开始菜单快捷方式的同时，向 `Environment.SpecialFolder.CommonDesktopDirectory` 写入桌面快捷方式 `阿君的工具.lnk`；卸载器已有的 `RemoveShortcuts` 已经覆盖该桌面路径，无需调整。
+- `ScheduleViewModel` 新增 `ClearAllCellsCommand`：编辑模式下点击"清空"按钮，确认后将所有员工所有日的 `Code` 置空、`IsManual=false`，并清除 `GeneratedAt` 让 Excel 导出按规则被阻拦。
+- `ScheduleViewModel.SaveAsync` 删除 `BuildHardConstraintIssues` 阻塞分支：编辑状态下点保存直接写入，不再校验硬约束；基础结构性校验（年月、每日总休数组长度等）继续保留，防止数据损坏。
+- `SchedulePage.xaml` 工具栏在"设置休息日"后插入"清空"按钮，绑定到 `ClearAllCellsCommand`。
+- 重新打包安装程序：`artifacts\installer\MyToolsSetup.exe` 41.15 MB，SHA256 = `802523230A970DF696B7AE5A14BFFFB2DDA8859A830452DD06FE1C38017FF9BF`。
+
+## [2026-05-23] frp 模块上线后重新打包安装程序
+- 补回缺失的 `src\MyTools\NativeBinaries\README.txt`，恢复 `Build-Installer.ps1` 的 payload 白名单要求。
+- 通过 `scripts\Build-Installer.ps1` 重新构建主程序、卸载器和安装器，包含 frp 隧道穿透模块、排班弹窗按钮宽度修正、`VpnLock`→`VpnKey` 图标修正等 5/22 之后的所有改动。
+- 验证：`artifacts\installer\MyToolsSetup.exe` 41.15 MB，SHA256 = `B956A1F6872A34682D54BE7474C31A954B49F9236CC5E3CA15952BEC975022CD`。
 ## [2026-04-17] 项目初始化
 - 建立 MyTools 项目目录结构与基础约束。
 - 确认技术栈为 .NET Framework 4.8 + WPF。

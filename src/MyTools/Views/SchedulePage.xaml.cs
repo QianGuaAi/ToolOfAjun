@@ -305,7 +305,7 @@ namespace MyTools.Views
                 int row = 4 + e;
                 int empIdx = e;
 
-                // Name (editable in edit mode)
+                // Name (editable in edit mode) prefixed with 1-based serial number.
                 var nameBox = new TextBox
                 {
                     Text = sched.Employees[e].Name,
@@ -315,10 +315,27 @@ namespace MyTools.Views
                     VerticalContentAlignment = VerticalAlignment.Center,
                     IsReadOnly = !_vm.IsEditing,
                     FontSize = 11,
-                    FontWeight = FontWeights.SemiBold
+                    FontWeight = FontWeights.SemiBold,
+                    Padding = new Thickness(0)
                 };
                 nameBox.LostFocus += (s, ev) => _vm.UpdateEmployeeName(empIdx, nameBox.Text);
-                ScheduleHost.Children.Add(WrapBorder(nameBox, row, 0, headerBg));
+
+                var indexLabel = new TextBlock
+                {
+                    Text = (e + 1).ToString(CultureInfo.InvariantCulture),
+                    FontSize = 9,
+                    Foreground = new SolidColorBrush(Color.FromRgb(0x90, 0x90, 0x90)),
+                    Width = 18,
+                    TextAlignment = TextAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    IsHitTestVisible = false
+                };
+
+                var nameCellPanel = new DockPanel { LastChildFill = true };
+                DockPanel.SetDock(indexLabel, Dock.Left);
+                nameCellPanel.Children.Add(indexLabel);
+                nameCellPanel.Children.Add(nameBox);
+                ScheduleHost.Children.Add(WrapBorder(nameCellPanel, row, 0, headerBg));
 
                 // Cells
                 for (int d = 0; d < days; d++)
@@ -550,22 +567,25 @@ namespace MyTools.Views
                 BorderBrush = new SolidColorBrush(Color.FromRgb(0xBD, 0xBD, 0xBD)),
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(6),
-                Padding = new Thickness(6),
+                Padding = new Thickness(10),
                 Effect = new System.Windows.Media.Effects.DropShadowEffect { ShadowDepth = 2, Opacity = 0.25, BlurRadius = 8 }
             };
 
-            var panel = new WrapPanel { MaxWidth = 220 };
+            var panel = new WrapPanel { MaxWidth = 260 };
             void Add(string label, Action onClick, Brush bg = null, Brush fg = null)
             {
                 var b = new Button
                 {
                     Content = label,
-                    Width = 42,
+                    Width = 46,
                     Height = 32,
                     Margin = new Thickness(2),
+                    Padding = new Thickness(0),
                     FontSize = 12,
                     Background = bg,
-                    Foreground = fg ?? Brushes.Black
+                    Foreground = fg ?? Brushes.Black,
+                    HorizontalContentAlignment = HorizontalAlignment.Center,
+                    VerticalContentAlignment = VerticalAlignment.Center
                 };
                 b.Click += (s, e) => { onClick(); popup.IsOpen = false; };
                 panel.Children.Add(b);
@@ -582,7 +602,7 @@ namespace MyTools.Views
             Add("午", () => _vm.SetCell(empIdx, dayIdx, ShiftCodes.Half), new SolidColorBrush(Color.FromRgb(0xFF, 0xF9, 0xC4)));
 
             // separator
-            panel.Children.Add(new Border { Width = 220, Height = 1, Background = new SolidColorBrush(Color.FromRgb(0xE0, 0xE0, 0xE0)), Margin = new Thickness(0, 4, 0, 4) });
+            panel.Children.Add(new Border { Width = 252, Height = 1, Background = new SolidColorBrush(Color.FromRgb(0xE0, 0xE0, 0xE0)), Margin = new Thickness(0, 4, 0, 4) });
 
             Add("大1", () => _vm.ApplyBigNight1(empIdx, dayIdx), new SolidColorBrush(Color.FromRgb(0xFF, 0xCC, 0x80)));
             Add("大2", () => _vm.ApplyBigNight2(empIdx, dayIdx), new SolidColorBrush(Color.FromRgb(0xFF, 0xB7, 0x4D)));
