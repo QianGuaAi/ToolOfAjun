@@ -16,7 +16,7 @@ namespace MyTools.Services
     /// 不依赖 Office / OpenXML SDK，自行写 OOXML 包。
     /// 样式保持与 SchedulePage 视觉一致：
     /// - 周末 / 节假日列：表头淡橙底
-    /// - 班次单元格：按 ShiftCodes 上色（大/小用深底白字）
+    /// - 班次单元格：按 ShiftCodes 上色（夜/小用深底白字）
     /// - 姓名列、统计列：粗体居中
     /// - 全表四向细边框
     /// </summary>
@@ -200,7 +200,7 @@ namespace MyTools.Services
                         styleKey = "shift_" + code;
                     else
                         styleKey = holiday ? "emptyHoliday" : "empty";
-                    WriteStr(w, Cell(2 + d, rowIdx), code, styles.S(styleKey));
+                    WriteStr(w, Cell(2 + d, rowIdx), DisplayShiftCode(code), styles.S(styleKey));
 
                     work += ShiftCodes.WorkDays(code);
                     rest += ShiftCodes.RestDays(code);
@@ -226,6 +226,12 @@ namespace MyTools.Services
         {
             return v % 1 == 0 ? ((int)v).ToString(CultureInfo.InvariantCulture)
                               : v.ToString("0.#", CultureInfo.InvariantCulture);
+        }
+
+        private static string DisplayShiftCode(string code)
+        {
+            code = ShiftCodes.Normalize(code);
+            return code == ShiftCodes.Big ? "夜" : code;
         }
 
         private static bool IsDailyRestWithinQuota(double actual, double quota)

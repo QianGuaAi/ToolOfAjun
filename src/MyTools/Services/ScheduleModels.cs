@@ -9,7 +9,7 @@ namespace MyTools.Services
     /// </summary>
     public class ShiftCell
     {
-        /// <summary>白/卡/副/感/大/小/休/公/午；空字符串表示未指定。</summary>
+        /// <summary>白/卡/副/感/大(界面显示为夜)/小/休/公/午；空字符串表示未指定。</summary>
         public string Code { get; set; } = string.Empty;
 
         public bool IsManual { get; set; }
@@ -80,7 +80,7 @@ namespace MyTools.Services
         public const string Card = "卡";      // 卡班
         public const string Deputy = "副";    // 副小
         public const string Infect = "感";    // 感染科
-        public const string Big = "大";       // 大夜
+        public const string Big = "大";       // 夜班（旧数据仍用“大”存储）
         public const string Small = "小";     // 小夜
         public const string Rest = "休";      // 休息
         public const string Public = "公";    // 公休
@@ -121,7 +121,7 @@ namespace MyTools.Services
                 case Card: return "卡班";
                 case Deputy: return "副小";
                 case Infect: return "感染科";
-                case Big: return "大夜";
+                case Big: return "夜班";
                 case Small: return "小夜";
                 case Rest: return "休息";
                 case Public: return "公休";

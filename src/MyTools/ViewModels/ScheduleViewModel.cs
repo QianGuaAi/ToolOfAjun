@@ -32,17 +32,19 @@ namespace MyTools.ViewModels
         {
             NewCommand = new RelayCommand(NewSchedule);
             EditCommand = new RelayCommand(ToggleEditMode, () => Current != null);
-            SaveCommand = new AsyncRelayCommand(SaveAsync, () => Current != null && IsEditing);
+            SaveCommand = new AsyncRelayCommand(SaveAsync, () => Current != null);
+            SaveAsCommand = new AsyncRelayCommand(SaveAsAsync, () => Current != null);
             DeleteVersionCommand = new RelayParameterCommand(DeleteVersion);
             RefreshVersionsCommand = new RelayCommand(LoadVersions);
-            AutoOptimizeCommand = new RelayCommand(AutoOptimize, () => Current != null && IsEditing);
-            ClearAllCellsCommand = new RelayCommand(ClearAllCells, () => Current != null && IsEditing);
+            AutoOptimizeCommand = new RelayCommand(AutoOptimize, () => Current != null);
+            ClearAllCellsCommand = new RelayCommand(ClearAllCells, () => Current != null);
+            ClearRandomCellsCommand = new RelayCommand(ClearRandomCells, () => Current != null);
             LoadVersionCommand = new AsyncRelayParameterCommand(LoadVersionAsync);
             ExportExcelCommand = new AsyncRelayCommand(ExportExcelAsync, () => Current != null);
-            ImportEmployeeTemplateCommand = new AsyncRelayCommand(ImportEmployeeTemplateAsync, () => Current != null && IsEditing);
+            ImportEmployeeTemplateCommand = new AsyncRelayCommand(ImportEmployeeTemplateAsync, () => Current != null);
             ExportEmployeeTemplateCommand = new AsyncRelayCommand(ExportEmployeeTemplateAsync, () => Current != null && Current.Employees.Count > 0);
-            CopyPreviousMonthEmployeesCommand = new AsyncRelayCommand(CopyPreviousMonthEmployeesAsync, () => Current != null && IsEditing);
-            CopyEmployeeMonthCommand = new RelayCommand(CopyEmployeeMonth, () => Current != null && IsEditing && CopySourceEmployee != null && CopyTargetEmployee != null && !ReferenceEquals(CopySourceEmployee, CopyTargetEmployee));
+            CopyPreviousMonthEmployeesCommand = new AsyncRelayCommand(CopyPreviousMonthEmployeesAsync, () => Current != null);
+            CopyEmployeeMonthCommand = new RelayCommand(CopyEmployeeMonth, () => Current != null && CopySourceEmployee != null && CopyTargetEmployee != null && !ReferenceEquals(CopySourceEmployee, CopyTargetEmployee));
             LocateScheduleConflictCommand = new RelayParameterCommand(LocateScheduleConflict, parameter => parameter is ScheduleConflictItem);
 
             LoadVersions();
@@ -65,12 +67,20 @@ namespace MyTools.ViewModels
             private set
             {
                 _current = value;
+                var shouldEdit = _current != null;
+                if (_isEditing != shouldEdit)
+                {
+                    _isEditing = shouldEdit;
+                    OnPropertyChanged(nameof(IsEditing));
+                    OnPropertyChanged(nameof(EditButtonLabel));
+                }
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(HasCurrent));
                 OnPropertyChanged(nameof(HasEmployees));
                 OnPropertyChanged(nameof(HeaderTitle));
                 CopySourceEmployee = null;
                 CopyTargetEmployee = null;
+                NormalizeScheduleRows(_current);
                 RefreshScheduleConflicts();
                 ScheduleStructureChanged?.Invoke(this, EventArgs.Empty);
                 CommandManager.InvalidateRequerySuggested();
@@ -82,7 +92,7 @@ namespace MyTools.ViewModels
 
         public string HeaderTitle => _current == null
             ? "排班"
-            : $"{_current.Year}-{_current.Month:00} · {_current.VersionName}（{(IsEditing ? "编辑中" : "查看")}）";
+            : $"{_current.Year}-{_current.Month:00} · {_current.VersionName}";
 
         // ============================ Edit mode ============================
         private bool _isEditing;
@@ -96,7 +106,6 @@ namespace MyTools.ViewModels
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(HeaderTitle));
                 OnPropertyChanged(nameof(EditButtonLabel));
-                // The schedule grid is generated in code-behind; rebuild it so read-only cells become editable.
                 ScheduleStructureChanged?.Invoke(this, EventArgs.Empty);
                 CommandManager.InvalidateRequerySuggested();
             }
@@ -113,11 +122,17 @@ namespace MyTools.ViewModels
 
         public ObservableCollection<ScheduleConflictItem> ScheduleConflicts { get; } = new ObservableCollection<ScheduleConflictItem>();
         public ObservableCollection<ScheduleWeekRestItem> WeeklyRestStats { get; } = new ObservableCollection<ScheduleWeekRestItem>();
-        public bool HasScheduleConflicts => ScheduleConflicts.Count > 0;
+        private const int MaxVisibleScheduleConflicts = 300;
+        private int _scheduleConflictTotalCount;
+        public bool HasScheduleConflicts => _scheduleConflictTotalCount > 0;
         public bool HasWeeklyRestStats => WeeklyRestStats.Count > 0;
         public string ScheduleConflictSummary => Current == null
             ? "未加载排班"
-            : HasScheduleConflicts ? $"{ScheduleConflicts.Count} 项需处理" : "未发现明显冲突";
+            : HasScheduleConflicts
+                ? (_scheduleConflictTotalCount > ScheduleConflicts.Count
+                    ? $"{_scheduleConflictTotalCount} 项需处理（显示前 {ScheduleConflicts.Count} 项）"
+                    : $"{_scheduleConflictTotalCount} 项需处理")
+                : "未发现明显冲突";
 
         public int SelectedConflictEmployeeIndex { get; private set; } = -1;
         public int SelectedConflictDayIndex { get; private set; } = -1;
@@ -150,10 +165,12 @@ namespace MyTools.ViewModels
         public ICommand NewCommand { get; }
         public ICommand EditCommand { get; }
         public ICommand SaveCommand { get; }
+        public ICommand SaveAsCommand { get; }
         public ICommand DeleteVersionCommand { get; }
         public ICommand RefreshVersionsCommand { get; }
         public ICommand AutoOptimizeCommand { get; }
         public ICommand ClearAllCellsCommand { get; }
+        public ICommand ClearRandomCellsCommand { get; }
         public ICommand LoadVersionCommand { get; }
         public ICommand ExportExcelCommand { get; }
         public ICommand ImportEmployeeTemplateCommand { get; }
@@ -237,7 +254,7 @@ namespace MyTools.ViewModels
 
         private async Task ImportEmployeeTemplateAsync()
         {
-            if (Current == null || !IsEditing) return;
+            if (Current == null) return;
             var dialog = new Microsoft.Win32.OpenFileDialog
             {
                 Title = "导入人员模板",
@@ -295,7 +312,7 @@ namespace MyTools.ViewModels
 
         private async Task CopyPreviousMonthEmployeesAsync()
         {
-            if (Current == null || !IsEditing) return;
+            if (Current == null) return;
             try
             {
                 var previous = await FindPreviousMonthScheduleAsync(Current.Year, Current.Month).ConfigureAwait(true);
@@ -324,7 +341,7 @@ namespace MyTools.ViewModels
 
         private void CopyEmployeeMonth()
         {
-            if (Current == null || !IsEditing || CopySourceEmployee == null || CopyTargetEmployee == null)
+            if (Current == null || CopySourceEmployee == null || CopyTargetEmployee == null)
             {
                 return;
             }
@@ -340,11 +357,11 @@ namespace MyTools.ViewModels
             for (var day = 0; day < Current.DayCount; day++)
             {
                 CopyTargetEmployee.Cells[day].Code = CopySourceEmployee.Cells[day].Code;
-                CopyTargetEmployee.Cells[day].IsManual = CopySourceEmployee.Cells[day].IsManual;
+                CopyTargetEmployee.Cells[day].IsManual = !string.IsNullOrEmpty(CopyTargetEmployee.Cells[day].Code);
             }
 
             StatusMessage = $"已将 {CopySourceEmployee.Name} 的整月班次复制给 {CopyTargetEmployee.Name}。";
-            NotifyScheduleStructureChanged();
+            NotifyScheduleDataChanged();
         }
 
         private static async Task<string> ReadAllTextAsync(string filePath)
@@ -438,7 +455,7 @@ namespace MyTools.ViewModels
                 IsEditing = true;
                 StatusMessage = sched.Employees.Count == 0
                     ? $"已新建 {year}-{month:00}/{versionName}（请先添加人员）。"
-                    : $"已新建 {year}-{month:00}/{versionName}，复制了 {sched.Employees.Count} 位人员。";
+                    : $"已新建 {year}-{month:00}/{versionName}，复制了 {sched.Employees.Count} 位人员，可直接编辑。";
             }
             catch (Exception ex)
             {
@@ -462,8 +479,8 @@ namespace MyTools.ViewModels
                     return;
                 }
                 Current = sched;
-                IsEditing = false; // 加载后只读
-                StatusMessage = $"已加载 {sched.Year}-{sched.Month:00}/{sched.VersionName}（只读，请点编辑修改）。";
+                IsEditing = true;
+                StatusMessage = $"已加载 {sched.Year}-{sched.Month:00}/{sched.VersionName}，可直接编辑。";
             }
             catch (Exception ex)
             {
@@ -476,28 +493,21 @@ namespace MyTools.ViewModels
         private void ToggleEditMode()
         {
             if (Current == null) return;
-            if (IsEditing)
-            {
-                ExitEditMode();
-            }
-            else
-            {
-                EnterEditMode();
-            }
+            EnterEditMode();
         }
 
         private void EnterEditMode()
         {
             if (Current == null) return;
             IsEditing = true;
-            StatusMessage = "已进入编辑模式：可单击班次格子选择班次，也可修改姓名和每日需休人数。";
+            StatusMessage = "当前排班表可直接编辑：可单击班次格子选择班次，也可修改姓名和每日需休人数。";
         }
 
         private void ExitEditMode()
         {
             if (Current == null) return;
-            IsEditing = false;
-            StatusMessage = "已退出编辑模式；未保存的修改仍在内存中，重新加载版本会丢失。";
+            IsEditing = true;
+            StatusMessage = "当前排班表保持可编辑；如需保留修改请点击保存或另存。";
         }
 
         // ============================ Save ============================
@@ -536,6 +546,74 @@ namespace MyTools.ViewModels
             }
         }
 
+        private async Task SaveAsAsync()
+        {
+            if (Current == null) return;
+
+            var defaultName = BuildDefaultSaveAsName(Current);
+            var input = MyTools.Views.SimplePromptDialog.Prompt(
+                $"请输入 {Current.Year}-{Current.Month:00} 下的新版本名：",
+                "另存排班",
+                defaultName);
+            if (input == null) return;
+
+            var newName = SanitizeFileName(input);
+            if (string.IsNullOrWhiteSpace(newName))
+            {
+                StatusMessage = "另存失败：版本名不能为空。";
+                MessageBox.Show("版本名不能为空。", "另存排班", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            if (string.Equals(newName, Current.VersionName, StringComparison.OrdinalIgnoreCase))
+            {
+                StatusMessage = "另存失败：请使用不同于当前表的新名字。";
+                MessageBox.Show("请给当前排班表另起一个不同的名字。", "另存排班", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            if (ScheduleService.VersionExists(Current.Year, Current.Month, newName))
+            {
+                StatusMessage = $"另存失败：{Current.Year}-{Current.Month:00} 下已存在 {newName}。";
+                MessageBox.Show($"{Current.Year}-{Current.Month:00} 下已存在【{newName}】，请换一个名字。", "另存排班", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var oldName = Current.VersionName;
+            try
+            {
+                Current.VersionName = newName;
+                OnPropertyChanged(nameof(HeaderTitle));
+                var path = await ScheduleService.SaveAsync(Current).ConfigureAwait(true);
+                LoadVersions();
+                StatusMessage = $"已另存到当前月份：{path}";
+            }
+            catch (Exception ex)
+            {
+                Current.VersionName = oldName;
+                OnPropertyChanged(nameof(HeaderTitle));
+                AppLogService.Warning("SaveScheduleAs failed: {Msg}", ex.Message);
+                StatusMessage = "另存失败：" + ex.Message;
+            }
+        }
+
+        private static string BuildDefaultSaveAsName(ScheduleVersion schedule)
+        {
+            var baseName = SanitizeFileName(schedule?.VersionName);
+            if (string.IsNullOrWhiteSpace(baseName))
+            {
+                baseName = "v1";
+            }
+
+            var candidate = baseName + "-副本";
+            for (var index = 2; index <= 99 && ScheduleService.VersionExists(schedule.Year, schedule.Month, candidate); index++)
+            {
+                candidate = $"{baseName}-副本{index}";
+            }
+
+            return candidate;
+        }
+
         // ============================ Delete ============================
         private void DeleteVersion(object parameter)
         {
@@ -552,7 +630,7 @@ namespace MyTools.ViewModels
         // ============================ Auto optimize ============================
         private void AutoOptimize()
         {
-            if (Current == null || !IsEditing) return;
+            if (Current == null) return;
             var r = ShiftAutoOptimizer.Optimize(Current, BuildPreservedCells(Current));
             NotifyScheduleDataChanged();
             if (!r.Success)
@@ -587,21 +665,28 @@ namespace MyTools.ViewModels
         // ============================ Clear all cells ============================
         private void ClearAllCells()
         {
-            if (Current == null || !IsEditing) return;
+            if (Current == null) return;
             if (Current.Employees == null || Current.Employees.Count == 0) return;
 
             var resp = MessageBox.Show(
-                "确认清空当前排班表的所有班次格子？此操作不可撤销。",
+                "确认清空当前排班表的所有班次单元格？用户手动设置的单元格也会恢复为空白初始状态，此操作不可撤销。",
                 "清空排班",
                 MessageBoxButton.OKCancel,
                 MessageBoxImage.Warning);
             if (resp != MessageBoxResult.OK) return;
 
+            var cleared = 0;
             foreach (var emp in Current.Employees)
             {
                 if (emp.Cells == null) continue;
                 foreach (var cell in emp.Cells)
                 {
+                    if (cell == null) continue;
+                    if (!string.IsNullOrEmpty(cell.Code) || cell.IsManual)
+                    {
+                        cleared++;
+                    }
+
                     cell.Code = string.Empty;
                     cell.IsManual = false;
                 }
@@ -609,14 +694,49 @@ namespace MyTools.ViewModels
 
             Current.GeneratedAt = null;
             NotifyScheduleDataChanged();
-            StatusMessage = "已清空所有班次格子，可重新编辑。";
+            StatusMessage = $"已清空 {cleared} 个单元格，排班表已恢复为空白初始状态。";
+        }
+
+        // ============================ Clear random cells ============================
+        private void ClearRandomCells()
+        {
+            if (Current == null) return;
+            if (Current.Employees == null || Current.Employees.Count == 0) return;
+
+            var resp = MessageBox.Show(
+                "确认清空自动生成的随机单元格？用户手动设置的单元格会保留，此操作不可撤销。",
+                "清空随机单元",
+                MessageBoxButton.OKCancel,
+                MessageBoxImage.Warning);
+            if (resp != MessageBoxResult.OK) return;
+
+            var cleared = 0;
+            foreach (var emp in Current.Employees)
+            {
+                if (emp.Cells == null) continue;
+                foreach (var cell in emp.Cells)
+                {
+                    if (cell == null || cell.IsManual) continue;
+                    if (!string.IsNullOrEmpty(cell.Code))
+                    {
+                        cleared++;
+                    }
+
+                    cell.Code = string.Empty;
+                    cell.IsManual = false;
+                }
+            }
+
+            Current.GeneratedAt = null;
+            NotifyScheduleDataChanged();
+            StatusMessage = $"已清空 {cleared} 个随机单元格，用户设置的单元格已保留。";
         }
 
         // ============================ Cell update / shortcuts ============================
         /// <summary>设置单元格为指定代码（用户手动）。</summary>
         public void SetCell(int empIdx, int dayIdx, string code)
         {
-            if (Current == null || !IsEditing) return;
+            if (Current == null) return;
             if (empIdx < 0 || empIdx >= Current.Employees.Count) return;
             if (dayIdx < 0 || dayIdx >= Current.DayCount) return;
 
@@ -626,48 +746,36 @@ namespace MyTools.ViewModels
             NotifyScheduleDataChanged();
         }
 
-        /// <summary>大1：当天=大，前一天=小，后两天=休（小→大→休→休）。</summary>
-        public void ApplyBigNight1(int empIdx, int dayIdx) => ApplyNightShift(empIdx, dayIdx, restDaysAfter: 2);
-
-        /// <summary>大2：当天=大，前一天=小，后一天=休。</summary>
-        public void ApplyBigNight2(int empIdx, int dayIdx) => ApplyNightShift(empIdx, dayIdx, restDaysAfter: 1);
-
-        private void ApplyNightShift(int empIdx, int dayIdx, int restDaysAfter)
+        /// <summary>小1：从当前格开始设置 小→夜→休→休。</summary>
+        public void ApplySmallNight1(int empIdx, int dayIdx)
         {
-            if (Current == null || !IsEditing) return;
+            if (Current == null) return;
             if (empIdx < 0 || empIdx >= Current.Employees.Count) return;
             int days = Current.DayCount;
             if (dayIdx < 0 || dayIdx >= days) return;
 
             var emp = Current.Employees[empIdx];
-
-            // 当天：大
-            emp.Cells[dayIdx].Code = ShiftCodes.Big;
-            emp.Cells[dayIdx].IsManual = true;
-
-            // 前一天：小（如在月内）
-            if (dayIdx - 1 >= 0)
-            {
-                emp.Cells[dayIdx - 1].Code = ShiftCodes.Small;
-                emp.Cells[dayIdx - 1].IsManual = true;
-            }
-
-            // 后续 N 天：休
-            for (int k = 1; k <= restDaysAfter; k++)
-            {
-                int idx = dayIdx + k;
-                if (idx >= days) break;
-                emp.Cells[idx].Code = ShiftCodes.Rest;
-                emp.Cells[idx].IsManual = true;
-            }
+            SetManualCell(emp, dayIdx, ShiftCodes.Small);
+            SetManualCell(emp, dayIdx + 1, ShiftCodes.Big);
+            SetManualCell(emp, dayIdx + 2, ShiftCodes.Rest);
+            SetManualCell(emp, dayIdx + 3, ShiftCodes.Rest);
 
             NotifyScheduleDataChanged();
+        }
+
+        private static void SetManualCell(EmployeeRow employee, int dayIdx, string code)
+        {
+            if (employee == null || employee.Cells == null) return;
+            if (dayIdx < 0 || dayIdx >= employee.Cells.Count) return;
+
+            employee.Cells[dayIdx].Code = ShiftCodes.Normalize(code);
+            employee.Cells[dayIdx].IsManual = !string.IsNullOrEmpty(employee.Cells[dayIdx].Code);
         }
 
         // ============================ Employee management ============================
         public void AddEmployee(string name)
         {
-            if (Current == null || !IsEditing) return;
+            if (Current == null) return;
             name = (name ?? string.Empty).Trim();
             if (string.IsNullOrEmpty(name)) return;
             var row = new EmployeeRow { Name = name };
@@ -678,7 +786,7 @@ namespace MyTools.ViewModels
 
         public void AddEmployees(System.Collections.Generic.IEnumerable<string> names)
         {
-            if (Current == null || !IsEditing || names == null) return;
+            if (Current == null || names == null) return;
             int added = 0;
             foreach (var raw in names)
             {
@@ -694,7 +802,7 @@ namespace MyTools.ViewModels
 
         public void RemoveEmployee(int empIdx)
         {
-            if (Current == null || !IsEditing) return;
+            if (Current == null) return;
             if (empIdx < 0 || empIdx >= Current.Employees.Count) return;
             var removed = Current.Employees[empIdx];
             Current.Employees.RemoveAt(empIdx);
@@ -713,7 +821,7 @@ namespace MyTools.ViewModels
 
         public void UpdateEmployeeName(int empIdx, string newName)
         {
-            if (Current == null || !IsEditing) return;
+            if (Current == null) return;
             if (empIdx < 0 || empIdx >= Current.Employees.Count) return;
             Current.Employees[empIdx].Name = (newName ?? string.Empty).Trim();
             NotifyScheduleDataChanged();
@@ -721,7 +829,7 @@ namespace MyTools.ViewModels
 
         public void UpdateDailyQuota(int dayIdx, double quota)
         {
-            if (Current == null || !IsEditing) return;
+            if (Current == null) return;
             if (dayIdx < 0 || dayIdx >= Current.DailyRestQuotas.Count) return;
             Current.DailyRestQuotas[dayIdx] = Math.Max(0, quota);
             NotifyScheduleDataChanged();
@@ -769,7 +877,6 @@ namespace MyTools.ViewModels
         {
             RefreshScheduleConflicts();
             OnPropertyChanged(nameof(Current));
-            CommandManager.InvalidateRequerySuggested();
             ScheduleDataChanged?.Invoke(this, EventArgs.Empty);
         }
 
@@ -952,6 +1059,7 @@ namespace MyTools.ViewModels
         {
             ScheduleConflicts.Clear();
             WeeklyRestStats.Clear();
+            _scheduleConflictTotalCount = 0;
             if (Current == null)
             {
                 OnPropertyChanged(nameof(HasScheduleConflicts));
@@ -960,7 +1068,6 @@ namespace MyTools.ViewModels
                 return;
             }
 
-            NormalizeScheduleRows(Current);
             RefreshWeeklyRestStats();
             for (var day = 0; day < Current.DayCount; day++)
             {
@@ -968,7 +1075,7 @@ namespace MyTools.ViewModels
                 var quota = day < Current.DailyRestQuotas.Count ? Current.DailyRestQuotas[day] : 0;
                 if (actual > quota + 0.001)
                 {
-                    ScheduleConflicts.Add(new ScheduleConflictItem
+                    AddScheduleConflict(new ScheduleConflictItem
                     {
                         Level = "高",
                         Title = $"{day + 1} 日总休超额",
@@ -980,7 +1087,7 @@ namespace MyTools.ViewModels
                 else if (!IsDailyRestWithinQuota(actual, quota))
                 {
                     var minAllowed = MinDailyRestAllowed(quota);
-                    ScheduleConflicts.Add(new ScheduleConflictItem
+                    AddScheduleConflict(new ScheduleConflictItem
                     {
                         Level = "高",
                         Title = $"{day + 1} 日总休不足",
@@ -998,7 +1105,7 @@ namespace MyTools.ViewModels
                 var stats = ComputeRowStats(empIndex);
                 if (stats.maxRun > 5)
                 {
-                    ScheduleConflicts.Add(new ScheduleConflictItem
+                    AddScheduleConflict(new ScheduleConflictItem
                     {
                         Level = "高",
                         Title = $"{employee.Name} 连续上班 {stats.maxRun} 天",
@@ -1010,7 +1117,7 @@ namespace MyTools.ViewModels
 
                 if (stats.rest < 8)
                 {
-                    ScheduleConflicts.Add(new ScheduleConflictItem
+                    AddScheduleConflict(new ScheduleConflictItem
                     {
                         Level = "中",
                         Title = $"{employee.Name} 休息不足",
@@ -1023,6 +1130,15 @@ namespace MyTools.ViewModels
             OnPropertyChanged(nameof(HasScheduleConflicts));
             OnPropertyChanged(nameof(ScheduleConflictSummary));
             OnPropertyChanged(nameof(HasWeeklyRestStats));
+        }
+
+        private void AddScheduleConflict(ScheduleConflictItem item)
+        {
+            _scheduleConflictTotalCount++;
+            if (ScheduleConflicts.Count < MaxVisibleScheduleConflicts)
+            {
+                ScheduleConflicts.Add(item);
+            }
         }
 
         private void RefreshWeeklyRestStats()
