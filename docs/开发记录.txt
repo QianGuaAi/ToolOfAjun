@@ -1,4 +1,8 @@
 # 开发记录
+## [2026-05-23] 精简多媒体菜单
+- `MainWindow.xaml` 删除"图片查看(_I)"、"视频播放(_V)"、"格式转换(_C)"三个菜单项；三个模块本身保留，仍可从"多媒体入口"进入。
+- 重新打包安装程序：`artifacts\installer\MyToolsSetup.exe` 41.15 MB，SHA256 = `611AA6C1396C3E6BC470217862E35EA11E2835EAAE4FEE530E8DF05084547E1E`。
+
 ## [2026-05-23] 排班序号显示与"退出编辑"按钮
 - `SchedulePage.xaml.cs` 在员工行（首行 = 表格第 5 行）的姓名单元格左侧加 18px 的浅灰序号 TextBlock（`IsHitTestVisible=false`，不抢编辑焦点），1 起算，方便清点人数。
 - `ScheduleViewModel.EditCommand` 改为切换式 `ToggleEditMode`：未编辑显示「编辑」，编辑中显示「退出编辑」；新增 `ExitEditMode` 仅置 `IsEditing = false`，不回滚内存中的未保存修改，状态栏提示"重新加载版本会丢失"。

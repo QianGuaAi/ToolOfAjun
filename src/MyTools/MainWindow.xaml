@@ -85,9 +85,6 @@
                 <MenuItem Header="多媒体(_M)" Style="{StaticResource TopMenuItem}">
                     <MenuItem Header="多媒体入口(_M)" Command="{Binding ShowMultimediaCommand}" Style="{StaticResource TopMenuItem}" />
                     <MenuItem Header="截图工具(_S)" Command="{Binding ShowScreenshotCommand}" Style="{StaticResource TopMenuItem}" />
-                    <MenuItem Header="图片查看(_I)" Command="{Binding ShowImageViewerCommand}" Style="{StaticResource TopMenuItem}" />
-                    <MenuItem Header="视频播放(_V)" Command="{Binding ShowVideoViewerCommand}" Style="{StaticResource TopMenuItem}" />
-                    <MenuItem Header="格式转换(_C)" Command="{Binding ShowConvertCommand}" Style="{StaticResource TopMenuItem}" />
                 </MenuItem>
                 <MenuItem Header="日程(_A)" Command="{Binding ShowScheduleCommand}" Style="{StaticResource TopMenuItem}" />
                 <MenuItem Header="设置(_P)" Command="{Binding ShowSystemSettingsCommand}" Style="{StaticResource TopMenuItem}" />
