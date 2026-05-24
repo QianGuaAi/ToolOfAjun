@@ -225,7 +225,8 @@ namespace MyTools.ViewModels
                             ? drive.Name.TrimEnd('\\')
                             : string.Format("{0} ({1})", drive.Name.TrimEnd('\\'), drive.VolumeLabel);
                         var node = new MediaFolderNode { Name = label, FullPath = drive.RootDirectory.FullName };
-                        node.AddDummyChild();
+                        if (HasVisibleChildFolders(drive.RootDirectory.FullName))
+                            node.AddDummyChild();
                         nodes.Add(node);
                     }
                     catch
@@ -347,6 +348,34 @@ namespace MyTools.ViewModels
             _owner.SwitchToHomeFromMultimedia();
         }
 
+        public bool CopyCurrentViewedImageToClipboard()
+        {
+            var image = IsImmersive && ImmersiveKind == MediaKind.Image
+                ? ImmersiveImageSource
+                : PreviewKind == MediaKind.Image
+                    ? PreviewImageSource
+                    : null;
+            if (image == null || SelectedMediaFile == null || SelectedMediaFile.Kind != MediaKind.Image)
+            {
+                StatusMessage = "当前没有可复制的图片。";
+                return false;
+            }
+
+            try
+            {
+                ScreenshotService.SetClipboardCompatible(image);
+                StatusMessage = "已复制图片到剪贴板：" + SelectedMediaFile.Name;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Warning("Multimedia image copy failed: {Msg}", ex.Message);
+                StatusMessage = "复制图片失败：" + ex.Message;
+                MessageBox.Show("复制图片失败：" + ex.Message, "图片查看", MessageBoxButton.OK, MessageBoxImage.Error);
+                return false;
+            }
+        }
+
         public void StopPreview()
         {
             IsPreviewPlaying = false;
@@ -375,7 +404,8 @@ namespace MyTools.ViewModels
                         var info = new DirectoryInfo(folder);
                         if ((info.Attributes & (FileAttributes.Hidden | FileAttributes.System)) != 0) continue;
                         var node = new MediaFolderNode { Name = info.Name, FullPath = info.FullName };
-                        node.AddDummyChild();
+                        if (HasVisibleChildFolders(info.FullName))
+                            node.AddDummyChild();
                         result.Add(node);
                     }
                     catch
@@ -387,6 +417,31 @@ namespace MyTools.ViewModels
             {
             }
             return result.OrderBy(item => item.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
+        }
+
+        private static bool HasVisibleChildFolders(string folderPath)
+        {
+            if (string.IsNullOrWhiteSpace(folderPath)) return false;
+            try
+            {
+                foreach (var folder in Directory.EnumerateDirectories(folderPath))
+                {
+                    try
+                    {
+                        var info = new DirectoryInfo(folder);
+                        if ((info.Attributes & (FileAttributes.Hidden | FileAttributes.System)) == 0)
+                            return true;
+                    }
+                    catch
+                    {
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            return false;
         }
 
         private IEnumerable<MediaFileDescriptor> ApplyPreferredFilter(IEnumerable<MediaFileDescriptor> files)
@@ -557,7 +612,8 @@ namespace MyTools.ViewModels
 
         public void AddDummyChild()
         {
-            Children.Add(new MediaFolderNode { Name = "...", FullPath = null });
+            if (Children.Count == 0)
+                Children.Add(new MediaFolderNode { Name = "...", FullPath = null });
         }
 
         public event PropertyChangedEventHandler PropertyChanged;

@@ -26,6 +26,10 @@
     <Color x:Key="BrushErrorColor">#EF4444</Color>
     <Color x:Key="BrushInfoColor">#0EA5E9</Color>
     <Color x:Key="BrushInfoSoftColor">#EAF6FF</Color>
+    <Color x:Key="BrushCodexStatusOkColor">#22C55E</Color>
+    <Color x:Key="BrushCodexStatusWarnColor">#F59E0B</Color>
+    <Color x:Key="BrushCodexStatusExpiredColor">#EF4444</Color>
+    <Color x:Key="BrushCodexStatusUnknownColor">#94A3B8</Color>
 
     <Color x:Key="BrushHeaderGradientStartColor">#F8FAFC</Color>
     <Color x:Key="BrushHeaderGradientEndColor">#EEF2F7</Color>
@@ -52,6 +56,10 @@
     <SolidColorBrush x:Key="BrushError" Color="{StaticResource BrushErrorColor}" />
     <SolidColorBrush x:Key="BrushInfo" Color="{StaticResource BrushInfoColor}" />
     <SolidColorBrush x:Key="BrushInfoSoft" Color="{StaticResource BrushInfoSoftColor}" />
+    <SolidColorBrush x:Key="BrushCodexStatusOk" Color="{StaticResource BrushCodexStatusOkColor}" />
+    <SolidColorBrush x:Key="BrushCodexStatusWarn" Color="{StaticResource BrushCodexStatusWarnColor}" />
+    <SolidColorBrush x:Key="BrushCodexStatusExpired" Color="{StaticResource BrushCodexStatusExpiredColor}" />
+    <SolidColorBrush x:Key="BrushCodexStatusUnknown" Color="{StaticResource BrushCodexStatusUnknownColor}" />
 
     <SolidColorBrush x:Key="BrushHeaderGradientStart" Color="{StaticResource BrushHeaderGradientStartColor}" />
     <SolidColorBrush x:Key="BrushHeaderGradientEnd" Color="{StaticResource BrushHeaderGradientEndColor}" />

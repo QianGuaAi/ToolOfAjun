@@ -36,7 +36,7 @@ namespace MyTools.ViewModels
             SaveAsCommand = new AsyncRelayCommand(SaveAsAsync, () => Current != null);
             DeleteVersionCommand = new RelayParameterCommand(DeleteVersion);
             RefreshVersionsCommand = new RelayCommand(LoadVersions);
-            AutoOptimizeCommand = new RelayCommand(AutoOptimize, () => Current != null);
+            AutoOptimizeCommand = new AsyncRelayCommand(AutoOptimizeAsync, () => Current != null && !IsAutoOptimizeWaiting);
             ClearAllCellsCommand = new RelayCommand(ClearAllCells, () => Current != null);
             ClearRandomCellsCommand = new RelayCommand(ClearRandomCells, () => Current != null);
             LoadVersionCommand = new AsyncRelayParameterCommand(LoadVersionAsync);
@@ -123,7 +123,14 @@ namespace MyTools.ViewModels
         public ObservableCollection<ScheduleConflictItem> ScheduleConflicts { get; } = new ObservableCollection<ScheduleConflictItem>();
         public ObservableCollection<ScheduleWeekRestItem> WeeklyRestStats { get; } = new ObservableCollection<ScheduleWeekRestItem>();
         private const int MaxVisibleScheduleConflicts = 300;
+        private const int MaxWarningFreeOptimizeAttempts = 99;
         private int _scheduleConflictTotalCount;
+        private bool _requireWarningFreeSchedule;
+        private bool _isAutoOptimizeWaiting;
+        private int _autoOptimizeAttempt;
+        private int _autoOptimizeMaxAttempts = MaxWarningFreeOptimizeAttempts;
+        private double _autoOptimizeProgress;
+        private string _autoOptimizeWaitMessage = "正在生成正确的结果，请等待！";
         public bool HasScheduleConflicts => _scheduleConflictTotalCount > 0;
         public bool HasWeeklyRestStats => WeeklyRestStats.Count > 0;
         public string ScheduleConflictSummary => Current == null
@@ -133,6 +140,73 @@ namespace MyTools.ViewModels
                     ? $"{_scheduleConflictTotalCount} 项需处理（显示前 {ScheduleConflicts.Count} 项）"
                     : $"{_scheduleConflictTotalCount} 项需处理")
                 : "未发现明显冲突";
+
+        public bool RequireWarningFreeSchedule
+        {
+            get => _requireWarningFreeSchedule;
+            set
+            {
+                if (_requireWarningFreeSchedule == value) return;
+                _requireWarningFreeSchedule = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public bool IsAutoOptimizeWaiting
+        {
+            get => _isAutoOptimizeWaiting;
+            private set
+            {
+                if (_isAutoOptimizeWaiting == value) return;
+                _isAutoOptimizeWaiting = value;
+                OnPropertyChanged();
+                CommandManager.InvalidateRequerySuggested();
+            }
+        }
+
+        public int AutoOptimizeAttempt
+        {
+            get => _autoOptimizeAttempt;
+            private set
+            {
+                if (_autoOptimizeAttempt == value) return;
+                _autoOptimizeAttempt = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public int AutoOptimizeMaxAttempts
+        {
+            get => _autoOptimizeMaxAttempts;
+            private set
+            {
+                if (_autoOptimizeMaxAttempts == value) return;
+                _autoOptimizeMaxAttempts = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public double AutoOptimizeProgress
+        {
+            get => _autoOptimizeProgress;
+            private set
+            {
+                if (Math.Abs(_autoOptimizeProgress - value) < 0.001) return;
+                _autoOptimizeProgress = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public string AutoOptimizeWaitMessage
+        {
+            get => _autoOptimizeWaitMessage;
+            private set
+            {
+                if (string.Equals(_autoOptimizeWaitMessage, value, StringComparison.Ordinal)) return;
+                _autoOptimizeWaitMessage = value;
+                OnPropertyChanged();
+            }
+        }
 
         public int SelectedConflictEmployeeIndex { get; private set; } = -1;
         public int SelectedConflictDayIndex { get; private set; } = -1;
@@ -628,7 +702,19 @@ namespace MyTools.ViewModels
         }
 
         // ============================ Auto optimize ============================
-        private void AutoOptimize()
+        private async Task AutoOptimizeAsync()
+        {
+            if (Current == null) return;
+            if (!RequireWarningFreeSchedule)
+            {
+                AutoOptimizeCurrentOnce();
+                return;
+            }
+
+            await AutoOptimizeUntilWarningFreeAsync().ConfigureAwait(true);
+        }
+
+        private void AutoOptimizeCurrentOnce()
         {
             if (Current == null) return;
             var r = ShiftAutoOptimizer.Optimize(Current, BuildPreservedCells(Current));
@@ -652,16 +738,212 @@ namespace MyTools.ViewModels
                 return;
             }
 
-            if (r.Success)
+            StatusMessage = r.Message + (r.Warnings.Count > 0 ? "（详情见日志）" : "");
+            if (r.Warnings.Count > 0)
             {
-                StatusMessage = r.Message + (r.Warnings.Count > 0 ? "（详情见日志）" : "");
-                if (r.Warnings.Count > 0)
-                {
-                    foreach (var w in r.Warnings) AppLogService.Warning("Schedule warning: {W}", w);
-                }
+                foreach (var w in r.Warnings) AppLogService.Warning("Schedule warning: {W}", w);
             }
         }
 
+        private async Task AutoOptimizeUntilWarningFreeAsync()
+        {
+            if (Current == null) return;
+
+            var target = Current;
+            var source = CloneScheduleVersion(target);
+            AutoOptimizeMaxAttempts = MaxWarningFreeOptimizeAttempts;
+            AutoOptimizeAttempt = 0;
+            AutoOptimizeProgress = 0;
+            AutoOptimizeWaitMessage = "正在生成正确的结果，请等待！";
+            IsAutoOptimizeWaiting = true;
+
+            var progress = new Progress<int>(attempt =>
+            {
+                AutoOptimizeAttempt = attempt;
+                AutoOptimizeProgress = Math.Min(100, attempt * 100.0 / AutoOptimizeMaxAttempts);
+                AutoOptimizeWaitMessage = $"正在生成正确的结果，请等待！已尝试 {attempt}/{AutoOptimizeMaxAttempts} 次";
+            });
+
+            try
+            {
+                var result = await Task.Run(() => GenerateWarningFreeCandidate(source, AutoOptimizeMaxAttempts, progress)).ConfigureAwait(true);
+                if (!ReferenceEquals(Current, target))
+                {
+                    StatusMessage = "已切换到其他排班版本，本次自动生成结果已丢弃。";
+                    return;
+                }
+
+                if (result.Schedule == null)
+                {
+                    StatusMessage = $"已尝试 {result.Attempts} 次，仍未生成无警告结果。是否手工设置的作息有错，请检查！";
+                    MessageBox.Show(
+                        "是否手工设置的作息有错，请检查！",
+                        "设置休息日",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                    return;
+                }
+
+                ApplyScheduleVersionCells(target, result.Schedule);
+                NotifyScheduleDataChanged();
+                StatusMessage = $"已尝试 {result.Attempts} 次，生成无警告结果。{result.Result.Message}";
+            }
+            finally
+            {
+                IsAutoOptimizeWaiting = false;
+                AutoOptimizeWaitMessage = "正在生成正确的结果，请等待！";
+                AutoOptimizeProgress = 0;
+            }
+        }
+
+        private static (ScheduleVersion Schedule, ShiftAutoOptimizer.OptimizeResult Result, int Attempts, string LastIssue) GenerateWarningFreeCandidate(
+            ScheduleVersion source,
+            int maxAttempts,
+            IProgress<int> progress)
+        {
+            string lastIssue = string.Empty;
+            for (var attempt = 1; attempt <= maxAttempts; attempt++)
+            {
+                var candidate = CloneScheduleVersion(source);
+                var result = ShiftAutoOptimizer.Optimize(candidate, BuildPreservedCells(candidate));
+                lastIssue = GetScheduleOptimizeIssue(candidate, result);
+                if (string.IsNullOrWhiteSpace(lastIssue))
+                {
+                    progress?.Report(attempt);
+                    return (candidate, result, attempt, string.Empty);
+                }
+
+                if (attempt == 1 || attempt % 5 == 0 || attempt == maxAttempts)
+                {
+                    progress?.Report(attempt);
+                }
+            }
+
+            return (null, null, maxAttempts, lastIssue);
+        }
+
+        private static string GetScheduleOptimizeIssue(ScheduleVersion schedule, ShiftAutoOptimizer.OptimizeResult result)
+        {
+            if (result == null)
+            {
+                return "自动生成未返回结果。";
+            }
+
+            if (!result.Success)
+            {
+                return result.Warnings.Count > 0 ? result.Warnings[0] : result.Message;
+            }
+
+            if (result.Warnings.Count > 0)
+            {
+                return result.Warnings[0];
+            }
+
+            return BuildFirstScheduleConflictIssue(schedule);
+        }
+
+        private static string BuildFirstScheduleConflictIssue(ScheduleVersion schedule)
+        {
+            if (schedule == null)
+            {
+                return "当前排班为空。";
+            }
+
+            NormalizeScheduleRows(schedule);
+            for (var day = 0; day < schedule.DayCount; day++)
+            {
+                var actual = ComputeColumnRestCount(schedule, day);
+                var quota = day < schedule.DailyRestQuotas.Count ? schedule.DailyRestQuotas[day] : 0;
+                if (actual > quota + 0.001)
+                {
+                    return $"{day + 1} 日总休超额：实际 {FormatNumber(actual)} / 目标 {FormatNumber(quota)}。";
+                }
+
+                if (!IsDailyRestWithinQuota(actual, quota))
+                {
+                    var minAllowed = MinDailyRestAllowed(quota);
+                    return $"{day + 1} 日总休不足：实际 {FormatNumber(actual)} / 允许范围 {FormatNumber(minAllowed)}~{FormatNumber(quota)}。";
+                }
+            }
+
+            for (var empIndex = 0; empIndex < schedule.Employees.Count; empIndex++)
+            {
+                var employee = schedule.Employees[empIndex];
+                if (string.IsNullOrWhiteSpace(employee?.Name)) continue;
+
+                var maxRun = ComputeMaxConsecutiveWork(employee);
+                if (maxRun > 5)
+                {
+                    return $"{employee.Name} 连续上班 {maxRun} 天。";
+                }
+
+                var rest = employee.Cells == null ? 0 : employee.Cells.Sum(cell => ShiftCodes.RestDays(cell.Code));
+                if (rest < 8)
+                {
+                    return $"{employee.Name} 本月休息 {FormatNumber(rest)} 天，低于 8 天。";
+                }
+            }
+
+            return string.Empty;
+        }
+
+        private static ScheduleVersion CloneScheduleVersion(ScheduleVersion source)
+        {
+            if (source == null)
+            {
+                return null;
+            }
+
+            return new ScheduleVersion
+            {
+                Year = source.Year,
+                Month = source.Month,
+                VersionName = source.VersionName,
+                DailyRestQuotas = source.DailyRestQuotas == null ? new List<double>() : source.DailyRestQuotas.ToList(),
+                Employees = source.Employees == null
+                    ? new List<EmployeeRow>()
+                    : source.Employees.Select(employee => new EmployeeRow
+                    {
+                        Name = employee?.Name ?? string.Empty,
+                        Cells = employee?.Cells == null
+                            ? new List<ShiftCell>()
+                            : employee.Cells.Select(cell => new ShiftCell
+                            {
+                                Code = cell?.Code ?? string.Empty,
+                                IsManual = cell?.IsManual ?? false
+                            }).ToList()
+                    }).ToList(),
+                CreatedAt = source.CreatedAt,
+                UpdatedAt = source.UpdatedAt,
+                GeneratedAt = source.GeneratedAt
+            };
+        }
+
+        private static void ApplyScheduleVersionCells(ScheduleVersion target, ScheduleVersion source)
+        {
+            if (target == null || source == null)
+            {
+                return;
+            }
+
+            NormalizeScheduleRows(target);
+            NormalizeScheduleRows(source);
+            for (var employeeIndex = 0; employeeIndex < target.Employees.Count && employeeIndex < source.Employees.Count; employeeIndex++)
+            {
+                var targetEmployee = target.Employees[employeeIndex];
+                var sourceEmployee = source.Employees[employeeIndex];
+                EnsureEmployeeCellCount(targetEmployee, target.DayCount);
+                EnsureEmployeeCellCount(sourceEmployee, source.DayCount);
+                for (var day = 0; day < target.DayCount && day < sourceEmployee.Cells.Count; day++)
+                {
+                    targetEmployee.Cells[day].Code = sourceEmployee.Cells[day].Code;
+                    targetEmployee.Cells[day].IsManual = sourceEmployee.Cells[day].IsManual;
+                }
+            }
+
+            target.GeneratedAt = source.GeneratedAt;
+            target.UpdatedAt = DateTime.Now;
+        }
         // ============================ Clear all cells ============================
         private void ClearAllCells()
         {

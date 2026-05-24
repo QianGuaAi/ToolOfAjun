@@ -1,4 +1,53 @@
 # 开发记录
+
+## [2026-05-24] 多媒体看图 Ctrl+C 复制
+- `MultimediaPage.xaml.cs` 在页面快捷键处理中新增 `Ctrl+C`，当前预览或沉浸查看内容是图片时触发复制。
+- `MultimediaViewModel` 新增 `CopyCurrentViewedImageToClipboard()`，复用 `ScreenshotService.SetClipboardCompatible()` 将当前图片写入剪贴板，并更新状态文本。
+- 验证：`dotnet build src\MyTools\MyTools.csproj -c Release -p:OutputPath=c:\ToolOfAjun\output\buildcheck\MyTools\` 通过，0 警告 0 错误。
+
+## [2026-05-24] 排班无警告再显示 99 次上限
+- `ScheduleViewModel` 将“无警告再显示”的自动生成最大尝试次数改为 99 次。
+- 连续 99 次仍无法生成无警告排班时停止等待遮罩，并弹窗提示：是否手工设置的作息有错，请检查！
+- 验证：`dotnet build src\MyTools\MyTools.csproj -c Release -p:OutputPath=c:\ToolOfAjun\output\buildcheck\MyTools\` 通过，0 警告 0 错误。
+
+## [2026-05-24] 截图快捷键启动即生效
+- `MainWindow.OnSourceInitialized` 在初始化 `HotkeyService` 和窗口消息钩子后，调用 `MainViewModel.ScheduleStartupHotkeyRegistration()`，程序启动后即可注册截图全局快捷键。
+- `MainViewModel` 将截图热键配置加载拆成独立路径：启动空闲阶段只异步读取 `MyTools.settings.json` 并注册热键；进入截图界面时再加载录像输出目录和截图历史。
+- 保持启动性能约束：未在构造函数中同步读取磁盘，未在首帧前加载截图历史。
+- 验证：`dotnet build src\MyTools\MyTools.csproj -c Release` 默认 Release 输出构建通过，0 警告 0 错误。
+
+## [2026-05-24] CPA Token 实验导入与日程崩溃修复
+- `MainModulesView.xaml` 在 Codex 账号切换器顶部新增“导入 CPA Token”按钮。
+- `MainViewModel` 新增 CPA JSON 导入流程：选择本地 JSON 后读取 `access_token`、`refresh_token`、`id_token`、邮箱和到期时间，生成与 Codex 正常 ChatGPT 登录一致的实验 `auth.json`（`auth_mode`、`OPENAI_API_KEY`、`tokens`、`last_refresh`）与当前或空 `config.toml`，使用 DPAPI 加密保存为 Codex 档案；该流程不主动刷新 token，用户需点击“切换”后自行测试 Codex App 是否识别。
+- `CodexProfileLibraryService.ParseAccountEmail` 支持从 CPA 实验 `auth.json` 的顶层邮箱或 OpenAI access token 命名空间字段解析账号邮箱。
+- 修复点击“日程”崩溃：`SchedulePage.xaml` 中等待进度条 `Value` 改为 `OneWay` 绑定，避免绑定只读属性 `AutoOptimizeProgress` 时触发 `InvalidOperationException`。
+- 追加修复：旧 CPA 实验结构会让 Codex App 仍显示登录页，已改为生成正常 ChatGPT 登录结构，并将本机已导入的 CPA 档案与当前 `~/.codex/auth.json` 转换为新结构；`codex.exe login status` 显示 `Logged in using ChatGPT`。
+- 追加兜底：对缺少 `refresh_token` 但包含 `session_token` 的 CPA 文件，导入时将 `session_token` 作为实验 `tokens.refresh_token`；对以空签名段结尾的合成 `id_token` 补齐占位签名段，避免 Codex 本地解析报 `invalid ID token format`。
+- 验证限制：`-01.json` 可让 Codex CLI/App 进入 ChatGPT 登录态，但 App 发请求时日志显示服务端 `401 token_invalidated`，且 `session_token` 访问 ChatGPT 会话接口返回 403，暂不能换到真实 `refresh_token`。
+- 验证：`dotnet build src\MyTools\MyTools.csproj -c Release -p:OutputPath=c:\ToolOfAjun\output\buildcheck\MyTools\` 通过，0 警告 0 错误；默认 Release 输出被运行中的 `MyTools.exe` 锁定，未覆盖。
+
+## [2026-05-24] 多媒体文件夹树连线显示
+- `MultimediaPage.xaml` 重做文件夹树节点模板，使用竖线和横线连接父子节点；有子树的节点未展开显示 `+`，展开显示 `-`，叶子节点不显示标志。
+- `MultimediaPage.xaml.cs` 新增文件夹标题点击切换展开/折叠逻辑：点击标题会选中节点，有子树时同步展开或折叠。
+- `MultimediaViewModel` 改为仅在检测到可见子文件夹时添加占位子节点，避免无子树项目显示展开标志；仍保持按需展开扫描，不递归扫描整盘。
+- 验证：`dotnet build src\MyTools\MyTools.csproj -c Release -p:OutputPath=c:\ToolOfAjun\output\buildcheck\MyTools\` 通过，0 警告 0 错误。
+
+## [2026-05-24] 排班无警告生成选项
+- `SchedulePage.xaml` 在“设置休息日”右侧新增“无警告再显示”复选框；勾选后生成期间显示“正在生成正确的结果，请等待！”等待层和进度条。
+- `ScheduleViewModel` 将自动设置休息日命令改为异步执行：未勾选时保持原有单次生成行为；勾选后在后台最多尝试 500 次候选方案，只有优化器无警告且冲突侧栏无警告时才一次性刷新表格。
+- 如果 500 次内仍无合格方案，当前表格保持不变，并提示用户调整每日总休或手动班次后重试。
+- 验证：`dotnet build src\MyTools\MyTools.csproj -c Release -p:OutputPath=c:\ToolOfAjun\output\buildcheck\MyTools\` 通过，0 警告 0 错误；默认 Release 输出被运行中的 `MyTools.exe` 锁定，未覆盖。
+
+## [2026-05-24] Codex 账号切换器实现
+- 新增 `CodexProfileLibraryService`，将 Codex 档案库存放到 `%LOCALAPPDATA%\MyTools\Codex\profiles.json`，使用 DPAPI 加密整文件，并提供切换前备份、最近备份回滚、JWT 过期时间解析、状态计算和 `.codexbox` 加密包导入导出。
+- `MainViewModel` 的 Codex 模块改为按需加载新档案库，新增切换、刷新、改名、备注、回滚、加密包导入导出等命令；切换前自动备份当前 `~/.codex`，切换后写入 `active.json` 用于 UI 高亮。
+- `MainModulesView.xaml` 重做 Codex 面板，增加全局按钮和账号卡片列表，展示别名、脱敏邮箱、最后更新、剩余有效期、备注、状态色标及操作按钮；新增 `PasswordInputDialog`，加密包导入导出口令通过 `PasswordBox` 输入。
+- `Theme.xaml` 新增 Codex 状态色画刷；本次未引入新的 NuGet 依赖，未修改启动期加载流程。
+- 追加修复：旧 CPA 实验结构会让 Codex App 仍显示登录页，已改为生成正常 ChatGPT 登录结构，并将本机已导入的 CPA 档案与当前 `~/.codex/auth.json` 转换为新结构；`codex.exe login status` 显示 `Logged in using ChatGPT`。
+- 追加兜底：对缺少 `refresh_token` 但包含 `session_token` 的 CPA 文件，导入时将 `session_token` 作为实验 `tokens.refresh_token`；对以空签名段结尾的合成 `id_token` 补齐占位签名段，避免 Codex 本地解析报 `invalid ID token format`。
+- 验证限制：`-01.json` 可让 Codex CLI/App 进入 ChatGPT 登录态，但 App 发请求时日志显示服务端 `401 token_invalidated`，且 `session_token` 访问 ChatGPT 会话接口返回 403，暂不能换到真实 `refresh_token`。
+- 验证：`dotnet build src\MyTools\MyTools.csproj -c Release -p:OutputPath=c:\ToolOfAjun\output\buildcheck\MyTools\` 通过，0 警告 0 错误；默认 Release 输出被运行中的 `MyTools.exe` 锁定，未覆盖。
+
 ## [2026-05-23] 排班小1调整后重新打包安装程序
 - 通过 `scripts\Build-Installer.ps1` 重新构建主程序、卸载器和安装器，安装包已包含排班“小1=小→夜→休→休”、删除“大2”、夜班显示为“夜”等调整。
 - 打包前结束了占用 `src\MyTools\bin\Release\net48\MyTools.exe` 的本仓库运行实例，避免 Release 输出文件被锁定。
@@ -9,7 +58,10 @@
 - `ScheduleViewModel` 新增 `ApplySmallNight1`，从用户选中的格子开始依次设置“小、夜、休、休”四格，超出月底的格子自动跳过，所有被设置格均标记为手动单元格。
 - `SchedulePage.xaml.cs` 与 `ScheduleExcelExporter` 增加班次显示转换：底层继续兼容旧代码“大”，界面和 Excel 导出显示为“夜”。
 - `SchedulePage.xaml` 图例和说明更新为“夜”与“小1=小→夜→休→休”。
-- 验证：`dotnet build src\MyTools\MyTools.csproj -c Release` 通过，0 警告 0 错误。
+- 追加修复：旧 CPA 实验结构会让 Codex App 仍显示登录页，已改为生成正常 ChatGPT 登录结构，并将本机已导入的 CPA 档案与当前 `~/.codex/auth.json` 转换为新结构；`codex.exe login status` 显示 `Logged in using ChatGPT`。
+- 追加兜底：对缺少 `refresh_token` 但包含 `session_token` 的 CPA 文件，导入时将 `session_token` 作为实验 `tokens.refresh_token`；对以空签名段结尾的合成 `id_token` 补齐占位签名段，避免 Codex 本地解析报 `invalid ID token format`。
+- 验证限制：`-01.json` 可让 Codex CLI/App 进入 ChatGPT 登录态，但 App 发请求时日志显示服务端 `401 token_invalidated`，且 `session_token` 访问 ChatGPT 会话接口返回 403，暂不能换到真实 `refresh_token`。
+- 验证：`dotnet build src\MyTools\MyTools.csproj -c Release -p:OutputPath=c:\ToolOfAjun\output\buildcheck\MyTools\` 通过，0 警告 0 错误；默认 Release 输出被运行中的 `MyTools.exe` 锁定，未覆盖。
 
 ## [2026-05-23] 排班优化后重新打包安装程序
 - 通过 `scripts\Build-Installer.ps1` 重新构建主程序、卸载器和安装器，安装包已包含排班直接编辑、另存、清空、清空随机单元和大表可视区域渲染优化。
@@ -38,7 +90,10 @@
 - `SchedulePage.xaml.cs` 将 `ScheduleDataChanged` 从整表重建改为局部刷新现有按钮、统计格和总休格；只有人员数量、月份或列数变化时才重建动态 Grid。
 - `SchedulePage.xaml.cs` 移除姓名输入、每日总休输入、班次单元格按钮和删除人员按钮对 `IsEditing` 的只读/禁用判断，排班工作区加载后所有原编辑态控件都常驻可见且可操作。
 - 排班冲突侧栏最多渲染前 300 项，但摘要保留总冲突数量，减少大人员表每次编辑后的 UI 卡顿。
-- 验证：`dotnet build src\MyTools\MyTools.csproj -c Release` 通过，0 警告 0 错误。
+- 追加修复：旧 CPA 实验结构会让 Codex App 仍显示登录页，已改为生成正常 ChatGPT 登录结构，并将本机已导入的 CPA 档案与当前 `~/.codex/auth.json` 转换为新结构；`codex.exe login status` 显示 `Logged in using ChatGPT`。
+- 追加兜底：对缺少 `refresh_token` 但包含 `session_token` 的 CPA 文件，导入时将 `session_token` 作为实验 `tokens.refresh_token`；对以空签名段结尾的合成 `id_token` 补齐占位签名段，避免 Codex 本地解析报 `invalid ID token format`。
+- 验证限制：`-01.json` 可让 Codex CLI/App 进入 ChatGPT 登录态，但 App 发请求时日志显示服务端 `401 token_invalidated`，且 `session_token` 访问 ChatGPT 会话接口返回 403，暂不能换到真实 `refresh_token`。
+- 验证：`dotnet build src\MyTools\MyTools.csproj -c Release -p:OutputPath=c:\ToolOfAjun\output\buildcheck\MyTools\` 通过，0 警告 0 错误；默认 Release 输出被运行中的 `MyTools.exe` 锁定，未覆盖。
 
 ## [2026-05-23] 精简多媒体菜单
 - `MainWindow.xaml` 删除"图片查看(_I)"、"视频播放(_V)"、"格式转换(_C)"三个菜单项；三个模块本身保留，仍可从"多媒体入口"进入。

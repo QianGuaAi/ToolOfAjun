@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
@@ -503,7 +503,10 @@ namespace MyTools
             _windowSource?.AddHook(WndProc);
             EnableDragDropForElevatedProcess(handle);
             if (DataContext is MainViewModel vm)
+            {
                 vm.ReRegisterHotkey();
+                vm.ScheduleStartupHotkeyRegistration();
+            }
         }
 
         // ===== UIPI: 允许低权限窗口（如普通资源管理器）向本提升进程拖文件 =====

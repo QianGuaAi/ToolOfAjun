@@ -21,6 +21,7 @@ using Microsoft.VisualBasic;
 using Microsoft.Win32;
 using MyTools.Services;
 using MyTools.Shared;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using WinForms = System.Windows.Forms;
 using Drawing = System.Drawing;
@@ -231,6 +232,13 @@ namespace MyTools.ViewModels
         private readonly AsyncRelayParameterCommand _exportCodexProfileCommand;
         private readonly AsyncRelayParameterCommand _previewCodexProfileDiffCommand;
         private readonly AsyncRelayCommand _importCodexProfileCommand;
+        private readonly AsyncRelayCommand _importCodexCpaTokenCommand;
+        private readonly AsyncRelayParameterCommand _refreshCodexProfileCommand;
+        private readonly AsyncRelayParameterCommand _renameCodexProfileCommand;
+        private readonly AsyncRelayParameterCommand _editCodexProfileNoteCommand;
+        private readonly AsyncRelayCommand _restoreLastCodexBackupCommand;
+        private readonly AsyncRelayCommand _exportCodexProfilesEncBoxCommand;
+        private readonly AsyncRelayCommand _importCodexProfilesEncBoxCommand;
         private readonly AsyncRelayCommand _openRecordRegionCommand;
         private readonly AsyncRelayCommand _toggleAudioRecordingCommand;
         private readonly AsyncRelayCommand _refreshInstalledProgramsCommand;
@@ -265,6 +273,7 @@ namespace MyTools.ViewModels
         private WeChatCleanupService _weChatCleanupService;
         private WeChatBackupService _weChatBackupService;
         private bool _sqlHistoryLoadRequested;
+        private bool _screenshotHotkeysLoadRequested;
         private bool _screenshotStartupLoadRequested;
         private bool _videoViewerStartupLoadRequested;
         private bool _codexProfilesLoadRequested;
@@ -538,17 +547,32 @@ namespace MyTools.ViewModels
             OpenHomeRecentItemCommand = new RelayParameterCommand(OpenHomeRecentItem, parameter => parameter is HomeRecentItem);
             InitializeHomeCommandItems();
 
-            _applyCodexProfileCommand = new AsyncRelayParameterCommand(ApplyCodexProfileAsync);
+            _applyCodexProfileCommand = new AsyncRelayParameterCommand(ApplyCodexProfileAsync, parameter => parameter is CodexProfileItem);
             ApplyCodexProfileCommand = _applyCodexProfileCommand;
-            _exportCodexProfileCommand = new AsyncRelayParameterCommand(ExportCodexProfileAsync);
+            SwitchCodexProfileCommand = _applyCodexProfileCommand;
+            _exportCodexProfileCommand = new AsyncRelayParameterCommand(ExportCodexProfileAsync, parameter => parameter is CodexProfileItem);
             ExportCodexProfileCommand = _exportCodexProfileCommand;
             _previewCodexProfileDiffCommand = new AsyncRelayParameterCommand(PreviewCodexProfileDiffAsync, parameter => parameter is CodexProfileItem);
             PreviewCodexProfileDiffCommand = _previewCodexProfileDiffCommand;
             _importCodexProfileCommand = new AsyncRelayCommand(ImportCodexProfileAsync);
             ImportCodexProfileCommand = _importCodexProfileCommand;
-            DeleteCodexProfileCommand = new RelayParameterCommand(DeleteCodexProfile);
-            EditCodexConfigTomlCommand = new AsyncRelayParameterCommand(p => EditCodexFileAsync(p, CodexConfigProfileService.ConfigFileName));
-            EditCodexAuthJsonCommand = new AsyncRelayParameterCommand(p => EditCodexFileAsync(p, CodexConfigProfileService.AuthFileName));
+            _importCodexCpaTokenCommand = new AsyncRelayCommand(ImportCodexCpaTokenAsync);
+            ImportCodexCpaTokenCommand = _importCodexCpaTokenCommand;
+            _refreshCodexProfileCommand = new AsyncRelayParameterCommand(RefreshCodexProfileAsync, parameter => parameter is CodexProfileItem);
+            RefreshCodexProfileCommand = _refreshCodexProfileCommand;
+            _renameCodexProfileCommand = new AsyncRelayParameterCommand(RenameCodexProfileAsync, parameter => parameter is CodexProfileItem);
+            RenameCodexProfileCommand = _renameCodexProfileCommand;
+            _editCodexProfileNoteCommand = new AsyncRelayParameterCommand(EditCodexProfileNoteAsync, parameter => parameter is CodexProfileItem);
+            EditCodexProfileNoteCommand = _editCodexProfileNoteCommand;
+            _restoreLastCodexBackupCommand = new AsyncRelayCommand(RestoreLastCodexBackupAsync);
+            RestoreLastCodexBackupCommand = _restoreLastCodexBackupCommand;
+            _exportCodexProfilesEncBoxCommand = new AsyncRelayCommand(ExportCodexProfilesEncBoxAsync);
+            ExportCodexProfilesEncBoxCommand = _exportCodexProfilesEncBoxCommand;
+            _importCodexProfilesEncBoxCommand = new AsyncRelayCommand(ImportCodexProfilesEncBoxAsync);
+            ImportCodexProfilesEncBoxCommand = _importCodexProfilesEncBoxCommand;
+            DeleteCodexProfileCommand = new AsyncRelayParameterCommand(DeleteCodexProfileAsync, parameter => parameter is CodexProfileItem);
+            EditCodexConfigTomlCommand = new AsyncRelayParameterCommand(p => EditCodexFileAsync(p, CodexConfigProfileService.ConfigFileName), parameter => parameter is CodexProfileItem);
+            EditCodexAuthJsonCommand = new AsyncRelayParameterCommand(p => EditCodexFileAsync(p, CodexConfigProfileService.AuthFileName), parameter => parameter is CodexProfileItem);
 
             CurrentModule = "Home";
             ScheduleStartupBackgroundLoads();
@@ -1801,9 +1825,17 @@ namespace MyTools.ViewModels
         public ICommand LoadVideoViewerSubtitleCommand { get; }
         public ICommand ClearVideoViewerSubtitleCommand { get; }
         public ICommand ApplyCodexProfileCommand { get; }
+        public ICommand SwitchCodexProfileCommand { get; }
         public ICommand ExportCodexProfileCommand { get; }
         public ICommand PreviewCodexProfileDiffCommand { get; }
         public ICommand ImportCodexProfileCommand { get; }
+        public ICommand ImportCodexCpaTokenCommand { get; }
+        public ICommand RefreshCodexProfileCommand { get; }
+        public ICommand RenameCodexProfileCommand { get; }
+        public ICommand EditCodexProfileNoteCommand { get; }
+        public ICommand RestoreLastCodexBackupCommand { get; }
+        public ICommand ExportCodexProfilesEncBoxCommand { get; }
+        public ICommand ImportCodexProfilesEncBoxCommand { get; }
         public ICommand DeleteCodexProfileCommand { get; }
         public ICommand EditCodexConfigTomlCommand { get; }
         public ICommand EditCodexAuthJsonCommand { get; }
@@ -2841,10 +2873,29 @@ namespace MyTools.ViewModels
 
             _screenshotStartupLoadRequested = true;
             SafeFireAndForget(LoadRecordingOutputFoldersAsync());
-            SafeFireAndForget(LoadScreenshotSettingsAsync());
+            EnsureScreenshotHotkeySettingsLoading();
             Application.Current?.Dispatcher.BeginInvoke(
                 DispatcherPriority.Background,
                 new Action(LoadScreenshotHistory));
+        }
+
+        public void ScheduleStartupHotkeyRegistration()
+        {
+            var dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
+            dispatcher.BeginInvoke(
+                DispatcherPriority.ApplicationIdle,
+                new Action(EnsureScreenshotHotkeySettingsLoading));
+        }
+
+        private void EnsureScreenshotHotkeySettingsLoading()
+        {
+            if (_screenshotHotkeysLoadRequested)
+            {
+                return;
+            }
+
+            _screenshotHotkeysLoadRequested = true;
+            SafeFireAndForget(LoadScreenshotSettingsAsync());
         }
 
         private void EnsureVideoViewerStartupDataLoading()
@@ -3233,7 +3284,7 @@ namespace MyTools.ViewModels
                 catch (Exception ex)
                 {
                     failedCount++;
-                    AppLogService.Error(ex, "Adding Codex profile folder failed for {FolderPath}", fullPath);
+                    AppLogService.Error(new InvalidOperationException(ex.Message), "Adding Codex profile folder failed for {FolderName} with {ErrorType}", Path.GetFileName(fullPath), ex.GetType().Name);
                 }
             }
 
@@ -3259,7 +3310,8 @@ namespace MyTools.ViewModels
         {
             try
             {
-                var settings = await AppSettingsService.LoadAsync();
+                var file = await CodexProfileLibraryService.LoadAsync(CancellationToken.None);
+                var active = await CodexProfileLibraryService.LoadActiveAsync(CancellationToken.None);
                 await Application.Current.Dispatcher.InvokeAsync(() =>
                 {
                     foreach (var item in CodexProfiles)
@@ -3268,30 +3320,28 @@ namespace MyTools.ViewModels
                     }
 
                     CodexProfiles.Clear();
-                    var profiles = settings.CodexProfiles ?? new List<CodexProfileSettings>();
-                    foreach (var profile in profiles)
+                    foreach (var item in file.items ?? new List<CodexProfileItem>())
                     {
-                        if (profile == null)
+                        if (item == null)
                         {
                             continue;
                         }
 
-                        AddCodexProfileItem(CreateCodexProfileItem(
-                            profile.FolderPath,
-                            profile.Name,
-                            profile.Remark,
-                            profile.Tags,
-                            profile.LastAppliedAt,
-                            profile.ConfigTomlContentProtected,
-                            profile.AuthJsonContentProtected));
+                        ApplyCodexProfileMetadata(item);
+                        item.IsActive = !string.IsNullOrWhiteSpace(active.ActiveDisplayName)
+                            && string.Equals(item.DisplayName, active.ActiveDisplayName, StringComparison.OrdinalIgnoreCase);
+                        AddCodexProfileItem(item);
                     }
 
                     SortCodexProfilesByLastApplied();
+                    CodexProfilesStatusMessage = CodexProfiles.Count == 0
+                        ? "未保存 Codex 账号档案。请先在 Codex CLI 登录一次，然后点击导入当前账号。"
+                        : $"已加载 {CodexProfiles.Count} 个 Codex 账号档案。本机：{Environment.MachineName}";
                 });
             }
             catch (Exception ex)
             {
-                AppLogService.Error(ex, "Loading Codex config profiles failed.");
+                AppLogService.Error(new InvalidOperationException(ex.Message), "Loading Codex config profiles failed with {ErrorType}", ex.GetType().Name);
                 CodexProfilesStatusMessage = "读取 Codex 配置记录失败。";
             }
         }
@@ -3307,21 +3357,75 @@ namespace MyTools.ViewModels
         {
             var normalizedPath = NormalizeFolderPath(folderPath);
             var defaultName = ResolveCodexProfileName(name, normalizedPath);
-            return new CodexProfileItem
+            var item = new CodexProfileItem
             {
+                DisplayName = defaultName,
                 Name = defaultName,
-                Remark = string.IsNullOrWhiteSpace(remark) ? defaultName : remark,
+                Note = string.IsNullOrWhiteSpace(remark) ? string.Empty : remark.Trim(),
+                Remark = string.IsNullOrWhiteSpace(remark) ? defaultName : remark.Trim(),
                 Tags = tags ?? string.Empty,
                 LastAppliedAt = lastAppliedAt,
+                LastImportedAt = DateTime.UtcNow,
                 FolderPath = normalizedPath,
-                ConfigTomlContentProtected = configTomlContentProtected,
-                AuthJsonContentProtected = authJsonContentProtected,
+                ProtectedConfigTomlBase64 = configTomlContentProtected ?? string.Empty,
+                ProtectedAuthJsonBase64 = authJsonContentProtected ?? string.Empty,
+                ConfigTomlContentProtected = configTomlContentProtected ?? string.Empty,
+                AuthJsonContentProtected = authJsonContentProtected ?? string.Empty,
                 StatusMessage = string.Empty
             };
+
+            ApplyCodexProfileMetadata(item);
+            return item;
+        }
+
+        private void ApplyCodexProfileMetadata(CodexProfileItem item)
+        {
+            if (item == null)
+            {
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(item.DisplayName))
+            {
+                item.DisplayName = string.IsNullOrWhiteSpace(item.Name) ? "Codex 账号" : item.Name.Trim();
+            }
+
+            item.Name = item.DisplayName;
+            if (string.IsNullOrWhiteSpace(item.Note))
+            {
+                item.Note = item.Remark ?? string.Empty;
+            }
+
+            item.Remark = string.IsNullOrWhiteSpace(item.Note) ? item.DisplayName : item.Note;
+            if (item.LastImportedAt == default(DateTime))
+            {
+                item.LastImportedAt = item.LastAppliedAt ?? DateTime.UtcNow;
+            }
+
+            if (string.IsNullOrWhiteSpace(item.ProtectedConfigTomlBase64))
+            {
+                item.ProtectedConfigTomlBase64 = item.ConfigTomlContentProtected ?? string.Empty;
+            }
+
+            if (string.IsNullOrWhiteSpace(item.ProtectedAuthJsonBase64))
+            {
+                item.ProtectedAuthJsonBase64 = item.AuthJsonContentProtected ?? string.Empty;
+            }
+
+            item.ConfigTomlContentProtected = item.ProtectedConfigTomlBase64;
+            item.AuthJsonContentProtected = item.ProtectedAuthJsonBase64;
+            var authBytes = CodexConfigProfileService.UnprotectBytesFromBase64(item.ProtectedAuthJsonBase64);
+            item.AccountEmail = string.IsNullOrWhiteSpace(item.AccountEmail)
+                ? CodexProfileLibraryService.ParseAccountEmail(authBytes)
+                : item.AccountEmail;
+            item.AccessTokenExpiresAt = item.AccessTokenExpiresAt ?? CodexProfileLibraryService.ParseAccessTokenExp(authBytes);
+            item.RefreshTokenExpiresAt = null;
+            item.Status = CodexProfileLibraryService.ComputeStatus(item.AccessTokenExpiresAt);
         }
 
         private void AddCodexProfileItem(CodexProfileItem item)
         {
+            ApplyCodexProfileMetadata(item);
             item.PropertyChanged += CodexProfileItem_OnPropertyChanged;
             CodexProfiles.Add(item);
         }
@@ -3329,8 +3433,9 @@ namespace MyTools.ViewModels
         private void SortCodexProfilesByLastApplied()
         {
             var ordered = CodexProfiles
-                .OrderByDescending(item => item.LastAppliedAt ?? DateTime.MinValue)
-                .ThenBy(item => item.Name, StringComparer.CurrentCultureIgnoreCase)
+                .OrderByDescending(item => item.IsActive)
+                .ThenByDescending(item => item.LastAppliedAt ?? item.LastImportedAt)
+                .ThenBy(item => item.DisplayName, StringComparer.CurrentCultureIgnoreCase)
                 .ToList();
 
             foreach (var item in CodexProfiles)
@@ -3348,7 +3453,8 @@ namespace MyTools.ViewModels
         private void CodexProfileItem_OnPropertyChanged(object sender, PropertyChangedEventArgs e)
         {
             if (e.PropertyName == nameof(CodexProfileItem.Remark)
-                || e.PropertyName == nameof(CodexProfileItem.Tags))
+                || e.PropertyName == nameof(CodexProfileItem.Tags)
+                || e.PropertyName == nameof(CodexProfileItem.Note))
             {
                 SafeFireAndForget(SaveCodexProfilesAsync());
             }
@@ -3356,25 +3462,45 @@ namespace MyTools.ViewModels
 
         private async Task SaveCodexProfilesAsync()
         {
-            var profiles = CodexProfiles
-                .Where(item =>
-                    !string.IsNullOrWhiteSpace(item.Name)
-                    && (!string.IsNullOrWhiteSpace(item.FolderPath)
-                        || !string.IsNullOrWhiteSpace(item.ConfigTomlContentProtected)
-                        || !string.IsNullOrWhiteSpace(item.AuthJsonContentProtected)))
-                .Select(item => new CodexProfileSettings
-                {
-                    Name = item.Name,
-                    Remark = item.Remark,
-                    Tags = item.Tags,
-                    FolderPath = NormalizeFolderPath(item.FolderPath),
-                    ConfigTomlContentProtected = item.ConfigTomlContentProtected,
-                    AuthJsonContentProtected = item.AuthJsonContentProtected,
-                    LastAppliedAt = item.LastAppliedAt
-                })
-                .ToList();
+            var file = BuildCodexProfilesFileFromCollection();
+            await CodexProfileLibraryService.SaveAsync(file, CancellationToken.None);
+        }
 
-            await AppSettingsService.UpdateAsync(settings => settings.CodexProfiles = profiles);
+        private CodexProfilesFile BuildCodexProfilesFileFromCollection()
+        {
+            var file = new CodexProfilesFile
+            {
+                schemaVersion = CodexProfileLibraryService.CurrentSchemaVersion,
+                machineName = Environment.MachineName,
+                createdAtUtc = DateTime.UtcNow,
+                items = CodexProfiles
+                    .Where(item => item != null && !string.IsNullOrWhiteSpace(item.DisplayName))
+                    .Select(item =>
+                    {
+                        ApplyCodexProfileMetadata(item);
+                        return new CodexProfileItem
+                        {
+                            DisplayName = item.DisplayName,
+                            Name = item.DisplayName,
+                            AccountEmail = item.AccountEmail ?? string.Empty,
+                            Note = item.Note ?? string.Empty,
+                            Remark = item.Note ?? string.Empty,
+                            Tags = item.Tags ?? string.Empty,
+                            FolderPath = NormalizeFolderPath(item.FolderPath),
+                            LastAppliedAt = item.LastAppliedAt,
+                            LastImportedAt = item.LastImportedAt,
+                            AccessTokenExpiresAt = item.AccessTokenExpiresAt,
+                            RefreshTokenExpiresAt = null,
+                            ProtectedConfigTomlBase64 = item.ProtectedConfigTomlBase64 ?? item.ConfigTomlContentProtected,
+                            ProtectedAuthJsonBase64 = item.ProtectedAuthJsonBase64 ?? item.AuthJsonContentProtected,
+                            ConfigTomlContentProtected = item.ProtectedConfigTomlBase64 ?? item.ConfigTomlContentProtected,
+                            AuthJsonContentProtected = item.ProtectedAuthJsonBase64 ?? item.AuthJsonContentProtected,
+                            Status = item.Status ?? CodexProfileLibraryService.StatusUnknown
+                        };
+                    })
+                    .ToList()
+            };
+            return file;
         }
 
         private async Task ApplyCodexProfileAsync(object parameter)
@@ -3384,53 +3510,85 @@ namespace MyTools.ViewModels
                 return;
             }
 
+            var confirm = MessageBox.Show(
+                $"即将切换到「{item.DisplayName}」，当前 ~/.codex 将自动备份。继续？",
+                "切换 Codex 账号",
+                MessageBoxButton.OKCancel,
+                MessageBoxImage.Question);
+            if (confirm != MessageBoxResult.OK)
+            {
+                return;
+            }
+
             try
             {
                 item.IsApplying = true;
-                item.StatusMessage = "正在应用...";
+                item.StatusMessage = "正在切换...";
 
-                var configTomlBytes = CodexConfigProfileService.UnprotectBytesFromBase64(item.ConfigTomlContentProtected);
-                var authJsonBytes = CodexConfigProfileService.UnprotectBytesFromBase64(item.AuthJsonContentProtected);
+                var configTomlBytes = CodexConfigProfileService.UnprotectBytesFromBase64(item.ProtectedConfigTomlBase64 ?? item.ConfigTomlContentProtected);
+                var authJsonBytes = CodexConfigProfileService.UnprotectBytesFromBase64(item.ProtectedAuthJsonBase64 ?? item.AuthJsonContentProtected);
 
                 if (configTomlBytes == null || authJsonBytes == null)
                 {
                     var fallbackFolderPath = NormalizeFolderPath(item.FolderPath);
                     if (string.IsNullOrWhiteSpace(fallbackFolderPath) || !Directory.Exists(fallbackFolderPath))
                     {
-                        throw new InvalidOperationException("该记录未保存配置内容，且来源文件夹已不存在，请重新拖入配置文件夹。");
+                        throw new InvalidOperationException("该记录未保存配置内容，且来源文件夹已不存在，请重新导入当前账号。 ");
                     }
 
                     var sourceFiles = await CodexConfigProfileService.ReadProfileFromFolderAsync(fallbackFolderPath, CancellationToken.None);
                     configTomlBytes = sourceFiles.ConfigTomlBytes;
                     authJsonBytes = sourceFiles.AuthJsonBytes;
-                    item.ConfigTomlContentProtected = CodexConfigProfileService.ProtectBytesToBase64(configTomlBytes);
-                    item.AuthJsonContentProtected = CodexConfigProfileService.ProtectBytesToBase64(authJsonBytes);
+                    item.ProtectedConfigTomlBase64 = CodexConfigProfileService.ProtectBytesToBase64(configTomlBytes);
+                    item.ProtectedAuthJsonBase64 = CodexConfigProfileService.ProtectBytesToBase64(authJsonBytes);
+                    item.ConfigTomlContentProtected = item.ProtectedConfigTomlBase64;
+                    item.AuthJsonContentProtected = item.ProtectedAuthJsonBase64;
                 }
 
+                var previousActive = CodexProfiles.FirstOrDefault(profile => profile.IsActive)?.DisplayName ?? "codex";
+                var backupPath = await CodexProfileLibraryService.BackupCurrentCodexFolderAsync(previousActive, CancellationToken.None);
                 var result = await CodexConfigProfileService.ApplyAsync(configTomlBytes, authJsonBytes, CancellationToken.None);
                 item.LastAppliedAt = DateTime.Now;
-                item.StatusMessage = $"已应用到 {result.TargetFolderPath}：{item.LastAppliedAt:yyyy-MM-dd HH:mm:ss}";
-                CodexProfilesStatusMessage = $"已应用「{item.Name}」。";
+                item.LastImportedAt = item.LastImportedAt == default(DateTime) ? DateTime.UtcNow : item.LastImportedAt;
+                item.AccountEmail = CodexProfileLibraryService.ParseAccountEmail(authJsonBytes);
+                item.AccessTokenExpiresAt = CodexProfileLibraryService.ParseAccessTokenExp(authJsonBytes);
+                item.Status = CodexProfileLibraryService.ComputeStatus(item.AccessTokenExpiresAt);
+                item.StatusMessage = $"已切换：{item.LastAppliedAt:yyyy-MM-dd HH:mm:ss}";
+
+                foreach (var profile in CodexProfiles)
+                {
+                    profile.IsActive = ReferenceEquals(profile, item);
+                }
+
+                await CodexProfileLibraryService.SaveActiveAsync(new CodexActiveFile
+                {
+                    ActiveDisplayName = item.DisplayName,
+                    SwitchedAtUtc = DateTime.UtcNow
+                }, CancellationToken.None);
+
+                CodexProfilesStatusMessage = string.IsNullOrWhiteSpace(backupPath)
+                    ? $"已切换到「{item.DisplayName}」。当前 ~/.codex 原本无可备份文件。"
+                    : $"已切换到「{item.DisplayName}」。已备份切换前配置。";
                 SortCodexProfilesByLastApplied();
                 await SaveCodexProfilesAsync();
+                AppLogService.Information("Switched Codex profile to {DisplayName}, backup at {BackupPath}", SafeCodexLogName(item.DisplayName), backupPath ?? string.Empty);
                 MessageBox.Show(
-                    $"已成功应用「{item.Name}」。\n\n目标目录：{result.TargetFolderPath}",
-                    "Codex 配置应用成功",
+                    $"已成功切换到「{item.DisplayName}」。\n\n目标目录：{result.TargetFolderPath}\n请重启 Codex 或重新打开终端后使用。",
+                    "Codex 账号切换成功",
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
-                AppLogService.Error(ex, "Applying Codex config profile failed for {ProfileName}", item.Name ?? string.Empty);
-                item.StatusMessage = "应用失败：" + ex.Message;
-                MessageBox.Show(ex.Message, "Codex 配置应用失败", MessageBoxButton.OK, MessageBoxImage.Error);
+                AppLogService.Error(new InvalidOperationException(ex.Message), "Switching Codex profile failed for {ProfileName} with {ErrorType}", SafeCodexLogName(item.DisplayName), ex.GetType().Name);
+                item.StatusMessage = "切换失败：" + ex.Message;
+                MessageBox.Show(ex.Message, "Codex 账号切换失败", MessageBoxButton.OK, MessageBoxImage.Error);
             }
             finally
             {
                 item.IsApplying = false;
             }
         }
-
         private async Task ExportCodexProfileAsync(object parameter)
         {
             if (!(parameter is CodexProfileItem item))
@@ -3477,12 +3635,12 @@ namespace MyTools.ViewModels
                     await WriteAllBytesAsync(authPath, authJsonBytes, CancellationToken.None);
 
                     CodexProfilesStatusMessage = $"已导出「{item.Name}」到 {targetFolder}。";
-                    AppLogService.Information("Exported Codex profile {Name} to {Folder}", item.Name ?? string.Empty, targetFolder);
+                    AppLogService.Information("Exported Codex profile {Name} to folder {FolderName}", SafeCodexLogName(item.Name), Path.GetFileName(targetFolder));
                 }
             }
             catch (Exception ex)
             {
-                AppLogService.Error(ex, "Exporting Codex profile failed for {Name}", item.Name ?? string.Empty);
+                AppLogService.Error(new InvalidOperationException(ex.Message), "Exporting Codex profile failed for {Name} with {ErrorType}", SafeCodexLogName(item.Name), ex.GetType().Name);
                 MessageBox.Show(ex.Message, "导出失败", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
@@ -3491,53 +3649,17 @@ namespace MyTools.ViewModels
         {
             try
             {
-                var dialog = new OpenFileDialog
-                {
-                    Multiselect = true,
-                    Filter = "Codex 配置文件|config.toml;auth.json|所有文件 (*.*)|*.*",
-                    Title = "请选择 config.toml 和 auth.json"
-                };
+                var sourceFiles = await CodexProfileLibraryService.ReadCurrentCodexFilesAsync(CancellationToken.None);
+                var email = CodexProfileLibraryService.ParseAccountEmail(sourceFiles.AuthJsonBytes);
+                var fallbackName = string.IsNullOrWhiteSpace(email) ? $"Codex账号_{DateTime.Now:yyyyMMdd_HHmmss}" : email;
+                var inputName = Interaction.InputBox("请输入账号档案别名", "导入当前 Codex 账号", fallbackName);
+                var name = string.IsNullOrWhiteSpace(inputName) ? fallbackName : inputName.Trim();
+                name = EnsureUniqueCodexDisplayName(name, null);
 
-                if (dialog.ShowDialog() != true || dialog.FileNames == null || dialog.FileNames.Length == 0)
-                {
-                    return;
-                }
-
-                var configFilePath = dialog.FileNames.FirstOrDefault(path =>
-                    string.Equals(Path.GetFileName(path), CodexConfigProfileService.ConfigFileName, StringComparison.OrdinalIgnoreCase));
-                var authFilePath = dialog.FileNames.FirstOrDefault(path =>
-                    string.Equals(Path.GetFileName(path), CodexConfigProfileService.AuthFileName, StringComparison.OrdinalIgnoreCase));
-
-                if (string.IsNullOrWhiteSpace(configFilePath) || string.IsNullOrWhiteSpace(authFilePath))
-                {
-                    MessageBox.Show("请同时选择 config.toml 和 auth.json 两个文件。", "导入 Codex 配置", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return;
-                }
-
-                var configFolderPath = NormalizeFolderPath(Path.GetDirectoryName(configFilePath));
-                var authFolderPath = NormalizeFolderPath(Path.GetDirectoryName(authFilePath));
-                if (!string.Equals(configFolderPath, authFolderPath, StringComparison.OrdinalIgnoreCase))
-                {
-                    MessageBox.Show("config.toml 和 auth.json 必须来自同一个文件夹。", "导入 Codex 配置", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return;
-                }
-
-                var inputName = Interaction.InputBox("请输入新记录名称", "导入 Codex 配置", string.Empty);
-                var fallbackName = Path.GetFileName(configFolderPath);
-                var name = string.IsNullOrWhiteSpace(inputName)
-                    ? fallbackName
-                    : inputName.Trim();
-                if (string.IsNullOrWhiteSpace(name))
-                {
-                    name = $"codex-profile-{DateTime.Now:yyyyMMddHHmmss}";
-                }
-
-                var configBytes = await ReadAllBytesAsync(configFilePath, CancellationToken.None);
-                var authBytes = await ReadAllBytesAsync(authFilePath, CancellationToken.None);
-                var importSummary = BuildCodexProfileImportSummary(name, configBytes, authBytes);
+                var importSummary = BuildCodexProfileImportSummary(name, sourceFiles.ConfigTomlBytes, sourceFiles.AuthJsonBytes);
                 var confirm = MessageBox.Show(
-                    importSummary + "\n\n是否保存这条 Codex 配置记录？",
-                    "导入 Codex 配置预览",
+                    importSummary + "\n\n是否保存当前 ~/.codex 为这条账号档案？",
+                    "导入当前 Codex 账号预览",
                     MessageBoxButton.OKCancel,
                     MessageBoxImage.Information);
                 if (confirm != MessageBoxResult.OK)
@@ -3547,28 +3669,382 @@ namespace MyTools.ViewModels
                 }
 
                 var item = CreateCodexProfileItem(
-                    configFolderPath,
-                    name,
+                    sourceFiles.SourceFolderPath,
                     name,
                     string.Empty,
+                    string.Empty,
                     null,
-                    CodexConfigProfileService.ProtectBytesToBase64(configBytes),
-                    CodexConfigProfileService.ProtectBytesToBase64(authBytes));
-                item.StatusMessage = "已导入配置内容。";
+                    CodexConfigProfileService.ProtectBytesToBase64(sourceFiles.ConfigTomlBytes),
+                    CodexConfigProfileService.ProtectBytesToBase64(sourceFiles.AuthJsonBytes));
+                item.DisplayName = name;
+                item.Name = name;
+                item.Note = string.Empty;
+                item.Remark = name;
+                item.AccountEmail = email;
+                item.LastImportedAt = DateTime.UtcNow;
+                item.AccessTokenExpiresAt = CodexProfileLibraryService.ParseAccessTokenExp(sourceFiles.AuthJsonBytes);
+                item.Status = CodexProfileLibraryService.ComputeStatus(item.AccessTokenExpiresAt);
+                item.StatusMessage = "已导入当前账号。";
                 AddCodexProfileItem(item);
 
                 await SaveCodexProfilesAsync();
-                CodexProfilesStatusMessage = $"已导入「{item.Name}」。";
-                AppLogService.Information("Imported Codex profile {Name} from {Folder}", item.Name ?? string.Empty, configFolderPath);
+                CodexProfilesStatusMessage = $"已导入当前账号为「{item.DisplayName}」。";
+                AppLogService.Information("Imported Codex profile {Name} from current Codex folder", SafeCodexLogName(item.DisplayName));
             }
             catch (Exception ex)
             {
-                AppLogService.Error(ex, "Importing Codex profile failed.");
+                AppLogService.Error(new InvalidOperationException(ex.Message), "Importing current Codex profile failed with {ErrorType}", ex.GetType().Name);
                 MessageBox.Show(ex.Message, "导入失败", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
-        private void DeleteCodexProfile(object parameter)
+        private async Task ImportCodexCpaTokenAsync()
+        {
+            try
+            {
+                var dialog = new OpenFileDialog
+                {
+                    Title = "导入 CPA Token JSON",
+                    Filter = "JSON 文件 (*.json)|*.json|所有文件 (*.*)|*.*"
+                };
+                if (dialog.ShowDialog() != true)
+                {
+                    return;
+                }
+
+                var tokenText = Encoding.UTF8.GetString(await ReadAllBytesAsync(dialog.FileName, CancellationToken.None).ConfigureAwait(true));
+                var tokenJson = JObject.Parse(tokenText);
+                var accessToken = SelectJsonString(tokenJson, "access_token", "accessToken");
+                var rawRefreshToken = SelectJsonString(tokenJson, "refresh_token", "refreshToken");
+                var sessionToken = SelectJsonString(tokenJson, "session_token", "sessionToken");
+                var refreshToken = ResolveCpaRefreshToken(rawRefreshToken, sessionToken);
+                var idToken = NormalizeCpaIdToken(SelectJsonString(tokenJson, "id_token", "idToken"));
+                var usesSessionTokenAsRefreshToken = string.IsNullOrWhiteSpace(rawRefreshToken) && !string.IsNullOrWhiteSpace(refreshToken);
+                if (string.IsNullOrWhiteSpace(accessToken))
+                {
+                    throw new InvalidOperationException("CPA Token 文件缺少 access_token，无法生成实验档案。");
+                }
+
+                var email = ResolveCpaTokenEmail(tokenJson, accessToken, idToken);
+                var fallbackName = string.IsNullOrWhiteSpace(email)
+                    ? $"CPA导入_{DateTime.Now:yyyyMMdd_HHmmss}"
+                    : "CPA导入-" + CodexProfileLibraryService.MaskEmail(email);
+                var inputName = Interaction.InputBox("请输入实验档案别名", "导入 CPA Token", fallbackName);
+                var name = string.IsNullOrWhiteSpace(inputName) ? fallbackName : inputName.Trim();
+                name = EnsureUniqueCodexDisplayName(name, null);
+
+                var configBytes = await ResolveCodexConfigForCpaImportAsync().ConfigureAwait(true);
+                var authBytes = BuildCodexAuthJsonFromCpaToken(tokenJson, accessToken, refreshToken, idToken, email);
+                var summary = BuildCodexCpaImportSummary(name, dialog.FileName, tokenJson, authBytes, accessToken, refreshToken, idToken, usesSessionTokenAsRefreshToken);
+                var confirm = MessageBox.Show(
+                    summary + "\n\n该功能不会刷新 token，只生成实验档案。保存后可点击“切换”写入 ~/.codex 测试 Codex App 是否识别。是否继续？",
+                    "导入 CPA Token 预览",
+                    MessageBoxButton.OKCancel,
+                    MessageBoxImage.Information);
+                if (confirm != MessageBoxResult.OK)
+                {
+                    CodexProfilesStatusMessage = "已取消 CPA Token 导入。";
+                    return;
+                }
+
+                var item = CreateCodexProfileItem(
+                    Path.GetDirectoryName(dialog.FileName) ?? string.Empty,
+                    name,
+                    "由 CPA token 文件生成，未验证可登录。",
+                    "cpa,experiment",
+                    null,
+                    CodexConfigProfileService.ProtectBytesToBase64(configBytes),
+                    CodexConfigProfileService.ProtectBytesToBase64(authBytes));
+                item.DisplayName = name;
+                item.Name = name;
+                item.Note = "由 CPA token 文件生成，未验证可登录。";
+                item.Remark = item.Note;
+                item.AccountEmail = email;
+                item.LastImportedAt = DateTime.UtcNow;
+                item.AccessTokenExpiresAt = CodexProfileLibraryService.ParseAccessTokenExp(authBytes);
+                item.Status = CodexProfileLibraryService.ComputeStatus(item.AccessTokenExpiresAt);
+                item.StatusMessage = usesSessionTokenAsRefreshToken
+                    ? "已导入 CPA 实验档案；使用 session_token 兜底，可能无法刷新。"
+                    : string.IsNullOrWhiteSpace(refreshToken)
+                    ? "已导入 CPA 实验档案；缺少 refresh_token。"
+                    : "已导入 CPA 实验档案；未验证可登录。";
+                AddCodexProfileItem(item);
+                SortCodexProfilesByLastApplied();
+                await SaveCodexProfilesAsync().ConfigureAwait(true);
+                CodexProfilesStatusMessage = $"已导入 CPA Token 实验档案「{item.DisplayName}」。点击“切换”后可测试 Codex App 是否识别。";
+                AppLogService.Information("Imported CPA token experiment profile {DisplayName} from {FileName}, has refresh token = {HasRefreshToken}, used session fallback = {UsedSessionFallback}", SafeCodexLogName(item.DisplayName), Path.GetFileName(dialog.FileName), !string.IsNullOrWhiteSpace(refreshToken), usesSessionTokenAsRefreshToken);
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(new InvalidOperationException(ex.Message), "Importing CPA token experiment profile failed with {ErrorType}", ex.GetType().Name);
+                MessageBox.Show(ex.Message, "导入 CPA Token 失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+        private async Task RefreshCodexProfileAsync(object parameter)
+        {
+            if (!(parameter is CodexProfileItem item))
+            {
+                return;
+            }
+
+            try
+            {
+                var sourceFiles = await CodexProfileLibraryService.ReadCurrentCodexFilesAsync(CancellationToken.None);
+                item.ProtectedConfigTomlBase64 = CodexConfigProfileService.ProtectBytesToBase64(sourceFiles.ConfigTomlBytes);
+                item.ProtectedAuthJsonBase64 = CodexConfigProfileService.ProtectBytesToBase64(sourceFiles.AuthJsonBytes);
+                item.ConfigTomlContentProtected = item.ProtectedConfigTomlBase64;
+                item.AuthJsonContentProtected = item.ProtectedAuthJsonBase64;
+                item.AccountEmail = CodexProfileLibraryService.ParseAccountEmail(sourceFiles.AuthJsonBytes);
+                item.AccessTokenExpiresAt = CodexProfileLibraryService.ParseAccessTokenExp(sourceFiles.AuthJsonBytes);
+                item.RefreshTokenExpiresAt = null;
+                item.LastImportedAt = DateTime.UtcNow;
+                item.Status = CodexProfileLibraryService.ComputeStatus(item.AccessTokenExpiresAt);
+                item.StatusMessage = "已刷新当前 token。";
+                await SaveCodexProfilesAsync();
+                CodexProfilesStatusMessage = $"已刷新「{item.DisplayName}」。";
+                AppLogService.Information("Refreshed Codex profile {DisplayName}, expires at {AccessTokenExpiresAt}", SafeCodexLogName(item.DisplayName), item.AccessTokenExpiresAt);
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(new InvalidOperationException(ex.Message), "Refreshing Codex profile failed for {DisplayName} with {ErrorType}", SafeCodexLogName(item.DisplayName), ex.GetType().Name);
+                MessageBox.Show(ex.Message, "刷新失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private async Task RenameCodexProfileAsync(object parameter)
+        {
+            if (!(parameter is CodexProfileItem item))
+            {
+                return;
+            }
+
+            var input = Interaction.InputBox("请输入新的账号档案别名", "重命名 Codex 档案", item.DisplayName ?? item.Name ?? string.Empty);
+            if (string.IsNullOrWhiteSpace(input))
+            {
+                return;
+            }
+
+            var name = input.Trim();
+            if (CodexProfiles.Any(profile => !ReferenceEquals(profile, item) && string.Equals(profile.DisplayName, name, StringComparison.OrdinalIgnoreCase)))
+            {
+                MessageBox.Show("已存在同名 Codex 档案，请换一个别名。", "重命名 Codex 档案", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            item.DisplayName = name;
+            item.Name = name;
+            item.Remark = string.IsNullOrWhiteSpace(item.Note) ? name : item.Note;
+            if (item.IsActive)
+            {
+                await CodexProfileLibraryService.SaveActiveAsync(new CodexActiveFile
+                {
+                    ActiveDisplayName = item.DisplayName,
+                    SwitchedAtUtc = DateTime.UtcNow
+                }, CancellationToken.None);
+            }
+
+            await SaveCodexProfilesAsync();
+            CodexProfilesStatusMessage = $"已重命名为「{item.DisplayName}」。";
+        }
+
+        private async Task EditCodexProfileNoteAsync(object parameter)
+        {
+            if (!(parameter is CodexProfileItem item))
+            {
+                return;
+            }
+
+            var input = Interaction.InputBox("请输入备注（最多 200 字）", "编辑 Codex 档案备注", item.Note ?? string.Empty);
+            if (input == null)
+            {
+                return;
+            }
+
+            item.Note = input.Length > 200 ? input.Substring(0, 200) : input;
+            item.Remark = string.IsNullOrWhiteSpace(item.Note) ? item.DisplayName : item.Note;
+            await SaveCodexProfilesAsync();
+            CodexProfilesStatusMessage = $"已更新「{item.DisplayName}」备注。";
+        }
+
+        private async Task RestoreLastCodexBackupAsync()
+        {
+            var confirm = MessageBox.Show(
+                "将回滚到最近一次切换前的 ~/.codex 备份。继续？",
+                "回滚 Codex 备份",
+                MessageBoxButton.OKCancel,
+                MessageBoxImage.Warning);
+            if (confirm != MessageBoxResult.OK)
+            {
+                return;
+            }
+
+            try
+            {
+                var path = await CodexProfileLibraryService.RestoreLatestBackupAsync(CancellationToken.None);
+                foreach (var profile in CodexProfiles)
+                {
+                    profile.IsActive = false;
+                }
+
+                await CodexProfileLibraryService.SaveActiveAsync(new CodexActiveFile(), CancellationToken.None);
+                CodexProfilesStatusMessage = "已回滚最近一次 Codex 切换备份，请重启 Codex。";
+                AppLogService.Information("Restored latest Codex backup from {BackupPath}", path ?? string.Empty);
+                MessageBox.Show("已回滚最近一次 Codex 切换备份，请重启 Codex。", "回滚完成", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(new InvalidOperationException(ex.Message), "Restoring Codex backup failed with {ErrorType}", ex.GetType().Name);
+                MessageBox.Show(ex.Message, "回滚失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private async Task ExportCodexProfilesEncBoxAsync()
+        {
+            try
+            {
+                if (CodexProfiles.Count == 0)
+                {
+                    MessageBox.Show("当前没有可导出的 Codex 档案。", "导出加密包", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+
+                var dialog = new SaveFileDialog
+                {
+                    Title = "导出 Codex 加密档案包",
+                    Filter = "Codex 加密档案包 (*.codexbox)|*.codexbox",
+                    DefaultExt = ".codexbox",
+                    FileName = $"CodexProfiles_{DateTime.Now:yyyyMMdd_HHmmss}.codexbox"
+                };
+                if (dialog.ShowDialog() != true)
+                {
+                    return;
+                }
+
+                var passwordDialog = new MyTools.Views.PasswordInputDialog("导出 Codex 加密档案包", "请输入导出口令。该口令只用于本次 .codexbox 文件加密，不会被保存。")
+                {
+                    Owner = Application.Current?.MainWindow
+                };
+                if (passwordDialog.ShowDialog() != true || string.IsNullOrEmpty(passwordDialog.Password))
+                {
+                    return;
+                }
+
+                var confirmPasswordDialog = new MyTools.Views.PasswordInputDialog("确认导出口令", "请再次输入导出口令。")
+                {
+                    Owner = Application.Current?.MainWindow
+                };
+                if (confirmPasswordDialog.ShowDialog() != true)
+                {
+                    return;
+                }
+
+                var password = passwordDialog.Password;
+                var password2 = confirmPasswordDialog.Password;
+                if (!string.Equals(password, password2, StringComparison.Ordinal))
+                {
+                    MessageBox.Show("两次输入的口令不一致。", "导出加密包", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                var file = BuildCodexProfilesFileFromCollection();
+                await CodexProfileLibraryService.ExportBoxAsync(file, dialog.FileName, password, CancellationToken.None);
+                CodexProfilesStatusMessage = $"已导出 {file.items.Count} 个 Codex 档案到加密包。";
+                AppLogService.Information("Exported Codex profile encbox {FileName}, item count = {Count}", Path.GetFileName(dialog.FileName), file.items.Count);
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(new InvalidOperationException(ex.Message), "Exporting Codex encbox failed with {ErrorType}", ex.GetType().Name);
+                MessageBox.Show(ex.Message, "导出加密包失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private async Task ImportCodexProfilesEncBoxAsync()
+        {
+            try
+            {
+                var dialog = new OpenFileDialog
+                {
+                    Title = "导入 Codex 加密档案包",
+                    Filter = "Codex 加密档案包 (*.codexbox)|*.codexbox|所有文件 (*.*)|*.*"
+                };
+                if (dialog.ShowDialog() != true)
+                {
+                    return;
+                }
+
+                var passwordDialog = new MyTools.Views.PasswordInputDialog("导入 Codex 加密档案包", "请输入 .codexbox 文件口令。")
+                {
+                    Owner = Application.Current?.MainWindow
+                };
+                if (passwordDialog.ShowDialog() != true || string.IsNullOrEmpty(passwordDialog.Password))
+                {
+                    return;
+                }
+
+                var importFile = await CodexProfileLibraryService.ImportBoxAsync(dialog.FileName, passwordDialog.Password, CancellationToken.None);
+                var added = 0;
+                var updated = 0;
+                var skipped = 0;
+                foreach (var imported in importFile.items ?? new List<CodexProfileItem>())
+                {
+                    if (imported == null)
+                    {
+                        skipped++;
+                        continue;
+                    }
+
+                    ApplyCodexProfileMetadata(imported);
+                    var existing = CodexProfiles.FirstOrDefault(item => string.Equals(item.DisplayName, imported.DisplayName, StringComparison.OrdinalIgnoreCase));
+                    if (existing == null)
+                    {
+                        imported.DisplayName = EnsureUniqueCodexDisplayName(imported.DisplayName, null);
+                        imported.Name = imported.DisplayName;
+                        AddCodexProfileItem(imported);
+                        added++;
+                        continue;
+                    }
+
+                    var result = MessageBox.Show(
+                        $"已存在同名档案「{imported.DisplayName}」。\n\n是=覆盖，否=重命名导入，取消=跳过。",
+                        "导入冲突",
+                        MessageBoxButton.YesNoCancel,
+                        MessageBoxImage.Question);
+                    if (result == MessageBoxResult.Cancel)
+                    {
+                        skipped++;
+                        continue;
+                    }
+
+                    if (result == MessageBoxResult.Yes)
+                    {
+                        imported.IsActive = existing.IsActive;
+                        var index = CodexProfiles.IndexOf(existing);
+                        existing.PropertyChanged -= CodexProfileItem_OnPropertyChanged;
+                        CodexProfiles[index] = imported;
+                        imported.PropertyChanged += CodexProfileItem_OnPropertyChanged;
+                        updated++;
+                        continue;
+                    }
+
+                    imported.DisplayName = EnsureUniqueCodexDisplayName(imported.DisplayName, existing);
+                    imported.Name = imported.DisplayName;
+                    AddCodexProfileItem(imported);
+                    added++;
+                }
+
+                SortCodexProfilesByLastApplied();
+                await SaveCodexProfilesAsync();
+                CodexProfilesStatusMessage = $"已导入加密包：新增 {added}，覆盖 {updated}，跳过 {skipped}。";
+                AppLogService.Information("Imported Codex profile encbox {FileName}, added = {Added}, updated = {Updated}, skipped = {Skipped}", Path.GetFileName(dialog.FileName), added, updated, skipped);
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(new InvalidOperationException(ex.Message), "Importing Codex encbox failed with {ErrorType}", ex.GetType().Name);
+                MessageBox.Show(ex.Message, "导入加密包失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private async Task DeleteCodexProfileAsync(object parameter)
         {
             if (!(parameter is CodexProfileItem item))
             {
@@ -3576,21 +4052,52 @@ namespace MyTools.ViewModels
             }
 
             var result = MessageBox.Show(
-                $"确定删除记录 \"{item.Name}\" 吗？",
-                "确认删除",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Question);
-            if (result != MessageBoxResult.Yes)
+                $"确定要删除档案「{item.DisplayName}」？删除后无法恢复（除非有加密导出包）。",
+                "删除确认",
+                MessageBoxButton.OKCancel,
+                MessageBoxImage.Warning);
+            if (result != MessageBoxResult.OK)
             {
                 return;
             }
 
             item.PropertyChanged -= CodexProfileItem_OnPropertyChanged;
+            var wasActive = item.IsActive;
             CodexProfiles.Remove(item);
-            CodexProfilesStatusMessage = $"已删除「{item.Name}」。";
-            SafeFireAndForget(SaveCodexProfilesAsync());
+            if (wasActive)
+            {
+                await CodexProfileLibraryService.SaveActiveAsync(new CodexActiveFile(), CancellationToken.None);
+            }
+
+            CodexProfilesStatusMessage = $"已删除「{item.DisplayName}」。";
+            await SaveCodexProfilesAsync();
+            AppLogService.Information("Deleted Codex profile {DisplayName}", SafeCodexLogName(item.DisplayName));
         }
 
+        private static string SafeCodexLogName(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return string.Empty;
+            }
+
+            return value.IndexOf('@') >= 0
+                ? CodexProfileLibraryService.MaskEmail(value)
+                : value;
+        }
+        private string EnsureUniqueCodexDisplayName(string requestedName, CodexProfileItem ignoreItem)
+        {
+            var baseName = string.IsNullOrWhiteSpace(requestedName) ? "Codex 账号" : requestedName.Trim();
+            var candidate = baseName;
+            var index = 2;
+            while (CodexProfiles.Any(item => !ReferenceEquals(item, ignoreItem) && string.Equals(item.DisplayName, candidate, StringComparison.OrdinalIgnoreCase)))
+            {
+                candidate = baseName + "_" + index;
+                index++;
+            }
+
+            return candidate;
+        }
         private async Task EditCodexFileAsync(object parameter, string fileName)
         {
             if (!(parameter is CodexProfileItem item))
@@ -3630,21 +4137,260 @@ namespace MyTools.ViewModels
 
                 var newBytes = Encoding.UTF8.GetBytes(dlg.EditedText ?? string.Empty);
                 var newProtected = CodexConfigProfileService.ProtectBytesToBase64(newBytes);
-                if (isConfigToml) item.ConfigTomlContentProtected = newProtected;
-                else item.AuthJsonContentProtected = newProtected;
+                if (isConfigToml)
+                {
+                    item.ProtectedConfigTomlBase64 = newProtected;
+                    item.ConfigTomlContentProtected = newProtected;
+                }
+                else
+                {
+                    item.ProtectedAuthJsonBase64 = newProtected;
+                    item.AuthJsonContentProtected = newProtected;
+                    item.AccountEmail = CodexProfileLibraryService.ParseAccountEmail(newBytes);
+                    item.AccessTokenExpiresAt = CodexProfileLibraryService.ParseAccessTokenExp(newBytes);
+                    item.Status = CodexProfileLibraryService.ComputeStatus(item.AccessTokenExpiresAt);
+                }
 
+                item.LastImportedAt = DateTime.UtcNow;
                 item.StatusMessage = $"已保存 {fileName}：{DateTime.Now:HH:mm:ss}";
                 CodexProfilesStatusMessage = $"已更新「{item.Name}」的 {fileName}。";
                 await SaveCodexProfilesAsync().ConfigureAwait(true);
-                AppLogService.Information("Edited Codex {File} for profile {Name}", fileName, item.Name ?? string.Empty);
+                AppLogService.Information("Edited Codex {File} for profile {Name}", fileName, SafeCodexLogName(item.Name));
             }
             catch (Exception ex)
             {
-                AppLogService.Error(ex, "Editing Codex {File} failed for {Name}", fileName, item.Name ?? string.Empty);
+                AppLogService.Error(new InvalidOperationException(ex.Message), "Editing Codex {File} failed for {Name} with {ErrorType}", fileName, SafeCodexLogName(item.Name), ex.GetType().Name);
                 MessageBox.Show(ex.Message, "编辑失败", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
+        private async Task<byte[]> ResolveCodexConfigForCpaImportAsync()
+        {
+            var currentConfigPath = Path.Combine(CodexProfileLibraryService.CodexFolderPath, CodexConfigProfileService.ConfigFileName);
+            if (File.Exists(currentConfigPath))
+            {
+                return await ReadAllBytesAsync(currentConfigPath, CancellationToken.None).ConfigureAwait(true);
+            }
+
+            return Encoding.UTF8.GetBytes(string.Empty);
+        }
+
+        private static byte[] BuildCodexAuthJsonFromCpaToken(JObject source, string accessToken, string refreshToken, string idToken, string email)
+        {
+            var accountId = ResolveCpaTokenAccountId(source, accessToken);
+            var tokens = new JObject();
+            AddJsonString(tokens, "id_token", idToken);
+            AddJsonString(tokens, "access_token", accessToken);
+            AddJsonString(tokens, "refresh_token", refreshToken);
+            AddJsonString(tokens, "account_id", accountId);
+
+            var auth = new JObject
+            {
+                ["auth_mode"] = "chatgpt",
+                ["OPENAI_API_KEY"] = null,
+                ["tokens"] = tokens,
+                ["last_refresh"] = ResolveCpaLastRefresh(source)
+            };
+
+            return Encoding.UTF8.GetBytes(auth.ToString(Formatting.Indented));
+        }
+
+        private static string ResolveCpaRefreshToken(string refreshToken, string sessionToken)
+        {
+            if (!string.IsNullOrWhiteSpace(refreshToken))
+            {
+                return refreshToken.Trim();
+            }
+
+            return !string.IsNullOrWhiteSpace(sessionToken) ? sessionToken.Trim() : string.Empty;
+        }
+
+        private static string NormalizeCpaIdToken(string idToken)
+        {
+            if (string.IsNullOrWhiteSpace(idToken))
+            {
+                return string.Empty;
+            }
+
+            var normalized = idToken.Trim();
+            return normalized.EndsWith(".", StringComparison.Ordinal) ? normalized + "AA" : normalized;
+        }
+
+        private static string BuildCodexCpaImportSummary(string profileName, string sourcePath, JObject source, byte[] authBytes, string accessToken, string refreshToken, string idToken, bool usesSessionTokenAsRefreshToken)
+        {
+            var builder = new StringBuilder();
+            builder.AppendLine("即将导入 CPA Token 实验档案");
+            builder.AppendLine("记录名：" + (profileName ?? string.Empty));
+            builder.AppendLine("来源文件：" + Path.GetFileName(sourcePath));
+            builder.AppendLine("auth.json：" + FileSizeFormatter.Format(authBytes?.LongLength ?? 0));
+            builder.AppendLine("access_token：" + (string.IsNullOrWhiteSpace(accessToken) ? "缺失" : $"存在（长度 {accessToken.Length}）"));
+            builder.AppendLine("refresh_token：" + (string.IsNullOrWhiteSpace(refreshToken) ? "缺失" : $"存在（长度 {refreshToken.Length}）"));
+            if (usesSessionTokenAsRefreshToken)
+            {
+                builder.AppendLine("refresh_token 来源：session_token 兜底");
+                builder.AppendLine("兜底限制：Codex 可能识别为已登录，但服务端作废 access_token 后仍会要求重新登录。");
+            }
+            builder.AppendLine("id_token：" + (string.IsNullOrWhiteSpace(idToken) ? "缺失" : $"存在（长度 {idToken.Length}）"));
+            var expiresAt = CodexProfileLibraryService.ParseAccessTokenExp(authBytes);
+            builder.AppendLine("access_token 到期：" + (expiresAt.HasValue ? expiresAt.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") : "未知"));
+            var email = CodexProfileLibraryService.ParseAccountEmail(authBytes);
+            builder.AppendLine("账号：" + (string.IsNullOrWhiteSpace(email) ? "未知" : CodexProfileLibraryService.MaskEmail(email)));
+            builder.AppendLine("顶层字段：" + string.Join(", ", source.Properties().Select(property => property.Name).Take(24)));
+            builder.AppendLine();
+            builder.Append("敏感值已脱敏，不会在此窗口显示明文。");
+            return builder.ToString();
+        }
+
+        private static string ResolveCpaLastRefresh(JObject source)
+        {
+            var raw = SelectJsonString(source, "last_refresh", "lastRefresh");
+            if (!string.IsNullOrWhiteSpace(raw))
+            {
+                DateTime parsed;
+                if (DateTime.TryParse(raw, null, System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal, out parsed))
+                {
+                    return parsed.ToUniversalTime().ToString("O");
+                }
+            }
+
+            return DateTime.UtcNow.ToString("O");
+        }
+        private static string ResolveCpaTokenEmail(JObject source, string accessToken, string idToken)
+        {
+            var email = SelectJsonString(source, "email", "profile.email", "account.email");
+            if (!string.IsNullOrWhiteSpace(email))
+            {
+                return email.Trim();
+            }
+
+            var idPayload = TryReadJwtPayloadForCpa(idToken);
+            email = SelectJsonString(idPayload, "email", "profile.email");
+            if (!string.IsNullOrWhiteSpace(email))
+            {
+                return email.Trim();
+            }
+
+            var accessPayload = TryReadJwtPayloadForCpa(accessToken);
+            email = SelectJsonString(accessPayload, "email", "profile.email");
+            if (!string.IsNullOrWhiteSpace(email))
+            {
+                return email.Trim();
+            }
+
+            return SelectOpenAiJwtClaimString(accessPayload, "https://api.openai.com/profile", "email");
+        }
+
+        private static string ResolveCpaTokenAccountId(JObject source, string accessToken)
+        {
+            var accountId = SelectJsonString(source, "account_id", "accountId", "chatgpt_account_id");
+            if (!string.IsNullOrWhiteSpace(accountId))
+            {
+                return accountId.Trim();
+            }
+
+            var accessPayload = TryReadJwtPayloadForCpa(accessToken);
+            accountId = SelectOpenAiJwtClaimString(accessPayload, "https://api.openai.com/auth", "chatgpt_account_id");
+            if (!string.IsNullOrWhiteSpace(accountId))
+            {
+                return accountId.Trim();
+            }
+
+            accountId = SelectOpenAiJwtClaimString(accessPayload, "https://api.openai.com/auth", "user_id");
+            return !string.IsNullOrWhiteSpace(accountId) ? accountId.Trim() : SelectJsonString(accessPayload, "sub");
+        }
+
+        private static string SelectOpenAiJwtClaimString(JObject payload, string claimName, string propertyName)
+        {
+            if (payload == null || string.IsNullOrWhiteSpace(claimName) || string.IsNullOrWhiteSpace(propertyName))
+            {
+                return string.Empty;
+            }
+
+            var claim = payload[claimName] as JObject;
+            return claim?[propertyName]?.Value<string>()?.Trim() ?? string.Empty;
+        }
+        private static string SelectJsonString(JToken token, params string[] paths)
+        {
+            if (token == null || paths == null)
+            {
+                return string.Empty;
+            }
+
+            foreach (var path in paths)
+            {
+                if (string.IsNullOrWhiteSpace(path))
+                {
+                    continue;
+                }
+
+                string value = null;
+                try
+                {
+                    value = token.SelectToken(path)?.Value<string>();
+                }
+                catch
+                {
+                    value = null;
+                }
+
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    return value.Trim();
+                }
+            }
+
+            return string.Empty;
+        }
+
+        private static void AddJsonString(JObject target, string name, string value)
+        {
+            if (target == null || string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(value))
+            {
+                return;
+            }
+
+            target[name] = value;
+        }
+
+        private static JObject TryReadJwtPayloadForCpa(string jwt)
+        {
+            if (string.IsNullOrWhiteSpace(jwt))
+            {
+                return null;
+            }
+
+            var parts = jwt.Split('.');
+            if (parts.Length < 2)
+            {
+                return null;
+            }
+
+            try
+            {
+                var json = Encoding.UTF8.GetString(Base64UrlDecode(parts[1]));
+                return JObject.Parse(json);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static byte[] Base64UrlDecode(string value)
+        {
+            var normalized = (value ?? string.Empty).Replace('-', '+').Replace('_', '/');
+            switch (normalized.Length % 4)
+            {
+                case 2:
+                    normalized += "==";
+                    break;
+                case 3:
+                    normalized += "=";
+                    break;
+            }
+
+            return Convert.FromBase64String(normalized);
+        }
         private static string ResolveCodexProfileName(string name, string normalizedFolderPath)
         {
             if (!string.IsNullOrWhiteSpace(name))
@@ -3807,7 +4553,7 @@ namespace MyTools.ViewModels
             }
             catch (Exception ex)
             {
-                AppLogService.Error(ex, "Previewing Codex profile diff failed for {Name}", item.Name ?? string.Empty);
+                AppLogService.Error(new InvalidOperationException(ex.Message), "Previewing Codex profile diff failed for {Name} with {ErrorType}", SafeCodexLogName(item.Name), ex.GetType().Name);
                 MessageBox.Show(ex.Message, "差异预览失败", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
@@ -11872,6 +12618,7 @@ namespace MyTools.ViewModels
             _refreshInstalledProgramsCommand?.RaiseCanExecuteChanged();
             _uninstallProgramCommand?.RaiseCanExecuteChanged();
             _importCodexProfileCommand?.RaiseCanExecuteChanged();
+            _importCodexCpaTokenCommand?.RaiseCanExecuteChanged();
             _exportCodexProfileCommand?.RaiseCanExecuteChanged();
             _previewCodexProfileDiffCommand?.RaiseCanExecuteChanged();
             _copyBenchmarkResultsCommand?.RaiseCanExecuteChanged();
@@ -11944,29 +12691,85 @@ namespace MyTools.ViewModels
     }
 
         public class CodexProfileItem : INotifyPropertyChanged
-        {
-            private string _remark;
-            private string _tags;
-            private DateTime? _lastAppliedAt;
-            private bool _isApplying;
-            private string _statusMessage;
-            private string _configTomlContentProtected;
-            private string _authJsonContentProtected;
+    {
+        private string _displayName;
+        private string _name;
+        private string _accountEmail;
+        private string _note;
+        private string _remark;
+        private string _tags;
+        private DateTime? _lastAppliedAt;
+        private DateTime _lastImportedAt;
+        private DateTime? _accessTokenExpiresAt;
+        private DateTime? _refreshTokenExpiresAt;
+        private string _protectedConfigTomlBase64;
+        private string _protectedAuthJsonBase64;
+        private bool _isActive;
+        private bool _isApplying;
+        private string _status;
+        private string _statusMessage;
+        private string _configTomlContentProtected;
+        private string _authJsonContentProtected;
 
-        public string Name { get; set; }
+        public string DisplayName
+        {
+            get => _displayName;
+            set
+            {
+                if (string.Equals(_displayName, value, StringComparison.Ordinal)) return;
+                _displayName = value ?? string.Empty;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(EffectiveDisplayName));
+            }
+        }
+
+        public string Name
+        {
+            get => string.IsNullOrWhiteSpace(_name) ? DisplayName : _name;
+            set
+            {
+                if (string.Equals(_name, value, StringComparison.Ordinal)) return;
+                _name = value ?? string.Empty;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(EffectiveDisplayName));
+            }
+        }
+
         public string FolderPath { get; set; }
+
+        public string AccountEmail
+        {
+            get => _accountEmail;
+            set
+            {
+                if (string.Equals(_accountEmail, value, StringComparison.Ordinal)) return;
+                _accountEmail = value ?? string.Empty;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(AccountEmailDisplay));
+            }
+        }
+
+        public string Note
+        {
+            get => _note;
+            set
+            {
+                var next = value ?? string.Empty;
+                if (next.Length > 200) next = next.Substring(0, 200);
+                if (string.Equals(_note, next, StringComparison.Ordinal)) return;
+                _note = next;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(NoteDisplay));
+            }
+        }
 
         public string Remark
         {
             get => _remark;
             set
             {
-                if (string.Equals(_remark, value, StringComparison.Ordinal))
-                {
-                    return;
-                }
-
-                _remark = value;
+                if (string.Equals(_remark, value, StringComparison.Ordinal)) return;
+                _remark = value ?? string.Empty;
                 OnPropertyChanged();
             }
         }
@@ -11976,12 +12779,8 @@ namespace MyTools.ViewModels
             get => _tags;
             set
             {
-                if (string.Equals(_tags, value, StringComparison.Ordinal))
-                {
-                    return;
-                }
-
-                _tags = value;
+                if (string.Equals(_tags, value, StringComparison.Ordinal)) return;
+                _tags = value ?? string.Empty;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(TagsDisplay));
             }
@@ -11992,43 +12791,123 @@ namespace MyTools.ViewModels
             get => _lastAppliedAt;
             set
             {
-                if (_lastAppliedAt == value)
-                {
-                    return;
-                }
-
+                if (_lastAppliedAt == value) return;
                 _lastAppliedAt = value;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(LastAppliedText));
             }
         }
 
+        public DateTime LastImportedAt
+        {
+            get => _lastImportedAt;
+            set
+            {
+                if (_lastImportedAt == value) return;
+                _lastImportedAt = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(LastImportedText));
+            }
+        }
+
+        public DateTime? AccessTokenExpiresAt
+        {
+            get => _accessTokenExpiresAt;
+            set
+            {
+                if (_accessTokenExpiresAt == value) return;
+                _accessTokenExpiresAt = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(AccessTokenExpiresText));
+                OnPropertyChanged(nameof(RemainingValidityText));
+            }
+        }
+
+        public DateTime? RefreshTokenExpiresAt
+        {
+            get => _refreshTokenExpiresAt;
+            set
+            {
+                if (_refreshTokenExpiresAt == value) return;
+                _refreshTokenExpiresAt = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public string ProtectedConfigTomlBase64
+        {
+            get => _protectedConfigTomlBase64;
+            set
+            {
+                if (string.Equals(_protectedConfigTomlBase64, value, StringComparison.Ordinal)) return;
+                _protectedConfigTomlBase64 = value ?? string.Empty;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(HasEmbeddedContent));
+                OnPropertyChanged(nameof(ContentStorageSummary));
+            }
+        }
+
+        public string ProtectedAuthJsonBase64
+        {
+            get => _protectedAuthJsonBase64;
+            set
+            {
+                if (string.Equals(_protectedAuthJsonBase64, value, StringComparison.Ordinal)) return;
+                _protectedAuthJsonBase64 = value ?? string.Empty;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(HasEmbeddedContent));
+                OnPropertyChanged(nameof(ContentStorageSummary));
+            }
+        }
+
+        [JsonIgnore]
+        public bool IsActive
+        {
+            get => _isActive;
+            set
+            {
+                if (_isActive == value) return;
+                _isActive = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(ActivePrefix));
+            }
+        }
+
+        [JsonIgnore]
         public bool IsApplying
         {
             get => _isApplying;
             set
             {
-                if (_isApplying == value)
-                {
-                    return;
-                }
-
+                if (_isApplying == value) return;
                 _isApplying = value;
                 OnPropertyChanged();
             }
         }
 
+        public string Status
+        {
+            get => _status;
+            set
+            {
+                if (string.Equals(_status, value, StringComparison.Ordinal)) return;
+                _status = value ?? CodexProfileLibraryService.StatusUnknown;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(IsStatusOk));
+                OnPropertyChanged(nameof(IsStatusWarn));
+                OnPropertyChanged(nameof(IsStatusExpired));
+                OnPropertyChanged(nameof(IsStatusUnknown));
+            }
+        }
+
+        [JsonIgnore]
         public string StatusMessage
         {
             get => _statusMessage;
             set
             {
-                if (string.Equals(_statusMessage, value, StringComparison.Ordinal))
-                {
-                    return;
-                }
-
-                _statusMessage = value;
+                if (string.Equals(_statusMessage, value, StringComparison.Ordinal)) return;
+                _statusMessage = value ?? string.Empty;
                 OnPropertyChanged();
             }
         }
@@ -12038,12 +12917,8 @@ namespace MyTools.ViewModels
             get => _configTomlContentProtected;
             set
             {
-                if (string.Equals(_configTomlContentProtected, value, StringComparison.Ordinal))
-                {
-                    return;
-                }
-
-                _configTomlContentProtected = value;
+                if (string.Equals(_configTomlContentProtected, value, StringComparison.Ordinal)) return;
+                _configTomlContentProtected = value ?? string.Empty;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(HasEmbeddedContent));
                 OnPropertyChanged(nameof(ContentStorageSummary));
@@ -12055,36 +12930,94 @@ namespace MyTools.ViewModels
             get => _authJsonContentProtected;
             set
             {
-                if (string.Equals(_authJsonContentProtected, value, StringComparison.Ordinal))
-                {
-                    return;
-                }
-
-                _authJsonContentProtected = value;
+                if (string.Equals(_authJsonContentProtected, value, StringComparison.Ordinal)) return;
+                _authJsonContentProtected = value ?? string.Empty;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(HasEmbeddedContent));
                 OnPropertyChanged(nameof(ContentStorageSummary));
             }
         }
 
-        public bool HasEmbeddedContent =>
-            !string.IsNullOrWhiteSpace(ConfigTomlContentProtected)
-            && !string.IsNullOrWhiteSpace(AuthJsonContentProtected);
+        [JsonIgnore]
+        public string EffectiveDisplayName => string.IsNullOrWhiteSpace(DisplayName) ? Name : DisplayName;
 
+        [JsonIgnore]
+        public string AccountEmailDisplay => string.IsNullOrWhiteSpace(AccountEmail) ? "未识别邮箱" : CodexProfileLibraryService.MaskEmail(AccountEmail);
+
+        [JsonIgnore]
+        public string NoteDisplay => string.IsNullOrWhiteSpace(Note) ? "未设置备注" : Note;
+
+        [JsonIgnore]
+        public string ActivePrefix => IsActive ? "⚡ " : string.Empty;
+
+        [JsonIgnore]
+        public bool IsStatusOk => string.Equals(Status, CodexProfileLibraryService.StatusOk, StringComparison.Ordinal);
+
+        [JsonIgnore]
+        public bool IsStatusWarn => string.Equals(Status, CodexProfileLibraryService.StatusWarn, StringComparison.Ordinal);
+
+        [JsonIgnore]
+        public bool IsStatusExpired => string.Equals(Status, CodexProfileLibraryService.StatusExpired, StringComparison.Ordinal);
+
+        [JsonIgnore]
+        public bool IsStatusUnknown => !IsStatusOk && !IsStatusWarn && !IsStatusExpired;
+
+        [JsonIgnore]
+        public bool HasEmbeddedContent =>
+            (!string.IsNullOrWhiteSpace(ProtectedConfigTomlBase64) || !string.IsNullOrWhiteSpace(ConfigTomlContentProtected))
+            && (!string.IsNullOrWhiteSpace(ProtectedAuthJsonBase64) || !string.IsNullOrWhiteSpace(AuthJsonContentProtected));
+
+        [JsonIgnore]
         public string ContentStorageSummary =>
             HasEmbeddedContent
-                ? "已内置保存 config.toml 和 auth.json 内容"
-                : "未内置配置内容（建议重新拖入文件夹）";
+                ? "已加密保存 config.toml 和 auth.json"
+                : "未保存配置内容（请重新导入当前账号）";
 
-        public string TagsDisplay =>
-            string.IsNullOrWhiteSpace(Tags)
-                ? "未设置标签"
-                : Tags;
+        [JsonIgnore]
+        public string TagsDisplay => string.IsNullOrWhiteSpace(Tags) ? "未设置标签" : Tags;
 
+        [JsonIgnore]
         public string LastAppliedText =>
             LastAppliedAt.HasValue
-                ? "最近应用：" + LastAppliedAt.Value.ToString("MM-dd HH:mm")
-                : "最近应用：-";
+                ? "最近切换：" + LastAppliedAt.Value.ToString("MM-dd HH:mm")
+                : "最近切换：-";
+
+        [JsonIgnore]
+        public string LastImportedText =>
+            LastImportedAt == default(DateTime)
+                ? "最后更新：-"
+                : "最后更新：" + LastImportedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
+
+        [JsonIgnore]
+        public string AccessTokenExpiresText =>
+            AccessTokenExpiresAt.HasValue
+                ? "Access 过期：" + AccessTokenExpiresAt.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+                : "Access 过期：未知";
+
+        [JsonIgnore]
+        public string RemainingValidityText
+        {
+            get
+            {
+                if (!AccessTokenExpiresAt.HasValue)
+                {
+                    return "剩余：未知";
+                }
+
+                var span = AccessTokenExpiresAt.Value - DateTime.UtcNow;
+                if (span.TotalSeconds <= 0)
+                {
+                    span = DateTime.UtcNow - AccessTokenExpiresAt.Value;
+                    return span.TotalHours >= 1
+                        ? $"已过期 {Math.Floor(span.TotalHours)} 小时"
+                        : $"已过期 {Math.Max(1, Math.Floor(span.TotalMinutes))} 分钟";
+                }
+
+                return span.TotalDays >= 1
+                    ? $"剩余 {Math.Floor(span.TotalDays)} 天 {span.Hours} 小时"
+                    : $"剩余 {Math.Max(1, Math.Floor(span.TotalHours))} 小时";
+            }
+        }
 
         public event PropertyChangedEventHandler PropertyChanged;
 
@@ -12093,7 +13026,6 @@ namespace MyTools.ViewModels
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
     }
-
     public class SqlProviderOption
     {
         public SqlProviderOption(SqlProviderKind kind, string displayName)

@@ -2,6 +2,7 @@ using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 using MyTools.ViewModels;
 
@@ -44,6 +45,35 @@ namespace MyTools.Views
                 await ViewModel.SelectFolderAsync(node.FullPath);
         }
 
+        private async void FolderNodeHeader_OnMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            var item = FindVisualParent<TreeViewItem>(sender as DependencyObject);
+            if (item == null || !(item.DataContext is MediaFolderNode node) || node.IsDummy)
+                return;
+
+            item.IsSelected = true;
+            if (item.HasItems || node.Children.Count > 0)
+            {
+                item.IsExpanded = !item.IsExpanded;
+                if (item.IsExpanded && ViewModel != null)
+                    await ViewModel.ExpandFolderAsync(node);
+            }
+
+            e.Handled = true;
+        }
+
+        private static T FindVisualParent<T>(DependencyObject source) where T : DependencyObject
+        {
+            while (source != null)
+            {
+                source = VisualTreeHelper.GetParent(source);
+                if (source is T target)
+                    return target;
+            }
+
+            return null;
+        }
+
         private void MediaFileList_OnMouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
             var vm = ViewModel;
@@ -54,7 +84,18 @@ namespace MyTools.Views
         private void MultimediaPage_OnPreviewKeyDown(object sender, KeyEventArgs e)
         {
             var vm = ViewModel;
-            if (vm != null && vm.IsImmersive && e.Key == Key.Escape)
+            if (vm == null)
+            {
+                return;
+            }
+
+            if (e.Key == Key.C && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
+            {
+                e.Handled = vm.CopyCurrentViewedImageToClipboard();
+                return;
+            }
+
+            if (vm.IsImmersive && e.Key == Key.Escape)
             {
                 StopImmersiveElements();
                 vm.ExitImmersive();
