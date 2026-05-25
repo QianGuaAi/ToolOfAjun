@@ -317,10 +317,6 @@ namespace MyTools.Services
                     .ThenBy(_ => rnd.Next())
                     .ToList();
                 var picks = new HashSet<int>(forcedSorted.Take(maxAdd));
-                if (forcedSorted.Count > picks.Count)
-                {
-                    result.Warnings.Add($"{sched.Year}-{sched.Month:00}-{d + 1:00} 当日为避免 6 连班需安排 {forcedSorted.Count} 人休，但配额仅余 {FormatNumber(rem)}，已延后给阶段 D 处理。");
-                }
 
                 int restToAdd = maxAdd - picks.Count;
                 if (restToAdd > 0)

@@ -29,7 +29,7 @@ namespace MyTools.ViewModels
         private CancellationTokenSource _loadCancellationTokenSource;
         private MediaFileItem _selectedMediaFile;
         private string _selectedFolderPath = string.Empty;
-        private string _statusMessage = "选择左侧文件夹浏览图片、音频和视频。";
+        private string _statusMessage = "选择左侧文件夹浏览图片、音频、视频和 PDF。";
         private MediaKind _previewKind = MediaKind.Other;
         private MediaKind _immersiveKind = MediaKind.Other;
         private bool _isImmersive;
@@ -51,8 +51,12 @@ namespace MyTools.ViewModels
             MediaFiles = new ObservableCollection<MediaFileItem>();
             ExitMultimediaCommand = new RelayCommand(ExitMultimedia);
             ExitImmersiveCommand = new RelayCommand(ExitImmersive, () => IsImmersive);
-            EnterImmersiveCommand = new RelayCommand(EnterImmersive, () => SelectedMediaFile != null);
+            EnterImmersiveCommand = new RelayCommand(EnterImmersive, CanEnterImmersive);
+            PreviousImageCommand = new RelayCommand(ShowPreviousImage, CanShowPreviousImage);
+            NextImageCommand = new RelayCommand(ShowNextImage, CanShowNextImage);
             OpenConvertDialogCommand = new RelayParameterCommand(OpenConvertDialog, CanOpenConvertDialog);
+            ConvertImageToPdfCommand = new AsyncRelayParameterCommand(ConvertImageToPdfAsync, CanConvertImageToPdf);
+            ConvertPdfToImagesCommand = new AsyncRelayParameterCommand(ConvertPdfToImagesAsync, CanConvertPdfToImages);
             OpenExternalCommand = new RelayCommand(OpenSelectedExternally, () => SelectedMediaFile != null && File.Exists(SelectedMediaFile.Path));
         }
 
@@ -61,7 +65,11 @@ namespace MyTools.ViewModels
         public ICommand ExitMultimediaCommand { get; }
         public ICommand ExitImmersiveCommand { get; }
         public ICommand EnterImmersiveCommand { get; }
+        public ICommand PreviousImageCommand { get; }
+        public ICommand NextImageCommand { get; }
         public ICommand OpenConvertDialogCommand { get; }
+        public ICommand ConvertImageToPdfCommand { get; }
+        public ICommand ConvertPdfToImagesCommand { get; }
         public ICommand OpenExternalCommand { get; }
 
         public MultimediaPreferredFilter PreferredFilter
@@ -149,7 +157,7 @@ namespace MyTools.ViewModels
         public bool IsPreviewImage => PreviewKind == MediaKind.Image;
         public bool IsPreviewAudio => PreviewKind == MediaKind.Audio;
         public bool IsPreviewVideo => PreviewKind == MediaKind.Video;
-        public bool IsPreviewEmpty => PreviewKind == MediaKind.Other;
+        public bool IsPreviewEmpty => PreviewKind == MediaKind.Other || PreviewKind == MediaKind.Pdf;
         public bool IsImmersiveImage => IsImmersive && ImmersiveKind == MediaKind.Image;
         public bool IsImmersiveAudio => IsImmersive && ImmersiveKind == MediaKind.Audio;
         public bool IsImmersiveVideo => IsImmersive && ImmersiveKind == MediaKind.Video;
@@ -239,7 +247,7 @@ namespace MyTools.ViewModels
             FolderTreeNodes.Clear();
             foreach (var root in roots)
                 FolderTreeNodes.Add(root);
-            StatusMessage = roots.Count == 0 ? "未发现可用磁盘。" : "选择左侧文件夹浏览图片、音频和视频。";
+            StatusMessage = roots.Count == 0 ? "未发现可用磁盘。" : "选择左侧文件夹浏览图片、音频、视频和 PDF。";
         }
 
         public async Task ExpandFolderAsync(MediaFolderNode node)
@@ -376,6 +384,67 @@ namespace MyTools.ViewModels
             }
         }
 
+        private bool CanShowPreviousImage()
+        {
+            return GetAdjacentImage(-1) != null;
+        }
+
+        private bool CanShowNextImage()
+        {
+            return GetAdjacentImage(1) != null;
+        }
+
+        private void ShowPreviousImage()
+        {
+            ShowAdjacentImage(-1);
+        }
+
+        private void ShowNextImage()
+        {
+            ShowAdjacentImage(1);
+        }
+
+        private void ShowAdjacentImage(int direction)
+        {
+            var target = GetAdjacentImage(direction);
+            if (target == null) return;
+
+            var keepImmersiveImage = IsImmersive && ImmersiveKind == MediaKind.Image;
+            SelectedMediaFile = target;
+            if (keepImmersiveImage)
+            {
+                ImmersiveKind = MediaKind.Image;
+                _ = LoadPreviewImageAsync(target.Path, true);
+            }
+        }
+
+        private MediaFileItem GetAdjacentImage(int direction)
+        {
+            if (SelectedMediaFile == null || SelectedMediaFile.Kind != MediaKind.Image || direction == 0)
+            {
+                return null;
+            }
+
+            var currentIndex = MediaFiles.IndexOf(SelectedMediaFile);
+            if (currentIndex < 0)
+            {
+                return null;
+            }
+
+            var nextIndex = currentIndex + Math.Sign(direction);
+            while (nextIndex >= 0 && nextIndex < MediaFiles.Count)
+            {
+                var item = MediaFiles[nextIndex];
+                if (item != null && item.Kind == MediaKind.Image && File.Exists(item.Path))
+                {
+                    return item;
+                }
+
+                nextIndex += Math.Sign(direction);
+            }
+
+            return null;
+        }
         public void StopPreview()
         {
             IsPreviewPlaying = false;
@@ -477,6 +546,10 @@ namespace MyTools.ViewModels
                 PreviewMediaSource = new Uri(item.Path);
                 StatusMessage = "已选择媒体：" + item.Name;
             }
+            else if (item.Kind == MediaKind.Pdf)
+            {
+                StatusMessage = "已选择 PDF：" + item.Name;
+            }
         }
 
         private async Task LoadPreviewImageAsync(string filePath, bool immersive)
@@ -509,6 +582,12 @@ namespace MyTools.ViewModels
             return bitmap;
         }
 
+        private bool CanEnterImmersive()
+        {
+            var item = SelectedMediaFile;
+            return item != null && File.Exists(item.Path) && item.Kind != MediaKind.Pdf && item.Kind != MediaKind.Other;
+        }
+
         private void EnterImmersive()
         {
             var item = SelectedMediaFile;
@@ -523,10 +602,86 @@ namespace MyTools.ViewModels
             StatusMessage = "已进入沉浸模式，按 Esc 返回列表。";
         }
 
+        private bool IsStandardConvertTarget(MediaFileItem item)
+        {
+            return item != null
+                && File.Exists(item.Path)
+                && (item.Kind == MediaKind.Image || item.Kind == MediaKind.Audio || item.Kind == MediaKind.Video);
+        }
+
+        private MediaFileItem ResolveContextMediaItem(object parameter)
+        {
+            return parameter as MediaFileItem ?? SelectedMediaFile;
+        }
+
+        private bool CanConvertImageToPdf(object parameter)
+        {
+            var target = ResolveContextMediaItem(parameter);
+            return target != null && target.Kind == MediaKind.Image && File.Exists(target.Path);
+        }
+
+        private bool CanConvertPdfToImages(object parameter)
+        {
+            var target = ResolveContextMediaItem(parameter);
+            return target != null && target.Kind == MediaKind.Pdf && File.Exists(target.Path);
+        }
+
+        private async Task ConvertImageToPdfAsync(object parameter)
+        {
+            var target = ResolveContextMediaItem(parameter);
+            if (!CanConvertImageToPdf(target))
+            {
+                StatusMessage = "请选择要转换为 PDF 的图片。";
+                return;
+            }
+
+            StatusMessage = "正在转换图片为 PDF：" + target.Name;
+            var result = await PdfConvertService.ConvertImageToPdfAsync(target.Path, CancellationToken.None);
+            await RefreshGeneratedPdfConvertOutputAsync(target, result);
+            StatusMessage = result.Message;
+            if (!result.Success)
+            {
+                MessageBox.Show(result.Message, "图片转 PDF", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private async Task ConvertPdfToImagesAsync(object parameter)
+        {
+            var target = ResolveContextMediaItem(parameter);
+            if (!CanConvertPdfToImages(target))
+            {
+                StatusMessage = "请选择要转换为图片的 PDF。";
+                return;
+            }
+
+            StatusMessage = "正在转换 PDF 为图片：" + target.Name;
+            var result = await PdfConvertService.ConvertPdfToImagesAsync(target.Path, CancellationToken.None);
+            await RefreshGeneratedPdfConvertOutputAsync(target, result);
+            StatusMessage = result.Message;
+            if (!result.Success)
+            {
+                MessageBox.Show(result.Message, "PDF 转图片", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private async Task RefreshGeneratedPdfConvertOutputAsync(MediaFileItem source, ConvertResult result)
+        {
+            if (source == null || result == null || !result.Success || string.IsNullOrWhiteSpace(SelectedFolderPath))
+            {
+                return;
+            }
+
+            var sourceFolder = Path.GetDirectoryName(source.Path) ?? string.Empty;
+            if (string.Equals(sourceFolder, SelectedFolderPath, StringComparison.OrdinalIgnoreCase))
+            {
+                await SelectFolderAsync(SelectedFolderPath);
+            }
+        }
+
         private bool CanOpenConvertDialog(object parameter)
         {
-            var target = parameter as MediaFileItem ?? SelectedMediaFile;
-            return target != null && target.Kind != MediaKind.Other && File.Exists(target.Path);
+            return IsStandardConvertTarget(ResolveContextMediaItem(parameter))
+                || MediaFiles.Any(item => item.IsChecked && IsStandardConvertTarget(item));
         }
 
         private async void OpenConvertDialog(object parameter)
@@ -550,10 +705,10 @@ namespace MyTools.ViewModels
 
         private IList<MediaFileItem> ResolveConvertTargets(MediaFileItem contextItem)
         {
-            var checkedItems = MediaFiles.Where(item => item.IsChecked && item.Kind != MediaKind.Other && File.Exists(item.Path)).ToList();
+            var checkedItems = MediaFiles.Where(item => item.IsChecked && IsStandardConvertTarget(item)).ToList();
             if (checkedItems.Count > 0) return checkedItems;
-            if (contextItem != null && contextItem.Kind != MediaKind.Other && File.Exists(contextItem.Path)) return new List<MediaFileItem> { contextItem };
-            if (SelectedMediaFile != null && SelectedMediaFile.Kind != MediaKind.Other && File.Exists(SelectedMediaFile.Path)) return new List<MediaFileItem> { SelectedMediaFile };
+            if (IsStandardConvertTarget(contextItem)) return new List<MediaFileItem> { contextItem };
+            if (IsStandardConvertTarget(SelectedMediaFile)) return new List<MediaFileItem> { SelectedMediaFile };
             return new List<MediaFileItem>();
         }
 
@@ -642,7 +797,7 @@ namespace MyTools.ViewModels
         public MediaKind Kind { get; }
         public long SizeBytes { get; }
         public DateTime ModifiedAt { get; }
-        public string KindText => Kind == MediaKind.Image ? "图片" : Kind == MediaKind.Audio ? "音频" : Kind == MediaKind.Video ? "视频" : "其他";
+        public string KindText => Kind == MediaKind.Image ? "图片" : Kind == MediaKind.Audio ? "音频" : Kind == MediaKind.Video ? "视频" : Kind == MediaKind.Pdf ? "PDF" : "其他";
         public string SizeText => MediaFileTypeHelper.FormatFileSize(SizeBytes);
         public string ModifiedText => ModifiedAt.ToString("yyyy-MM-dd HH:mm");
 

@@ -1,5 +1,42 @@
 # 开发记录
 
+## [2026-05-26] 排班提示修复后重新打包安装程序
+- 通过 `scripts\Build-Installer.ps1` 重新构建主程序、卸载器和安装器，安装包已包含排班阶段 D 中间提示不再阻断无警告生成的修复。
+- 输出安装包：`artifacts\installer\MyToolsSetup.exe`，大小 41.18 MB，SHA256 = `FC77BBAED114C64A0DE885E97E1837EE0E7F17FA9B6FFFF46B29B4C74786D172`。
+- 验证：脚本内三次 `dotnet build` 均通过，0 警告 0 错误。
+
+## [2026-05-26] 排班阶段 D 中间提示不再阻断无警告生成
+- `ShiftAutoOptimizer` 不再把“当日为避免 6 连班需安排休息但配额不足，已延后给阶段 D 处理”这类过程信息加入最终 `Warnings`。
+- 阶段 D/阶段 F 修复后仍存在的连续上班或每日总休硬性冲突会继续通过最终校验返回，真正失败时仍会提示。
+- 验证：`dotnet build src\MyTools\MyTools.csproj -c Release -p:OutputPath=c:\ToolOfAjun\output\buildcheck\MyTools\` 通过，0 警告 0 错误。
+
+## [2026-05-25] 排班无警告生成失败提示收敛
+- `ScheduleViewModel` 新增只检查 `IsManual=true` 单元格的硬约束预检，手工休息超出每日总休或手工连续上班超过 5 天时才弹出手工设置错误提示。
+- “无警告再显示”连续 99 次仍失败但未发现手工格硬性违规时，改为显示普通失败原因，不再提示“是否手工设置的作息有错”。
+- 验证：`dotnet build src\MyTools\MyTools.csproj -c Release -p:OutputPath=c:\ToolOfAjun\output\buildcheck\MyTools\` 通过，0 警告 0 错误。
+
+## [2026-05-25] 排班大夜调整后重新打包安装程序
+- 通过 `scripts\Build-Installer.ps1` 重新构建主程序、卸载器和安装器，安装包已包含排班弹窗“大夜”和格子显示“大”的调整。
+- 输出安装包：`artifacts\installer\MyToolsSetup.exe`，大小 41.17 MB，SHA256 = `A52CDC32FB01C6F561540695BF3AB6B94BB5EA900E4E353969B6A835EB45A160`。
+- 验证：脚本内三次 `dotnet build` 均通过，0 警告 0 错误。
+
+## [2026-05-25] 排班大夜显示文案调整
+- `SchedulePage.xaml.cs` 将班次弹出菜单中的“夜”改为“大夜”，选择后底层仍写入 `ShiftCodes.Big`，当前格显示为“大”。
+- “小1”快捷项仍按“小、大、休、休”写入原有班次代码，只调整格子显示文字，不改变统计、保存和冲突检查逻辑。
+- 验证：`dotnet build src\MyTools\MyTools.csproj -c Release -p:OutputPath=c:\ToolOfAjun\output\buildcheck\MyTools\` 通过，0 警告 0 错误。
+
+## [2026-05-25] 多媒体图片上一张下一张按钮
+- `MultimediaViewModel` 新增 `PreviousImageCommand` 和 `NextImageCommand`，按当前媒体列表查找相邻图片并跳过非图片文件。
+- `MultimediaPage.xaml` 在图片预览区和沉浸看图区叠加“上一张 / 下一张”按钮，到第一张或最后一张时按钮自动禁用。
+- 验证：`dotnet build src\MyTools\MyTools.csproj -c Release -p:OutputPath=c:\ToolOfAjun\output\buildcheck\MyTools\` 通过，0 警告 0 错误。
+
+## [2026-05-25] 多媒体图片/PDF互转
+- `MediaFileTypeHelper` 新增 `.pdf` 识别，多媒体列表可展示 PDF 类型文件。
+- `MultimediaPage` 右键菜单新增“图片转 PDF”和“PDF 转图片”，右键时自动选中当前行。
+- `MultimediaViewModel` 新增图片转 PDF、PDF 转图片命令；通用“格式转换”仍限定图片、音频和视频，PDF 不进入原格式转换弹窗。
+- 新增 `PdfConvertService`：图片生成同目录单页 PDF；PDF 按页渲染为 PNG 图片，输出到同目录。
+- 验证：`dotnet build src\MyTools\MyTools.csproj -c Release -p:OutputPath=c:\ToolOfAjun\output\buildcheck\MyTools\` 通过，0 警告 0 错误。
+
 ## [2026-05-25] FRP Token 掩码状态显示
 - `FrpViewModel` 新增 `FrpTokenMask`，未填写时显示「未填写 Token」，已填写时显示与 Token 长度一致的星号掩码。
 - `FrpView.xaml` 在 Token 默认隐藏状态覆盖显示掩码文本，并加宽「显示Token」按钮区域，避免按钮文字挤压。
@@ -337,7 +374,6 @@
 - 压缩 Codex 配置页外边距、页头高度与拖拽提示区高度，减少顶部占用空间。
 - 配置记录卡片改为更紧凑的列表密度，路径与内容摘要使用省略显示并保留路径提示。
 - 统一导入、应用、导出与删除按钮为 32px 高度，备注输入框固定为 42px 高度。
-
 
 ## [2026-05-12] 全局 UI 紧凑化（侧边栏 + 各面板）
 - 侧边栏宽度 220→200，导航按钮高度 56→44，图标 22→20。

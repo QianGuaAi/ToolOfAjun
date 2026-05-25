@@ -13,7 +13,8 @@ namespace MyTools.Services
         Other,
         Image,
         Audio,
-        Video
+        Video,
+        Pdf
     }
 
     public sealed class MediaFileDescriptor
@@ -52,11 +53,17 @@ namespace MyTools.Services
             return Classify(extension) != MediaKind.Other;
         }
 
+        public static bool IsPdf(string extension)
+        {
+            return string.Equals(NormalizeExtension(extension), ".pdf", StringComparison.OrdinalIgnoreCase);
+        }
+
         public static MediaKind Classify(string extension)
         {
             if (IsImage(extension)) return MediaKind.Image;
             if (IsAudio(extension)) return MediaKind.Audio;
             if (IsVideo(extension)) return MediaKind.Video;
+            if (IsPdf(extension)) return MediaKind.Pdf;
             return MediaKind.Other;
         }
 

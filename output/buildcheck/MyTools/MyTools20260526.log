@@ -1,0 +1,33 @@
+﻿2026-05-26 00:19:12.266 +08:00 [ERR] Loading app settings failed.
+System.IO.FileNotFoundException: 未能加载文件或程序集“Newtonsoft.Json, Version=13.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed”或它的某一个依赖项。系统找不到指定的文件。
+文件名:“Newtonsoft.Json, Version=13.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed”
+   在 MyTools.Services.AppSettingsService.<LoadCoreAsync>d__5.MoveNext()
+   在 System.Runtime.CompilerServices.AsyncTaskMethodBuilder`1.Start[TStateMachine](TStateMachine& stateMachine)
+   在 MyTools.Services.AppSettingsService.LoadCoreAsync()
+   在 MyTools.Services.AppSettingsService.<LoadAsync>d__2.MoveNext() 位置 C:\ToolOfAjun\src\MyTools\Services\AppSettingsService.cs:行号 20
+
+警告: 程序集绑定日志记录被关闭。
+要启用程序集绑定失败日志记录，请将注册表值 [HKLM\Software\Microsoft\Fusion!EnableLog] (DWORD)设置为 1。
+注意: 会有一些与程序集绑定失败日志记录关联的性能损失。
+要关闭此功能，请移除注册表值 [HKLM\Software\Microsoft\Fusion!EnableLog]。
+
+2026-05-26 00:19:14.785 +08:00 [INF] Deferred UI resources loaded.
+2026-05-26 00:19:25.521 +08:00 [WRN] Schedule warning-free optimize failed after 99 attempts: 2026-05-23 当日为避免 6 连班需安排 3 人休，但配额仅余 0，已延后给阶段 D 处理。
+2026-05-26 00:19:44.566 +08:00 [WRN] Schedule warning-free optimize failed after 99 attempts: 2026-05-09 当日为避免 6 连班需安排 1 人休，但配额仅余 0，已延后给阶段 D 处理。
+2026-05-26 00:20:04.197 +08:00 [WRN] Schedule warning-free optimize failed after 99 attempts: 2026-05-23 当日为避免 6 连班需安排 1 人休，但配额仅余 0，已延后给阶段 D 处理。
+2026-05-26 00:21:11.929 +08:00 [INF] Application exiting with code 0
+2026-05-26 00:23:26.513 +08:00 [ERR] Loading app settings failed.
+System.IO.FileNotFoundException: 未能加载文件或程序集“Newtonsoft.Json, Version=13.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed”或它的某一个依赖项。系统找不到指定的文件。
+文件名:“Newtonsoft.Json, Version=13.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed”
+   在 MyTools.Services.AppSettingsService.<LoadCoreAsync>d__5.MoveNext()
+   在 System.Runtime.CompilerServices.AsyncTaskMethodBuilder`1.Start[TStateMachine](TStateMachine& stateMachine)
+   在 MyTools.Services.AppSettingsService.LoadCoreAsync()
+   在 MyTools.Services.AppSettingsService.<LoadAsync>d__2.MoveNext() 位置 C:\ToolOfAjun\src\MyTools\Services\AppSettingsService.cs:行号 20
+
+警告: 程序集绑定日志记录被关闭。
+要启用程序集绑定失败日志记录，请将注册表值 [HKLM\Software\Microsoft\Fusion!EnableLog] (DWORD)设置为 1。
+注意: 会有一些与程序集绑定失败日志记录关联的性能损失。
+要关闭此功能，请移除注册表值 [HKLM\Software\Microsoft\Fusion!EnableLog]。
+
+2026-05-26 00:23:28.025 +08:00 [INF] Deferred UI resources loaded.
+2026-05-26 00:24:37.870 +08:00 [INF] Application exiting with code 0

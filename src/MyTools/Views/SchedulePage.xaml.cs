@@ -761,7 +761,7 @@ namespace MyTools.Views
         {
             code = ShiftCodes.Normalize(code);
             if (string.IsNullOrEmpty(code)) return "·";
-            return code == ShiftCodes.Big ? "夜" : code;
+            return code == ShiftCodes.Big ? "大" : code;
         }
 
         private static string FormatStat(double value)
@@ -928,7 +928,7 @@ namespace MyTools.Views
             Add("卡", () => _vm.SetCell(empIdx, dayIdx, ShiftCodes.Card), new SolidColorBrush(Color.FromRgb(0xE8, 0xEA, 0xF6)));
             Add("副", () => _vm.SetCell(empIdx, dayIdx, ShiftCodes.Deputy), new SolidColorBrush(Color.FromRgb(0xE0, 0xF7, 0xFA)));
             Add("感", () => _vm.SetCell(empIdx, dayIdx, ShiftCodes.Infect), new SolidColorBrush(Color.FromRgb(0xFF, 0xEB, 0xEE)));
-            Add("夜", () => _vm.SetCell(empIdx, dayIdx, ShiftCodes.Big), new SolidColorBrush(Color.FromRgb(0x37, 0x47, 0x4F)), Brushes.White);
+            Add("大夜", () => _vm.SetCell(empIdx, dayIdx, ShiftCodes.Big), new SolidColorBrush(Color.FromRgb(0x37, 0x47, 0x4F)), Brushes.White);
             Add("小", () => _vm.SetCell(empIdx, dayIdx, ShiftCodes.Small), new SolidColorBrush(Color.FromRgb(0x78, 0x90, 0x9C)), Brushes.White);
             Add("休", () => _vm.SetCell(empIdx, dayIdx, ShiftCodes.Rest), new SolidColorBrush(Color.FromRgb(0xC8, 0xE6, 0xC9)));
             Add("公", () => _vm.SetCell(empIdx, dayIdx, ShiftCodes.Public), new SolidColorBrush(Color.FromRgb(0xA5, 0xD6, 0xA7)));

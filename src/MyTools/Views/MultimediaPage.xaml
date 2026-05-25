@@ -203,7 +203,15 @@
                                     <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
                                 <Border Background="{DynamicResource MaterialDesignToolBarBackground}" CornerRadius="8" ClipToBounds="True">
-                                    <Image Source="{Binding PreviewImageSource}" Stretch="Uniform" />
+                                    <Grid>
+                                        <Image Source="{Binding PreviewImageSource}" Stretch="Uniform" />
+                                        <Button Style="{StaticResource PrimaryActionButton}" Command="{Binding PreviousImageCommand}" HorizontalAlignment="Left" VerticalAlignment="Center" Height="30" Padding="10,0" Margin="8,0,0,0">
+                                            <TextBlock Text="上一张" />
+                                        </Button>
+                                        <Button Style="{StaticResource PrimaryActionButton}" Command="{Binding NextImageCommand}" HorizontalAlignment="Right" VerticalAlignment="Center" Height="30" Padding="10,0" Margin="0,0,8,0">
+                                            <TextBlock Text="下一张" />
+                                        </Button>
+                                    </Grid>
                                 </Border>
                                 <StackPanel Grid.Row="1" Margin="0,8,0,0">
                                     <TextBlock Text="{Binding SelectedMediaFile.Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
@@ -264,10 +272,12 @@
 
                         <TextBlock Text="媒体文件" Style="{StaticResource TextSubtitle}" FontWeight="SemiBold" VerticalAlignment="Center" />
                     </DockPanel>
-                    <ListView x:Name="MediaFileList" Grid.Row="1" ItemsSource="{Binding MediaFiles}" SelectedItem="{Binding SelectedMediaFile, Mode=TwoWay}" MouseDoubleClick="MediaFileList_OnMouseDoubleClick" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" ScrollViewer.CanContentScroll="True">
+                    <ListView x:Name="MediaFileList" Grid.Row="1" ItemsSource="{Binding MediaFiles}" SelectedItem="{Binding SelectedMediaFile, Mode=TwoWay}" MouseDoubleClick="MediaFileList_OnMouseDoubleClick" PreviewMouseRightButtonDown="MediaFileList_OnPreviewMouseRightButtonDown" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" ScrollViewer.CanContentScroll="True">
                         <ListView.ContextMenu>
                             <ContextMenu>
                                 <MenuItem Header="格式转换" Command="{Binding PlacementTarget.DataContext.OpenConvertDialogCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                <MenuItem Header="图片转 PDF" Command="{Binding PlacementTarget.DataContext.ConvertImageToPdfCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                <MenuItem Header="PDF 转图片" Command="{Binding PlacementTarget.DataContext.ConvertPdfToImagesCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
                                 <MenuItem Header="外部打开" Command="{Binding PlacementTarget.DataContext.OpenExternalCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
                             </ContextMenu>
                         </ListView.ContextMenu>
@@ -302,7 +312,15 @@
                         </StackPanel>
                     </Button>
 
-                    <Image Source="{Binding ImmersiveImageSource}" Stretch="Uniform" Visibility="{Binding IsImmersiveImage, Converter={StaticResource BoolToVis}}" />
+                    <Grid Visibility="{Binding IsImmersiveImage, Converter={StaticResource BoolToVis}}">
+                        <Image Source="{Binding ImmersiveImageSource}" Stretch="Uniform" />
+                        <Button Style="{StaticResource PrimaryActionButton}" Command="{Binding PreviousImageCommand}" HorizontalAlignment="Left" VerticalAlignment="Center" Height="44" Padding="16,0" Margin="24,0,0,0" Panel.ZIndex="3">
+                            <TextBlock Text="上一张" FontWeight="SemiBold" />
+                        </Button>
+                        <Button Style="{StaticResource PrimaryActionButton}" Command="{Binding NextImageCommand}" HorizontalAlignment="Right" VerticalAlignment="Center" Height="44" Padding="16,0" Margin="0,0,24,0" Panel.ZIndex="3">
+                            <TextBlock Text="下一张" FontWeight="SemiBold" />
+                        </Button>
+                    </Grid>
 
                     <Grid Visibility="{Binding IsImmersiveVideo, Converter={StaticResource BoolToVis}}">
                         <Grid.RowDefinitions>

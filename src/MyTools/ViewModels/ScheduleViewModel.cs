@@ -751,6 +751,19 @@ namespace MyTools.ViewModels
 
             var target = Current;
             var source = CloneScheduleVersion(target);
+            var manualHardIssues = BuildManualHardConstraintIssues(source).ToList();
+            if (manualHardIssues.Count > 0)
+            {
+                var detail = BuildIssuePreview(manualHardIssues, 6);
+                StatusMessage = $"手工设置的作息已违反硬性规定，请检查：{manualHardIssues[0]}";
+                MessageBox.Show(
+                    "手工设置的作息已违反硬性规定，请检查！\n\n" + detail,
+                    "设置休息日",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                return;
+            }
+
             AutoOptimizeMaxAttempts = MaxWarningFreeOptimizeAttempts;
             AutoOptimizeAttempt = 0;
             AutoOptimizeProgress = 0;
@@ -775,12 +788,16 @@ namespace MyTools.ViewModels
 
                 if (result.Schedule == null)
                 {
-                    StatusMessage = $"已尝试 {result.Attempts} 次，仍未生成无警告结果。是否手工设置的作息有错，请检查！";
+                    var lastIssue = string.IsNullOrWhiteSpace(result.LastIssue)
+                        ? "未找到明确的未通过项，请查看冲突侧栏。"
+                        : "最后未通过项：" + result.LastIssue;
+                    StatusMessage = $"已尝试 {result.Attempts} 次，仍未生成无警告结果。{lastIssue}";
+                    AppLogService.Warning("Schedule warning-free optimize failed after {Attempts} attempts: {Issue}", result.Attempts, result.LastIssue);
                     MessageBox.Show(
-                        "是否手工设置的作息有错，请检查！",
+                        $"已尝试 {result.Attempts} 次，仍未生成无警告结果。\n\n{lastIssue}",
                         "设置休息日",
                         MessageBoxButton.OK,
-                        MessageBoxImage.Warning);
+                        MessageBoxImage.Information);
                     return;
                 }
 
@@ -1165,6 +1182,85 @@ namespace MyTools.ViewModels
         private static IReadOnlyCollection<(int emp, int day)> BuildPreservedCells(ScheduleVersion schedule)
         {
             return new List<(int emp, int day)>();
+        }
+
+        private static IEnumerable<string> BuildManualHardConstraintIssues(ScheduleVersion schedule)
+        {
+            if (schedule == null)
+            {
+                yield break;
+            }
+
+            NormalizeScheduleRows(schedule);
+            for (var day = 0; day < schedule.DayCount; day++)
+            {
+                var quota = schedule.DailyRestQuotas != null && day < schedule.DailyRestQuotas.Count
+                    ? schedule.DailyRestQuotas[day]
+                    : 0;
+                double manualRest = 0;
+                foreach (var employee in schedule.Employees)
+                {
+                    if (string.IsNullOrWhiteSpace(employee?.Name)) continue;
+                    if (employee.Cells == null || day >= employee.Cells.Count) continue;
+                    var cell = employee.Cells[day];
+                    if (cell != null && cell.IsManual)
+                    {
+                        manualRest += ShiftCodes.RestDays(cell.Code);
+                    }
+                }
+
+                if (manualRest > quota + 0.001)
+                {
+                    yield return $"{day + 1} 日手工休息 {FormatNumber(manualRest)} / 总休目标 {FormatNumber(quota)}，多 {FormatNumber(manualRest - quota)}";
+                }
+            }
+
+            for (var empIndex = 0; empIndex < schedule.Employees.Count; empIndex++)
+            {
+                var employee = schedule.Employees[empIndex];
+                if (string.IsNullOrWhiteSpace(employee?.Name) || employee.Cells == null) continue;
+
+                var run = 0;
+                var runStart = 0;
+                for (var day = 0; day < employee.Cells.Count; day++)
+                {
+                    var cell = employee.Cells[day];
+                    if (cell != null && cell.IsManual && ShiftCodes.IsWork(cell.Code))
+                    {
+                        if (run == 0)
+                        {
+                            runStart = day;
+                        }
+
+                        run++;
+                        if (run == 6)
+                        {
+                            yield return $"{employee.Name} 手工设置 {runStart + 1}-{day + 1} 日连续上班 {run} 天，超过 5 天上限";
+                            break;
+                        }
+                    }
+                    else
+                    {
+                        run = 0;
+                    }
+                }
+            }
+        }
+
+        private static string BuildIssuePreview(IReadOnlyList<string> issues, int maxCount)
+        {
+            if (issues == null || issues.Count == 0)
+            {
+                return string.Empty;
+            }
+
+            var lines = issues.Take(maxCount).Select(item => "· " + item).ToList();
+            if (issues.Count > maxCount)
+            {
+                lines.Add($"· 另有 {issues.Count - maxCount} 项未显示");
+            }
+
+            return string.Join(Environment.NewLine, lines);
         }
 
         private static IEnumerable<string> BuildSaveValidationIssues(ScheduleVersion schedule)

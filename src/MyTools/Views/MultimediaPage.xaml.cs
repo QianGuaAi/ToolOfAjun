@@ -74,6 +74,16 @@ namespace MyTools.Views
             return null;
         }
 
+        private void MediaFileList_OnPreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            var item = FindVisualParent<ListViewItem>(e.OriginalSource as DependencyObject);
+            if (item != null)
+            {
+                item.IsSelected = true;
+                item.Focus();
+            }
+        }
+
         private void MediaFileList_OnMouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
             var vm = ViewModel;
