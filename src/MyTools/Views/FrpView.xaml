@@ -7,6 +7,16 @@
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
         <viewModels:InverseBoolToVisibilityConverter x:Key="InverseBoolToVis" />
+        <Style x:Key="FrpVisibleTextBox" TargetType="TextBox">
+            <Setter Property="Height" Value="36" />
+            <Setter Property="Padding" Value="8,0" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="#111827" />
+            <Setter Property="Background" Value="#FFFFFF" />
+            <Setter Property="BorderBrush" Value="#94A3B8" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
     </UserControl.Resources>
 
     <Grid Margin="16">
@@ -55,7 +65,27 @@
 
                 <materialDesign:Card Grid.Row="0" Grid.Column="0" Style="{StaticResource SectionCardOutlined}" Padding="14,12">
                     <StackPanel>
-                        <TextBlock Text="服务器配置" Style="{StaticResource TextSubtitle}" FontWeight="SemiBold" Margin="0,0,0,10" />
+                        <TextBlock Text="服务器配置" Style="{StaticResource TextSubtitle}" FontWeight="SemiBold" Margin="0,0,0,8" />
+
+                        <ComboBox ItemsSource="{Binding ServerPresets}"
+                                  SelectedItem="{Binding SelectedServerPreset, Mode=TwoWay}"
+                                  Style="{StaticResource StandardComboBox}"
+                                  Foreground="{DynamicResource MaterialDesignBody}"
+                                  materialDesign:HintAssist.Hint="选择服务器预设（自动填入地址和端口）"
+                                  materialDesign:HintAssist.IsFloating="False"
+                                  Margin="0,0,0,8">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding DisplayName}" Foreground="{DynamicResource MaterialDesignBody}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        <Border Background="{DynamicResource MaterialDesignDivider}" CornerRadius="6" Padding="8,5" Margin="0,0,0,10">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="当前服务器：" Style="{StaticResource TextHint}" />
+                                <TextBlock Text="{Binding CurrentServerSummary}" Style="{StaticResource TextCaption}" FontWeight="SemiBold" />
+                            </StackPanel>
+                        </Border>
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" />
@@ -70,27 +100,55 @@
 
                             <TextBox Grid.Row="0"
                                      Grid.Column="0"
-                                     Text="{Binding FrpServerAddress, UpdateSourceTrigger=PropertyChanged}"
-                                     Style="{StaticResource StandardTextBox}"
-                                     materialDesign:HintAssist.Hint="公网 IP 或域名"
-                                     materialDesign:HintAssist.IsFloating="False" />
+                                     Text="{Binding FrpServerAddress, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                     Style="{StaticResource FrpVisibleTextBox}"
+                                     ToolTip="公网 IP 或域名" />
 
                             <TextBox Grid.Row="0"
                                      Grid.Column="2"
-                                     Text="{Binding FrpServerPort, UpdateSourceTrigger=PropertyChanged}"
-                                     Style="{StaticResource StandardTextBox}"
-                                     materialDesign:HintAssist.Hint="端口，默认 7000"
-                                     materialDesign:HintAssist.IsFloating="False" />
+                                     Text="{Binding FrpServerPort, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                     Style="{StaticResource FrpVisibleTextBox}"
+                                     ToolTip="端口，默认 7000" />
 
-                            <PasswordBox x:Name="FrpTokenBox"
-                                         Grid.Row="1"
-                                         Grid.ColumnSpan="3"
-                                         Height="36"
-                                         Margin="0,10,0,0"
-                                         Style="{StaticResource MaterialDesignOutlinedPasswordBox}"
-                                         materialDesign:HintAssist.Hint="frps.ini 里 token = 后面的密码"
-                                         materialDesign:HintAssist.IsFloating="False"
-                                         PasswordChanged="FrpTokenBox_OnPasswordChanged" />
+                            <Grid Grid.Row="1" Grid.ColumnSpan="3" Margin="0,10,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="8" />
+                                    <ColumnDefinition Width="96" />
+                                </Grid.ColumnDefinitions>
+
+                                <Grid Grid.Column="0">
+                                    <PasswordBox x:Name="FrpTokenBox"
+                                                 Height="36"
+                                                 Style="{StaticResource MaterialDesignOutlinedPasswordBox}"
+                                                 materialDesign:HintAssist.Hint="frps.ini 里 token = 后面的密码"
+                                                 materialDesign:HintAssist.IsFloating="False"
+                                                 PasswordChar="*"
+                                                 PasswordChanged="FrpTokenBox_OnPasswordChanged" />
+
+                                    <TextBlock x:Name="FrpTokenMaskText"
+                                               Text="{Binding FrpTokenMask}"
+                                               Foreground="#111827"
+                                               Background="#FFFFFF"
+                                               Margin="8,0"
+                                               VerticalAlignment="Center"
+                                               IsHitTestVisible="False" />
+                                </Grid>
+
+                                <TextBox x:Name="FrpTokenVisibleBox"
+                                         Grid.Column="0"
+                                         Text="{Binding FrpToken, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                         Style="{StaticResource FrpVisibleTextBox}"
+                                         Visibility="Collapsed"
+                                         ToolTip="frps.ini 里 token = 后面的密码" />
+
+                                <ToggleButton x:Name="ShowFrpTokenButton"
+                                              Grid.Column="2"
+                                              Height="36"
+                                              Content="显示Token"
+                                              Checked="ShowFrpTokenButton_OnChecked"
+                                              Unchecked="ShowFrpTokenButton_OnUnchecked" />
+                            </Grid>
 
                             <TextBlock Grid.Row="2"
                                        Grid.ColumnSpan="3"
@@ -111,7 +169,24 @@
 
                 <materialDesign:Card Grid.Row="0" Grid.Column="2" Style="{StaticResource SectionCardOutlined}" Padding="14,12">
                     <StackPanel>
-                        <TextBlock Text="添加规则" Style="{StaticResource TextSubtitle}" FontWeight="SemiBold" Margin="0,0,0,10" />
+                        <TextBlock Text="添加规则" Style="{StaticResource TextSubtitle}" FontWeight="SemiBold" Margin="0,0,0,8" />
+
+                        <ComboBox ItemsSource="{Binding PortPresets}"
+                                  SelectedItem="{Binding SelectedPortPreset, Mode=TwoWay}"
+                                  Style="{StaticResource StandardComboBox}"
+                                  Foreground="{DynamicResource MaterialDesignBody}"
+                                  materialDesign:HintAssist.Hint="选择常用预设（自动填入下方端口）"
+                                  materialDesign:HintAssist.IsFloating="False"
+                                  Margin="0,0,0,8">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding DisplayName}" Foreground="{DynamicResource MaterialDesignBody}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        <Border Background="{DynamicResource MaterialDesignDivider}" CornerRadius="6" Padding="8,5" Margin="0,0,0,10">
+                            <TextBlock Text="{Binding CurrentPortPresetSummary}" Style="{StaticResource TextCaption}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                        </Border>
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" />
@@ -125,25 +200,22 @@
 
                             <TextBox Grid.Row="0"
                                      Grid.Column="0"
-                                     Text="{Binding DraftRule.LocalPort, UpdateSourceTrigger=PropertyChanged}"
-                                     Style="{StaticResource StandardTextBox}"
-                                     materialDesign:HintAssist.Hint="本机端口，如 3389"
-                                     materialDesign:HintAssist.IsFloating="False" />
+                                     Text="{Binding DraftRule.LocalPort, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                     Style="{StaticResource FrpVisibleTextBox}"
+                                     ToolTip="本机端口，如 3389" />
 
                             <TextBox Grid.Row="0"
                                      Grid.Column="2"
-                                     Text="{Binding DraftRule.RemotePort, UpdateSourceTrigger=PropertyChanged}"
-                                     Style="{StaticResource StandardTextBox}"
-                                     materialDesign:HintAssist.Hint="公网端口，如 33890"
-                                     materialDesign:HintAssist.IsFloating="False" />
+                                     Text="{Binding DraftRule.RemotePort, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                     Style="{StaticResource FrpVisibleTextBox}"
+                                     ToolTip="公网端口，如 33890" />
 
                             <TextBox Grid.Row="1"
                                      Grid.ColumnSpan="3"
-                                     Text="{Binding DraftRule.Description, UpdateSourceTrigger=PropertyChanged}"
-                                     Style="{StaticResource StandardTextBox}"
+                                     Text="{Binding DraftRule.Description, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                     Style="{StaticResource FrpVisibleTextBox}"
                                      Margin="0,10,0,0"
-                                     materialDesign:HintAssist.Hint="备注说明，如 远程桌面"
-                                     materialDesign:HintAssist.IsFloating="False" />
+                                     ToolTip="备注说明，如 远程桌面" />
                         </Grid>
 
                         <TextBlock Text="服务器安全组必须放行远程端口；远程端口不能与其他电脑重复。"

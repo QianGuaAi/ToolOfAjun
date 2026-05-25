@@ -617,4 +617,71 @@ namespace MyTools.Services
             }
         }
     }
+
+    public sealed class FrpPortPreset
+    {
+        public string DisplayName { get; }
+        public int LocalPort { get; }
+        public int RemotePort { get; }
+        public string Description { get; }
+
+        public FrpPortPreset(string displayName, int localPort, int remotePort, string description)
+        {
+            DisplayName = displayName ?? string.Empty;
+            LocalPort = localPort;
+            RemotePort = remotePort;
+            Description = description ?? string.Empty;
+        }
+
+        public override string ToString() => DisplayName;
+    }
+
+    public static class FrpPortPresetCatalog
+    {
+        public static IReadOnlyList<FrpPortPreset> All { get; } = new[]
+        {
+            new FrpPortPreset("远程桌面 (RDP)", 3389, 33890, "Windows 远程桌面"),
+            new FrpPortPreset("网页 HTTP 80", 80, 8081, "本机 80 端口网页服务"),
+            new FrpPortPreset("网页开发 8080", 8080, 8082, "本机 8080 开发服务器"),
+            new FrpPortPreset("网页开发 8000", 8000, 8003, "本机 8000 开发服务器"),
+            new FrpPortPreset("SSH 远程", 22, 2222, "OpenSSH 服务"),
+            new FrpPortPreset("MySQL 数据库", 3306, 3307, "MySQL 服务"),
+            new FrpPortPreset("PostgreSQL 数据库", 5432, 5433, "PostgreSQL 服务"),
+            new FrpPortPreset("Redis 缓存", 6379, 6380, "Redis 服务"),
+            new FrpPortPreset("SMB 文件共享", 445, 4450, "Windows 文件共享"),
+            new FrpPortPreset("VNC 远程桌面", 5900, 5901, "VNC 服务")
+        };
+    }
+
+    public sealed class FrpServerPreset
+    {
+        public string DisplayName { get; }
+        public string ServerAddress { get; }
+        public int ServerPort { get; }
+        public string Description { get; }
+
+        public FrpServerPreset(string displayName, string serverAddress, int serverPort, string description)
+        {
+            DisplayName = displayName ?? string.Empty;
+            ServerAddress = serverAddress ?? string.Empty;
+            ServerPort = serverPort;
+            Description = description ?? string.Empty;
+        }
+
+        public override string ToString() => DisplayName;
+    }
+
+    public static class FrpServerPresetCatalog
+    {
+        public static IReadOnlyList<FrpServerPreset> All { get; } = new[]
+        {
+            new FrpServerPreset("阿里云主服务器", FrpDefaults.DefaultServerAddress, FrpDefaults.DefaultServerPort, "120.26.50.234 · frps v0.50.0")
+        };
+    }
+
+    public static class FrpDefaults
+    {
+        public const string DefaultServerAddress = "120.26.50.234";
+        public const int DefaultServerPort = 7000;
+    }
 }

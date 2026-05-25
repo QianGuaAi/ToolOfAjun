@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
@@ -23,6 +24,8 @@ namespace MyTools.ViewModels
         private bool _isLoadingConfig;
         private string _clientId = string.Empty;
         private bool _disposed;
+        private FrpPortPreset _selectedPortPreset;
+        private FrpServerPreset _selectedServerPreset;
 
         public FrpViewModel(MainViewModel owner)
         {
@@ -93,6 +96,8 @@ namespace MyTools.ViewModels
             }
         }
 
+        public string FrpTokenMask => string.IsNullOrEmpty(FrpToken) ? "未填写 Token" : new string('*', FrpToken.Length);
+
         public string StatusHint
         {
             get => _statusHint;
@@ -110,6 +115,9 @@ namespace MyTools.ViewModels
         }
 
         public ObservableCollection<FrpTunnelRule> FrpRules { get; }
+
+        public IReadOnlyList<FrpPortPreset> PortPresets { get; } = FrpPortPresetCatalog.All;
+        public IReadOnlyList<FrpServerPreset> ServerPresets { get; } = FrpServerPresetCatalog.All;
 
         public FrpTunnelRule DraftRule
         {
@@ -133,6 +141,38 @@ namespace MyTools.ViewModels
             }
         }
 
+        public FrpPortPreset SelectedPortPreset
+        {
+            get => _selectedPortPreset;
+            set
+            {
+                if (ReferenceEquals(_selectedPortPreset, value))
+                {
+                    return;
+                }
+
+                _selectedPortPreset = value;
+                OnPropertyChanged();
+                ApplyPortPreset(value);
+            }
+        }
+
+        public FrpServerPreset SelectedServerPreset
+        {
+            get => _selectedServerPreset;
+            set
+            {
+                if (ReferenceEquals(_selectedServerPreset, value))
+                {
+                    return;
+                }
+
+                _selectedServerPreset = value;
+                OnPropertyChanged();
+                ApplyServerPreset(value);
+            }
+        }
+
         public FrpState ConnectionState => _manager.State;
         public string ConnectionStatusText => _manager.StatusMessage;
         public bool IsRunning => _manager.State == FrpState.Starting || _manager.State == FrpState.Running;
@@ -146,6 +186,32 @@ namespace MyTools.ViewModels
             && FrpServerPort >= 1
             && FrpServerPort <= 65535
             && !string.IsNullOrWhiteSpace(FrpToken);
+
+        public string CurrentServerSummary
+        {
+            get
+            {
+                if (string.IsNullOrWhiteSpace(FrpServerAddress))
+                {
+                    return "未选择服务器";
+                }
+
+                return $"{FrpServerAddress.Trim()}:{FrpServerPort}";
+            }
+        }
+
+        public string CurrentPortPresetSummary
+        {
+            get
+            {
+                if (SelectedPortPreset == null || DraftRule == null)
+                {
+                    return "未选择端口预设";
+                }
+
+                return $"{SelectedPortPreset.DisplayName} · 127.0.0.1:{DraftRule.LocalPort} → {FrpServerAddress.Trim()}:{DraftRule.RemotePort}";
+            }
+        }
 
         public string PublicAddressPreview
         {
@@ -189,7 +255,12 @@ namespace MyTools.ViewModels
                 var config = await FrpService.LoadConfigAsync();
                 _clientId = string.IsNullOrWhiteSpace(config.ClientId) ? Guid.NewGuid().ToString("N") : config.ClientId;
                 FrpServerAddress = config.ServerAddress ?? string.Empty;
-                FrpServerPort = FrpService.IsValidPort(config.ServerPort) ? config.ServerPort : 7000;
+                if (string.IsNullOrWhiteSpace(FrpServerAddress))
+                {
+                    FrpServerAddress = FrpDefaults.DefaultServerAddress;
+                }
+
+                FrpServerPort = FrpService.IsValidPort(config.ServerPort) ? config.ServerPort : FrpDefaults.DefaultServerPort;
                 FrpToken = FrpService.DecryptToken(config.EncryptedToken);
 
                 foreach (var rule in FrpRules)
@@ -334,6 +405,37 @@ namespace MyTools.ViewModels
             NotifyAll();
         }
 
+        private void ApplyPortPreset(FrpPortPreset preset)
+        {
+            if (preset == null || DraftRule == null)
+            {
+                return;
+            }
+
+            DraftRule.LocalPort = preset.LocalPort;
+            DraftRule.RemotePort = preset.RemotePort;
+            DraftRule.Description = preset.Description;
+            StatusHint = "已套用预设 \"" + preset.DisplayName + "\"，请确认端口后点击「添加规则」。";
+            OnPropertyChanged(nameof(CurrentPortPresetSummary));
+            NotifyStateProperties();
+        }
+
+        private void ApplyServerPreset(FrpServerPreset preset)
+        {
+            if (preset == null)
+            {
+                return;
+            }
+
+            FrpServerAddress = preset.ServerAddress;
+            FrpServerPort = preset.ServerPort;
+            OnPropertyChanged(nameof(FrpServerAddress));
+            OnPropertyChanged(nameof(FrpServerPort));
+            OnPropertyChanged(nameof(CurrentServerSummary));
+            StatusHint = "已套用服务器预设 \"" + preset.DisplayName + "\"：" + CurrentServerSummary + "，请填写 Token 后保存配置。";
+            NotifyStateProperties();
+        }
+
         private bool CanAddDraftRule()
         {
             return DraftRule != null
@@ -436,6 +538,9 @@ namespace MyTools.ViewModels
             OnPropertyChanged(nameof(HasEnabledRules));
             OnPropertyChanged(nameof(HasRules));
             OnPropertyChanged(nameof(HasRequiredConfig));
+            OnPropertyChanged(nameof(FrpTokenMask));
+            OnPropertyChanged(nameof(CurrentServerSummary));
+            OnPropertyChanged(nameof(CurrentPortPresetSummary));
             OnPropertyChanged(nameof(PublicAddressPreview));
             CommandManager.InvalidateRequerySuggested();
         }
