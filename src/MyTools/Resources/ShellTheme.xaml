@@ -1,6 +1,8 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:system="clr-namespace:System;assembly=mscorlib">
+    <BooleanToVisibilityConverter x:Key="BoolToVis" />
+
     <SolidColorBrush x:Key="ShellPaperBrush" Color="#FFFFFF" />
     <SolidColorBrush x:Key="ShellFlatBackgroundBrush" Color="#F8FAFC" />
     <SolidColorBrush x:Key="ShellDividerBrush" Color="#E2E8F0" />

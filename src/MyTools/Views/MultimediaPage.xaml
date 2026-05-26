@@ -174,7 +174,7 @@
                     <RowDefinition Height="220" MinHeight="140" MaxHeight="420" />
                 </Grid.RowDefinitions>
 
-                <materialDesign:Card Grid.Row="0" Padding="10" Margin="0,0,0,0">
+                <materialDesign:Card Grid.Row="0" Style="{StaticResource PremiumCard}" Padding="12" Margin="0,0,0,0">
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
@@ -187,7 +187,7 @@
 
                 <GridSplitter Grid.Row="1" Height="6" HorizontalAlignment="Stretch" ResizeBehavior="PreviousAndNext" ResizeDirection="Rows" Background="Transparent" />
 
-                <materialDesign:Card Grid.Row="2" Padding="10" Margin="0,0,0,0">
+                <materialDesign:Card Grid.Row="2" Style="{StaticResource PremiumCard}" Padding="12" Margin="0,0,0,0">
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
@@ -272,7 +272,7 @@
 
                         <TextBlock Text="媒体文件" Style="{StaticResource TextSubtitle}" FontWeight="SemiBold" VerticalAlignment="Center" />
                     </DockPanel>
-                    <ListView x:Name="MediaFileList" Grid.Row="1" ItemsSource="{Binding MediaFiles}" SelectedItem="{Binding SelectedMediaFile, Mode=TwoWay}" MouseDoubleClick="MediaFileList_OnMouseDoubleClick" PreviewMouseRightButtonDown="MediaFileList_OnPreviewMouseRightButtonDown" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" ScrollViewer.CanContentScroll="True">
+                    <ListView x:Name="MediaFileList" Grid.Row="1" ItemsSource="{Binding MediaFiles}" SelectedItem="{Binding SelectedMediaFile, Mode=TwoWay}" MouseDoubleClick="MediaFileList_OnMouseDoubleClick" PreviewMouseRightButtonDown="MediaFileList_OnPreviewMouseRightButtonDown" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" ScrollViewer.CanContentScroll="True" ItemContainerStyle="{StaticResource PremiumListViewItem}">
                         <ListView.ContextMenu>
                             <ContextMenu>
                                 <MenuItem Header="格式转换" Command="{Binding PlacementTarget.DataContext.OpenConvertDialogCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding PlacementTarget.SelectedItem, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
@@ -290,6 +290,13 @@
                                         </DataTemplate>
                                     </GridViewColumn.CellTemplate>
                                 </GridViewColumn>
+                                <GridViewColumn Header="预览" Width="80">
+                                    <GridViewColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <Image Source="{Binding Thumbnail}" Width="64" Height="64" Stretch="Uniform" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                        </DataTemplate>
+                                    </GridViewColumn.CellTemplate>
+                                </GridViewColumn>
                                 <GridViewColumn Header="文件名" DisplayMemberBinding="{Binding Name}" Width="260" />
                                 <GridViewColumn Header="类型" DisplayMemberBinding="{Binding KindText}" Width="72" />
                                 <GridViewColumn Header="大小" DisplayMemberBinding="{Binding SizeText}" Width="90" />
@@ -303,7 +310,8 @@
         </Grid>
 
         <Grid Grid.Row="1" Visibility="{Binding IsImmersive, Converter={StaticResource BoolToVis}}">
-            <Border Background="#F0000000" CornerRadius="{StaticResource CornerRadiusCard}" Padding="12">
+            <!-- Premium immersive overlay -->
+            <Border Background="#CC0F172A" CornerRadius="14" Padding="16">
                 <Grid>
                     <Button Style="{StaticResource GhostActionButton}" Command="{Binding ExitImmersiveCommand}" HorizontalAlignment="Right" VerticalAlignment="Top" Height="34" Padding="12,0" Panel.ZIndex="2">
                         <StackPanel Orientation="Horizontal">
@@ -328,7 +336,7 @@
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
                         <MediaElement x:Name="ImmersiveMediaElement" Source="{Binding ImmersiveMediaSource}" LoadedBehavior="Manual" UnloadedBehavior="Manual" Stretch="Uniform" MediaEnded="ImmersiveMediaElement_OnMediaEnded" />
-                        <Border Grid.Row="1" Background="#CC111111" CornerRadius="8" Padding="10" Margin="0,12,0,0">
+                        <materialDesign:Card Grid.Row="1" Style="{StaticResource PremiumCard}" Background="#1E293B" Padding="12" Margin="0,12,0,0">
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                                 <Button Style="{StaticResource GhostActionButton}" Click="ImmersivePlayPause_OnClick" Padding="12,0" Height="34">
                                     <materialDesign:PackIcon Kind="PlayPause" Width="16" Height="16" />
@@ -339,7 +347,7 @@
                                 </Button>
                                 <TextBlock Text="{Binding SelectedMediaFile.Name}" Foreground="White" Margin="12,0,0,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="260" />
                             </StackPanel>
-                        </Border>
+                        </materialDesign:Card>
                     </Grid>
 
                     <Grid Visibility="{Binding IsImmersiveAudio, Converter={StaticResource BoolToVis}}">

@@ -7,16 +7,8 @@
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
         <viewModels:InverseBoolToVisibilityConverter x:Key="InverseBoolToVis" />
-        <Style x:Key="FrpVisibleTextBox" TargetType="TextBox">
-            <Setter Property="Height" Value="36" />
-            <Setter Property="Padding" Value="8,0" />
-            <Setter Property="VerticalContentAlignment" Value="Center" />
-            <Setter Property="FontSize" Value="12" />
-            <Setter Property="Foreground" Value="#111827" />
-            <Setter Property="Background" Value="#FFFFFF" />
-            <Setter Property="BorderBrush" Value="#94A3B8" />
-            <Setter Property="BorderThickness" Value="1" />
-        </Style>
+        <!-- Use global StandardTextBox for consistency; local style kept for minimal diff -->
+        <Style x:Key="FrpVisibleTextBox" TargetType="TextBox" BasedOn="{StaticResource StandardTextBox}" />
     </UserControl.Resources>
 
     <Grid Margin="16">
@@ -26,24 +18,20 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <Border Grid.Row="0" Margin="0,0,0,12" CornerRadius="{StaticResource CornerRadiusCard}" Padding="12,8">
-            <Border.Background>
-                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                    <GradientStop Color="{DynamicResource BrushHeaderGradientStartColor}" Offset="0" />
-                    <GradientStop Color="{DynamicResource BrushHeaderGradientEndColor}" Offset="1" />
-                </LinearGradientBrush>
-            </Border.Background>
+        <!-- Premium dark header for consistency with System Optimization -->
+        <Border Grid.Row="0" Margin="0,0,0,12" CornerRadius="12" Padding="14,10"
+                Background="#1E293B" BorderThickness="0">
             <DockPanel>
                 <Border DockPanel.Dock="Right" Style="{StaticResource StatusPill}" Margin="12,0,0,0">
                     <TextBlock Text="{Binding ConnectionStatusText}" />
                 </Border>
                 <StackPanel Orientation="Horizontal">
-                    <Border Width="32" Height="32" CornerRadius="8" Background="{StaticResource BrushAccentGradient}" Margin="0,0,10,0" VerticalAlignment="Center">
-                        <materialDesign:PackIcon Kind="VpnKey" Width="16" Height="16" Foreground="White" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                    <Border Width="36" Height="36" CornerRadius="10" Background="{StaticResource BrushAccentGradient}" Margin="0,0,12,0" VerticalAlignment="Center">
+                        <materialDesign:PackIcon Kind="VpnKey" Width="18" Height="18" Foreground="White" VerticalAlignment="Center" HorizontalAlignment="Center" />
                     </Border>
                     <StackPanel VerticalAlignment="Center">
-                        <TextBlock Text="隧道穿透" Style="{StaticResource TextHeadline}" />
-                        <TextBlock Text="frp 内网穿透 · 指定本机端口映射到公网服务器" Style="{StaticResource TextCaption}" Margin="0,1,0,0" />
+                        <TextBlock Text="隧道穿透" Style="{StaticResource TextHeadline}" Foreground="White" />
+                        <TextBlock Text="frp 内网穿透 · 指定本机端口映射到公网服务器" Foreground="#94A3B8" Style="{StaticResource TextCaption}" Margin="0,2,0,0" />
                     </StackPanel>
                 </StackPanel>
             </DockPanel>

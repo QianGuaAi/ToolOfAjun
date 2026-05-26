@@ -24,6 +24,7 @@ namespace MyTools.Services
         private const int ExportSchemaVersion = 1;
         private const int ExportIterations = 200000;
         private const string ExportHeader = "CDXB";
+        private const string ExportPortableKind = "portable-codex-profiles-v2";
         private static readonly SemaphoreSlim FileLock = new SemaphoreSlim(1, 1);
 
         public static string RootFolderPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MyTools", "Codex");
@@ -193,8 +194,8 @@ namespace MyTools.Services
                 throw new InvalidOperationException("导出口令不能为空。");
             }
 
-            NormalizeProfilesFile(file);
-            var plainJson = JsonConvert.SerializeObject(file, Formatting.Indented);
+            var portableFile = CreatePortableExportFile(file);
+            var plainJson = JsonConvert.SerializeObject(portableFile, Formatting.Indented);
             var plaintext = Encoding.UTF8.GetBytes(plainJson);
             var salt = CreateRandomBytes(16);
             var iv = CreateRandomBytes(16);
@@ -306,9 +307,7 @@ namespace MyTools.Services
             }
 
             var plaintext = DecryptAesCbc(ciphertext, keyMaterial.Take(32).ToArray(), iv);
-            var file = JsonConvert.DeserializeObject<CodexProfilesFile>(Encoding.UTF8.GetString(plaintext)) ?? CreateEmptyProfilesFile();
-            NormalizeProfilesFile(file);
-            return file;
+            return DeserializeImportPackage(plaintext);
         }
 
         public static DateTime? ParseAccessTokenExp(byte[] authJsonBytes)
@@ -430,6 +429,196 @@ namespace MyTools.Services
             var json = JsonConvert.SerializeObject(file, Formatting.Indented);
             var protectedText = CodexConfigProfileService.ProtectBytesToBase64(Encoding.UTF8.GetBytes(json));
             await WriteAllTextAsync(ProfilesFilePath, protectedText, ct).ConfigureAwait(false);
+        }
+
+        private static CodexPortableProfilesFile CreatePortableExportFile(CodexProfilesFile file)
+        {
+            NormalizeProfilesFile(file);
+            var portableFile = new CodexPortableProfilesFile
+            {
+                schemaVersion = CurrentSchemaVersion,
+                packageKind = ExportPortableKind,
+                machineName = string.IsNullOrWhiteSpace(file.machineName) ? Environment.MachineName : file.machineName,
+                createdAtUtc = file.createdAtUtc == default(DateTime) ? DateTime.UtcNow : file.createdAtUtc,
+                items = new List<CodexPortableProfileItem>()
+            };
+
+            foreach (var item in file.items.Where(item => item != null))
+            {
+                NormalizeProfileItem(item);
+                var configTomlBytes = UnprotectProfileContentForExport(item.ProtectedConfigTomlBase64 ?? item.ConfigTomlContentProtected, item.DisplayName, "config.toml");
+                var authJsonBytes = UnprotectProfileContentForExport(item.ProtectedAuthJsonBase64 ?? item.AuthJsonContentProtected, item.DisplayName, "auth.json");
+                portableFile.items.Add(new CodexPortableProfileItem
+                {
+                    DisplayName = item.DisplayName,
+                    Name = item.DisplayName,
+                    AccountEmail = item.AccountEmail ?? string.Empty,
+                    Note = item.Note ?? string.Empty,
+                    Remark = item.Note ?? string.Empty,
+                    Tags = item.Tags ?? string.Empty,
+                    FolderPath = item.FolderPath ?? string.Empty,
+                    LastAppliedAt = item.LastAppliedAt,
+                    LastImportedAt = item.LastImportedAt == default(DateTime) ? DateTime.UtcNow : item.LastImportedAt,
+                    AccessTokenExpiresAt = item.AccessTokenExpiresAt ?? ParseAccessTokenExp(authJsonBytes),
+                    RefreshTokenExpiresAt = null,
+                    Status = item.Status ?? ComputeStatus(item.AccessTokenExpiresAt ?? ParseAccessTokenExp(authJsonBytes)),
+                    ConfigTomlBase64 = Convert.ToBase64String(configTomlBytes),
+                    AuthJsonBase64 = Convert.ToBase64String(authJsonBytes)
+                });
+            }
+
+            return portableFile;
+        }
+
+        private static byte[] UnprotectProfileContentForExport(string protectedBase64, string displayName, string fileName)
+        {
+            try
+            {
+                var bytes = CodexConfigProfileService.UnprotectBytesFromBase64(protectedBase64);
+                if (bytes == null || bytes.Length == 0)
+                {
+                    throw new InvalidOperationException("内容为空。");
+                }
+
+                return bytes;
+            }
+            catch (Exception ex)
+            {
+                var name = string.IsNullOrWhiteSpace(displayName) ? "Codex 账号" : displayName;
+                throw new InvalidOperationException($"档案「{name}」的 {fileName} 无法用当前 Windows 用户解密，不能导出为可迁移加密包。请在能正常切换该档案的 Windows 用户下重新导入当前账号后再导出。", ex);
+            }
+        }
+
+        private static CodexProfilesFile DeserializeImportPackage(byte[] plaintext)
+        {
+            var json = Encoding.UTF8.GetString(plaintext);
+            var root = JObject.Parse(json);
+            var packageKind = root["packageKind"]?.Value<string>() ?? string.Empty;
+            if (string.Equals(packageKind, ExportPortableKind, StringComparison.Ordinal)
+                || HasPortableContent(root))
+            {
+                return ConvertPortableImportPackage(root);
+            }
+
+            var legacyFile = JsonConvert.DeserializeObject<CodexProfilesFile>(json) ?? CreateEmptyProfilesFile();
+            NormalizeProfilesFile(legacyFile);
+            return ReprotectLegacyImportPackage(legacyFile);
+        }
+
+        private static bool HasPortableContent(JObject root)
+        {
+            var items = root["items"] as JArray;
+            if (items == null)
+            {
+                return false;
+            }
+
+            return items.OfType<JObject>().Any(item =>
+                item["ConfigTomlBase64"] != null
+                || item["AuthJsonBase64"] != null
+                || item["configTomlBase64"] != null
+                || item["authJsonBase64"] != null);
+        }
+
+        private static CodexProfilesFile ConvertPortableImportPackage(JObject root)
+        {
+            var portableFile = root.ToObject<CodexPortableProfilesFile>() ?? new CodexPortableProfilesFile();
+            var file = new CodexProfilesFile
+            {
+                schemaVersion = CurrentSchemaVersion,
+                machineName = string.IsNullOrWhiteSpace(portableFile.machineName) ? Environment.MachineName : portableFile.machineName,
+                createdAtUtc = portableFile.createdAtUtc == default(DateTime) ? DateTime.UtcNow : portableFile.createdAtUtc,
+                items = new List<CodexProfileItem>()
+            };
+
+            foreach (var imported in portableFile.items ?? new List<CodexPortableProfileItem>())
+            {
+                if (imported == null)
+                {
+                    continue;
+                }
+
+                byte[] configTomlBytes;
+                byte[] authJsonBytes;
+                try
+                {
+                    configTomlBytes = Convert.FromBase64String(imported.ConfigTomlBase64 ?? string.Empty);
+                    authJsonBytes = Convert.FromBase64String(imported.AuthJsonBase64 ?? string.Empty);
+                }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException("Codex 加密档案包内的配置内容格式无效。", ex);
+                }
+
+                if (configTomlBytes.Length == 0 || authJsonBytes.Length == 0)
+                {
+                    continue;
+                }
+
+                var protectedConfig = CodexConfigProfileService.ProtectBytesToBase64(configTomlBytes);
+                var protectedAuth = CodexConfigProfileService.ProtectBytesToBase64(authJsonBytes);
+                var accessExp = imported.AccessTokenExpiresAt ?? ParseAccessTokenExp(authJsonBytes);
+                var item = new CodexProfileItem
+                {
+                    DisplayName = string.IsNullOrWhiteSpace(imported.DisplayName) ? "Codex 账号" : imported.DisplayName,
+                    Name = string.IsNullOrWhiteSpace(imported.DisplayName) ? "Codex 账号" : imported.DisplayName,
+                    AccountEmail = string.IsNullOrWhiteSpace(imported.AccountEmail) ? ParseAccountEmail(authJsonBytes) : imported.AccountEmail,
+                    Note = imported.Note ?? string.Empty,
+                    Remark = imported.Note ?? string.Empty,
+                    Tags = imported.Tags ?? string.Empty,
+                    FolderPath = imported.FolderPath ?? string.Empty,
+                    LastAppliedAt = imported.LastAppliedAt,
+                    LastImportedAt = imported.LastImportedAt == default(DateTime) ? DateTime.UtcNow : imported.LastImportedAt,
+                    AccessTokenExpiresAt = accessExp,
+                    RefreshTokenExpiresAt = null,
+                    ProtectedConfigTomlBase64 = protectedConfig,
+                    ProtectedAuthJsonBase64 = protectedAuth,
+                    ConfigTomlContentProtected = protectedConfig,
+                    AuthJsonContentProtected = protectedAuth,
+                    Status = ComputeStatus(accessExp)
+                };
+                file.items.Add(item);
+            }
+
+            NormalizeProfilesFile(file);
+            return file;
+        }
+
+        private static CodexProfilesFile ReprotectLegacyImportPackage(CodexProfilesFile file)
+        {
+            foreach (var item in file.items.Where(item => item != null))
+            {
+                byte[] configTomlBytes;
+                byte[] authJsonBytes;
+                try
+                {
+                    configTomlBytes = CodexConfigProfileService.UnprotectBytesFromBase64(item.ProtectedConfigTomlBase64 ?? item.ConfigTomlContentProtected);
+                    authJsonBytes = CodexConfigProfileService.UnprotectBytesFromBase64(item.ProtectedAuthJsonBase64 ?? item.AuthJsonContentProtected);
+                }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException("这个 .codexbox 是旧版本导出的，包内仍包含源 Windows 用户的 DPAPI 加密内容，当前 Windows 用户无法解密。请在源电脑或源 Windows 用户下使用新版 MyTools 重新导出加密包后再导入。", ex);
+                }
+
+                if (configTomlBytes == null || authJsonBytes == null)
+                {
+                    continue;
+                }
+
+                var protectedConfig = CodexConfigProfileService.ProtectBytesToBase64(configTomlBytes);
+                var protectedAuth = CodexConfigProfileService.ProtectBytesToBase64(authJsonBytes);
+                item.ProtectedConfigTomlBase64 = protectedConfig;
+                item.ProtectedAuthJsonBase64 = protectedAuth;
+                item.ConfigTomlContentProtected = protectedConfig;
+                item.AuthJsonContentProtected = protectedAuth;
+                item.AccountEmail = string.IsNullOrWhiteSpace(item.AccountEmail) ? ParseAccountEmail(authJsonBytes) : item.AccountEmail;
+                item.AccessTokenExpiresAt = item.AccessTokenExpiresAt ?? ParseAccessTokenExp(authJsonBytes);
+                item.RefreshTokenExpiresAt = null;
+                item.Status = ComputeStatus(item.AccessTokenExpiresAt);
+            }
+
+            NormalizeProfilesFile(file);
+            return file;
         }
 
         private static CodexProfilesFile DeserializeProfilesFile(byte[] jsonBytes)
@@ -737,6 +926,33 @@ namespace MyTools.Services
         public string machineName { get; set; }
         public DateTime createdAtUtc { get; set; }
         public List<CodexProfileItem> items { get; set; } = new List<CodexProfileItem>();
+    }
+
+    public class CodexPortableProfilesFile
+    {
+        public int schemaVersion { get; set; }
+        public string packageKind { get; set; }
+        public string machineName { get; set; }
+        public DateTime createdAtUtc { get; set; }
+        public List<CodexPortableProfileItem> items { get; set; } = new List<CodexPortableProfileItem>();
+    }
+
+    public class CodexPortableProfileItem
+    {
+        public string DisplayName { get; set; }
+        public string Name { get; set; }
+        public string AccountEmail { get; set; }
+        public string Note { get; set; }
+        public string Remark { get; set; }
+        public string Tags { get; set; }
+        public string FolderPath { get; set; }
+        public DateTime? LastAppliedAt { get; set; }
+        public DateTime LastImportedAt { get; set; }
+        public DateTime? AccessTokenExpiresAt { get; set; }
+        public DateTime? RefreshTokenExpiresAt { get; set; }
+        public string Status { get; set; }
+        public string ConfigTomlBase64 { get; set; }
+        public string AuthJsonBase64 { get; set; }
     }
 
     public class CodexActiveFile

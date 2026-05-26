@@ -9,9 +9,9 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
-        <Style x:Key="ToolbarButton" TargetType="Button" BasedOn="{StaticResource MaterialDesignOutlinedButton}">
+        <Style x:Key="ToolbarButton" TargetType="Button" BasedOn="{StaticResource GhostActionButton}">
             <Setter Property="Margin" Value="0,0,6,0" />
-            <Setter Property="MinWidth" Value="64" />
+            <Setter Property="MinWidth" Value="58" />
             <Setter Property="Height" Value="28" />
             <Setter Property="Padding" Value="8,0" />
             <Setter Property="FontSize" Value="12" />
@@ -24,9 +24,11 @@
             <ColumnDefinition Width="226" />
         </Grid.ColumnDefinitions>
 
-        <!-- ===== Left: version list ===== -->
-        <Border Grid.Column="0" Background="{DynamicResource MaterialDesignCardBackground}"
-                BorderBrush="{DynamicResource MaterialDesignDivider}" BorderThickness="0,0,1,0">
+        <!-- ===== Left: version list - Premium -->
+        <Border Grid.Column="0"
+                Background="{DynamicResource MaterialDesignCardBackground}"
+                BorderBrush="{DynamicResource MaterialDesignDivider}"
+                BorderThickness="0,0,1,0">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
@@ -139,21 +141,21 @@
                 </Grid>
             </ScrollViewer>
 
-            <!-- Legend -->
+            <!-- Legend - Premium chips -->
             <Border Grid.Row="3" Padding="10,6" Background="{DynamicResource MaterialDesignCardBackground}"
                     BorderBrush="{DynamicResource MaterialDesignDivider}" BorderThickness="0,1,0,0">
                 <WrapPanel>
                     <TextBlock Text="图例" FontSize="11" FontWeight="SemiBold" Margin="0,0,8,0" VerticalAlignment="Center" />
-                    <Border Background="#E3F2FD" CornerRadius="3" Padding="5,1" Margin="0,0,4,0"><TextBlock Text="白" FontSize="11" /></Border>
-                    <Border Background="#E8EAF6" CornerRadius="3" Padding="5,1" Margin="0,0,4,0"><TextBlock Text="卡" FontSize="11" /></Border>
-                    <Border Background="#E0F7FA" CornerRadius="3" Padding="5,1" Margin="0,0,4,0"><TextBlock Text="副" FontSize="11" /></Border>
-                    <Border Background="#FFEBEE" CornerRadius="3" Padding="5,1" Margin="0,0,4,0"><TextBlock Text="感" FontSize="11" /></Border>
-                    <Border Background="#37474F" CornerRadius="3" Padding="5,1" Margin="0,0,4,0"><TextBlock Text="夜" FontSize="11" Foreground="White" /></Border>
-                    <Border Background="#78909C" CornerRadius="3" Padding="5,1" Margin="0,0,4,0"><TextBlock Text="小" FontSize="11" Foreground="White" /></Border>
-                    <Border Background="#C8E6C9" CornerRadius="3" Padding="5,1" Margin="0,0,4,0"><TextBlock Text="休" FontSize="11" /></Border>
-                    <Border Background="#A5D6A7" CornerRadius="3" Padding="5,1" Margin="0,0,4,0"><TextBlock Text="公" FontSize="11" /></Border>
-                    <Border Background="#FFF9C4" CornerRadius="3" Padding="5,1" Margin="0,0,8,0"><TextBlock Text="午" FontSize="11" /></Border>
-                    <TextBlock FontSize="11" Opacity="0.78" TextWrapping="Wrap" Text="小1=小→夜→休→休。单击格子选班次。" />
+                    <Border Style="{StaticResource ShiftLegendChip}" Background="#DBEAFE"><TextBlock Text="白" /></Border>
+                    <Border Style="{StaticResource ShiftLegendChip}" Background="#E0E7FF"><TextBlock Text="卡" /></Border>
+                    <Border Style="{StaticResource ShiftLegendChip}" Background="#CFFAFE"><TextBlock Text="副" /></Border>
+                    <Border Style="{StaticResource ShiftLegendChip}" Background="#FEE2E2"><TextBlock Text="感" /></Border>
+                    <Border Style="{StaticResource ShiftLegendChip}" Background="#1F2937"><TextBlock Text="夜" Foreground="White" /></Border>
+                    <Border Style="{StaticResource ShiftLegendChip}" Background="#475569"><TextBlock Text="小" Foreground="White" /></Border>
+                    <Border Style="{StaticResource ShiftLegendChip}" Background="#D1FAE5"><TextBlock Text="休" /></Border>
+                    <Border Style="{StaticResource ShiftLegendChip}" Background="#A7F3D0"><TextBlock Text="公" /></Border>
+                    <Border Style="{StaticResource ShiftLegendChip}" Background="#FEF3C7"><TextBlock Text="午" /></Border>
+                    <TextBlock FontSize="11" Opacity="0.78" TextWrapping="Wrap" Text="小1=小→夜→休→休。单击格子选班次。" Margin="4,0,0,0" />
                 </WrapPanel>
             </Border>
         </Grid>
@@ -179,9 +181,9 @@
                                                  Foreground="{DynamicResource BrushAccentAmber}" />
                         <TextBlock Text="冲突检查" FontWeight="SemiBold" FontSize="12" VerticalAlignment="Center" />
                     </StackPanel>
-                    <Border CornerRadius="4" Background="{DynamicResource MaterialDesignChipBackground}" Padding="7,4">
+                    <materialDesign:Card Style="{StaticResource PremiumCard}" Padding="8,6" Margin="0">
                         <TextBlock Text="{Binding ScheduleConflictSummary}" FontSize="11" TextTrimming="CharacterEllipsis" />
-                    </Border>
+                    </materialDesign:Card>
                 </StackPanel>
 
                 <StackPanel Grid.Row="1" Margin="0,10,0,10">
@@ -212,8 +214,7 @@
                     <ItemsControl ItemsSource="{Binding WeeklyRestStats}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <Border Margin="0,0,0,5" Padding="7,5" CornerRadius="4"
-                                        BorderBrush="{DynamicResource MaterialDesignDivider}" BorderThickness="1">
+                                <materialDesign:Card Style="{StaticResource SectionCardDense}" Padding="8,6" Margin="0,0,0,6">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
@@ -228,7 +229,7 @@
                                             <TextBlock Text="{Binding BalanceText}" FontSize="10.5" Opacity="0.72" HorizontalAlignment="Right" />
                                         </StackPanel>
                                     </Grid>
-                                </Border>
+                                </materialDesign:Card>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
@@ -261,7 +262,7 @@
                                                    Text="{Binding Level}"
                                                    FontSize="10"
                                                    FontWeight="SemiBold"
-                                                   Foreground="{DynamicResource BrushAccentRed}" />
+                                                   Foreground="{DynamicResource BrushError}" />
                                         <TextBlock Text="{Binding Category}"
                                                    FontSize="10"
                                                    Opacity="0.68"

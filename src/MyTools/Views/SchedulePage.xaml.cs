@@ -42,23 +42,23 @@ namespace MyTools.Views
         private const int HeaderRowCount = 4;
         private const double HeaderRowHeight = 24;
         private const double EmployeeRowHeight = 28;
-        private const int EmployeeRowOverscan = 8;
+        private const int EmployeeRowOverscan = 12; // Increased for smoother scrolling on large rosters (perf optimization)
         private static readonly string[] DowZh = { "日", "一", "二", "三", "四", "五", "六" };
-        private static readonly Brush HeaderBg = FrozenBrush(0xF1, 0xF3, 0xF6);
-        private static readonly Brush HolidayHeaderBg = FrozenBrush(0xFF, 0xF4, 0xE6);
-        private static readonly Brush QuotaMismatchBg = FrozenBrush(0xFF, 0xEB, 0xEE);
-        private static readonly Brush EmptyHolidayBg = FrozenBrush(0xFF, 0xFA, 0xF0);
-        private static readonly Brush BorderBg = FrozenBrush(0xE0, 0xE0, 0xE0);
-        private static readonly Brush CellDayBg = FrozenBrush(0xE3, 0xF2, 0xFD);
-        private static readonly Brush CellCardBg = FrozenBrush(0xE8, 0xEA, 0xF6);
-        private static readonly Brush CellDeputyBg = FrozenBrush(0xE0, 0xF7, 0xFA);
-        private static readonly Brush CellInfectBg = FrozenBrush(0xFF, 0xEB, 0xEE);
-        private static readonly Brush CellBigBg = FrozenBrush(0x37, 0x47, 0x4F);
-        private static readonly Brush CellSmallBg = FrozenBrush(0x78, 0x90, 0x9C);
-        private static readonly Brush CellRestBg = FrozenBrush(0xC8, 0xE6, 0xC9);
-        private static readonly Brush CellPublicBg = FrozenBrush(0xA5, 0xD6, 0xA7);
-        private static readonly Brush CellHalfBg = FrozenBrush(0xFF, 0xF9, 0xC4);
-        private static readonly Brush SerialTextFg = FrozenBrush(0x90, 0x90, 0x90);
+        private static readonly Brush HeaderBg = FrozenBrush(0xF1, 0xF5, 0xF9);
+        private static readonly Brush HolidayHeaderBg = FrozenBrush(0xFE, 0xF3, 0xC7);
+        private static readonly Brush QuotaMismatchBg = FrozenBrush(0xFE, 0xE2, 0xE2);
+        private static readonly Brush EmptyHolidayBg = FrozenBrush(0xFF, 0xFB, 0xEB);
+        private static readonly Brush BorderBg = FrozenBrush(0xE2, 0xE8, 0xF0);
+        private static readonly Brush CellDayBg = FrozenBrush(0xDB, 0xEA, 0xFE);
+        private static readonly Brush CellCardBg = FrozenBrush(0xE0, 0xE7, 0xFF);
+        private static readonly Brush CellDeputyBg = FrozenBrush(0xC0, 0xF0, 0xFC);
+        private static readonly Brush CellInfectBg = FrozenBrush(0xFE, 0xE2, 0xE2);
+        private static readonly Brush CellBigBg = FrozenBrush(0x1E, 0x29, 0x3B);
+        private static readonly Brush CellSmallBg = FrozenBrush(0x47, 0x55, 0x69);
+        private static readonly Brush CellRestBg = FrozenBrush(0xD1, 0xFA, 0xE5);
+        private static readonly Brush CellPublicBg = FrozenBrush(0xA7, 0xF3, 0xD0);
+        private static readonly Brush CellHalfBg = FrozenBrush(0xFE, 0xF3, 0xC7);
+        private static readonly Brush SerialTextFg = FrozenBrush(0x64, 0x74, 0x8B);
 
         public SchedulePage()
         {
@@ -544,13 +544,9 @@ namespace MyTools.Views
                 var btn = new Button
                 {
                     Content = DisplayCellCode(cell.Code),
-                    FontSize = 12,
-                    Padding = new Thickness(0),
-                    BorderThickness = isFocusedCell ? new Thickness(2) : new Thickness(0.5),
-                    BorderBrush = isFocusedCell ? Brushes.Crimson : BorderBg,
+                    Style = (Style)FindResource("ScheduleCellButton"),
                     Background = ResolveCellBg(cell, _holidayByDay != null && day < _holidayByDay.Length && _holidayByDay[day]),
                     Foreground = ResolveCellFg(cell),
-                    Cursor = Cursors.Hand,
                     IsEnabled = true,
                     Tag = (empIdx, day),
                     FontWeight = cell.IsManual ? FontWeights.Bold : FontWeights.Normal,

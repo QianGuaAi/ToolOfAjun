@@ -30,10 +30,7 @@
         </DataTemplate>
         <DataTemplate x:Key="SystemSectionTabs">
             <TabControl SelectedIndex="{Binding SelectedSystemSectionIndex, Mode=TwoWay}"
-                        Style="{StaticResource MaterialDesignTabControl}"
-                        HorizontalContentAlignment="Stretch"
-                        VerticalContentAlignment="Stretch"
-                        materialDesign:ColorZoneAssist.Mode="PrimaryMid"
+                        Style="{StaticResource PremiumMaterialTabControl}"
                         Height="34"
                         Margin="0,0,0,8">
                 <TabItem Header="系统优化" />
@@ -118,7 +115,7 @@
                                                 <ItemsControl x:Name="NetworkListControl" ItemsSource="{Binding NetworkList}">
                                                     <ItemsControl.ItemTemplate>
                                                         <DataTemplate>
-                                                            <materialDesign:Card Margin="0,0,0,10" Padding="12,10" materialDesign:ElevationAssist.Elevation="Dp1">
+                                                            <materialDesign:Card Style="{StaticResource PremiumCard}" Padding="12,10" Margin="0,0,0,10">
                                                                 <Grid>
                                                                     <Grid.ColumnDefinitions>
                                                                         <ColumnDefinition Width="Auto" />
@@ -477,9 +474,11 @@
                                         </Grid.RowDefinitions>
                         
                                         <Border Grid.Row="0"
-                                                Margin="0,0,0,8"
-                                                CornerRadius="{StaticResource CornerRadiusCard}"
-                                                Padding="12,8">
+                                                Margin="0,0,0,12"
+                                                CornerRadius="12"
+                                                Padding="14,10"
+                                                BorderBrush="#E2E8F0"
+                                                BorderThickness="0">
                                             <Border.Background>
                                                 <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
                                                     <GradientStop Color="{DynamicResource BrushHeaderGradientStartColor}" Offset="0" />
@@ -524,8 +523,7 @@
                                                 <ItemsControl ItemsSource="{Binding FilteredStartupView}">
                                                     <ItemsControl.ItemTemplate>
                                                         <DataTemplate>
-                                                            <materialDesign:Card Margin="0,0,0,10" Padding="0"
-                                                                                materialDesign:ElevationAssist.Elevation="Dp1">
+                                                            <materialDesign:Card Style="{StaticResource PremiumCard}" Padding="0" Margin="0,0,0,10">
                                                                 <Grid>
                                                                     <Grid.ColumnDefinitions>
                                                                         <ColumnDefinition Width="5" />
@@ -693,710 +691,12 @@
             <ContentControl x:Name="OptimizationHost" Content="{Binding}">
                 <ContentControl.Resources>
                     <DataTemplate x:Key="OptimizationDeferredTemplate">
-                                    <Grid Margin="16,58,16,16">
-                                        <Grid.Style>
-                                            <Style TargetType="Grid">
-                                                <Setter Property="Visibility" Value="Collapsed" />
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding IsSystemOptimizationVisible}" Value="True">
-                                                        <Setter Property="Visibility" Value="Visible" />
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </Grid.Style>
-                        
-                                        <Grid.RowDefinitions>
-                                            <RowDefinition Height="Auto" />
-                                            <RowDefinition Height="*" />
-                                        </Grid.RowDefinitions>
-                        
-                                        <Border Grid.Row="0"
-                                                Margin="0,0,0,8"
-                                                CornerRadius="{StaticResource CornerRadiusCard}"
-                                                Padding="12,8">
-                                            <Border.Background>
-                                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                                                    <GradientStop Color="{DynamicResource BrushHeaderGradientStartColor}" Offset="0" />
-                                                    <GradientStop Color="{DynamicResource BrushHeaderGradientEndColor}" Offset="1" />
-                                                </LinearGradientBrush>
-                                            </Border.Background>
-                                            <StackPanel Orientation="Horizontal">
-                                                <Border Width="32" Height="32" CornerRadius="8" Margin="0,0,10,0" VerticalAlignment="Center">
-                                                    <Border.Background>
-                                                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                                                            <GradientStop Color="#F43F5E" Offset="0" />
-                                                            <GradientStop Color="#F59E0B" Offset="1" />
-                                                        </LinearGradientBrush>
-                                                    </Border.Background>
-                                                    <materialDesign:PackIcon Kind="Tools" Width="16" Height="16" Foreground="White" VerticalAlignment="Center" HorizontalAlignment="Center" />
-                                                </Border>
-                                                <StackPanel VerticalAlignment="Center">
-                                                    <TextBlock Text="系统优化" Style="{StaticResource TextHeadline}" />
-                                                    <TextBlock Text="执行白名单维护与优化任务" Style="{StaticResource TextCaption}" Margin="0,1,0,0" />
-                                                </StackPanel>
-                                            </StackPanel>
-                                        </Border>
-                        
-                                        <TabControl Grid.Row="1"
-                                                    Style="{StaticResource MaterialDesignTabControl}"
-                                                    HorizontalContentAlignment="Stretch"
-                                                    VerticalContentAlignment="Stretch"
-                                                    materialDesign:ColorZoneAssist.Mode="PrimaryMid">
-                                            <TabItem Header="系统锁定">
-                                                <StackPanel>
-                                                <materialDesign:Card Padding="14,10" Margin="0,0,0,8">
-                                                    <Grid>
-                                                        <Grid.ColumnDefinitions>
-                                                            <ColumnDefinition Width="*" />
-                                                            <ColumnDefinition Width="Auto" />
-                                                        </Grid.ColumnDefinitions>
-                                                        <StackPanel>
-                                                            <TextBlock Text="锁定 Windows 10 版本 (22H2)" Style="{StaticResource TextSubtitle}" FontWeight="Bold" />
-                                                            <TextBlock Text="防止系统自动升级到 Windows 11 或更高版本，适用于希望继续停留在 Win10 22H2 的用户。"
-                                                                       Style="{StaticResource TextCaption}"
-                                                                       FontSize="12"
-                                                                       Opacity="0.6"
-                                                                       TextWrapping="Wrap"
-                                                                       Margin="0,3,18,0" />
-                                                        </StackPanel>
-                                                        <Button Grid.Column="1"
-                                                                Width="86"
-                                                                Height="32"
-                                                                Content="执行锁定"
-                                                                Command="{Binding LockWin10Command}"
-                                                                Style="{StaticResource PrimaryActionButton}" />
-                                                    </Grid>
-                                                </materialDesign:Card>
-
-                                                <materialDesign:Card Padding="14,10" Margin="0,0,0,8">
-                                                    <Grid>
-                                                        <Grid.ColumnDefinitions>
-                                                            <ColumnDefinition Width="*" />
-                                                            <ColumnDefinition Width="Auto" />
-                                                        </Grid.ColumnDefinitions>
-                                                        <StackPanel>
-                                                            <TextBlock Text="禁止自动关屏、关硬盘和休眠"
-                                                                       Style="{StaticResource TextSubtitle}"
-                                                                       FontWeight="Bold" />
-                                                            <TextBlock Text="把当前电源计划的交流电和电池模式都设置为：屏幕从不关闭、硬盘从不关闭、系统不睡眠/休眠，并关闭 hibernate。适合长时间下载、录屏、跑任务或远程连接。"
-                                                                       Style="{StaticResource TextCaption}"
-                                                                       FontSize="12"
-                                                                       Opacity="0.65"
-                                                                       TextWrapping="Wrap"
-                                                                       Margin="0,3,18,0" />
-                                                            <TextBlock Text="{Binding PowerPolicyStatusMessage}"
-                                                                       Style="{StaticResource TextCaption}"
-                                                                       TextWrapping="Wrap"
-                                                                       Margin="0,6,18,0" />
-                                                        </StackPanel>
-                                                        <StackPanel Grid.Column="1"
-                                                                    Orientation="Horizontal"
-                                                                    VerticalAlignment="Center">
-                                                            <Button Width="108"
-                                                                    Height="32"
-                                                                    Content="应用常亮"
-                                                                    Command="{Binding ApplyAlwaysOnPowerPolicyCommand}"
-                                                                    Style="{StaticResource PrimaryActionButton}" />
-                                                            <ProgressBar Width="22"
-                                                                         Height="22"
-                                                                         Margin="10,0,0,0"
-                                                                         IsIndeterminate="True"
-                                                                         Visibility="{Binding IsPowerPolicyBusy, Converter={StaticResource BoolToVis}}"
-                                                                         Style="{StaticResource MaterialDesignCircularProgressBar}" />
-                                                        </StackPanel>
-                                                    </Grid>
-                                                </materialDesign:Card>
-                        
-                                                </StackPanel>
-                                            </TabItem>
-                                            <TabItem Header="安全防护">
-                                                <StackPanel>
-                                                <materialDesign:Card Padding="14,10" Margin="0,0,0,8">
-                                                    <Grid>
-                                                        <Grid.ColumnDefinitions>
-                                                            <ColumnDefinition Width="*" />
-                                                            <ColumnDefinition Width="Auto" />
-                                                        </Grid.ColumnDefinitions>
-                                                        <StackPanel>
-                                                            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                                                                <TextBlock Text="Windows Defender 实时防护"
-                                                                           Style="{StaticResource TextSubtitle}"
-                                                                           FontWeight="Bold"
-                                                                           VerticalAlignment="Center" />
-                                                                <Border Margin="8,0,0,0" VerticalAlignment="Center">
-                                                                    <Border.Style>
-                                                                        <Style TargetType="Border" BasedOn="{StaticResource BadgeSuccess}">
-                                                                            <Style.Triggers>
-                                                                                <DataTrigger Binding="{Binding IsDefenderEnabled}" Value="False">
-                                                                                    <Setter Property="Background" Value="{DynamicResource BrushError}" />
-                                                                                </DataTrigger>
-                                                                            </Style.Triggers>
-                                                                        </Style>
-                                                                    </Border.Style>
-                                                                    <TextBlock Foreground="White" FontWeight="Bold" FontSize="11">
-                                                                        <TextBlock.Style>
-                                                                            <Style TargetType="TextBlock">
-                                                                                <Setter Property="Text" Value="防护中" />
-                                                                                <Style.Triggers>
-                                                                                    <DataTrigger Binding="{Binding IsDefenderEnabled}" Value="False">
-                                                                                        <Setter Property="Text" Value="已关闭" />
-                                                                                    </DataTrigger>
-                                                                                </Style.Triggers>
-                                                                            </Style>
-                                                                        </TextBlock.Style>
-                                                                    </TextBlock>
-                                                                </Border>
-                                                            </StackPanel>
-                                                            <TextBlock Text="关闭或恢复 Windows 安全中心的实时防护。Win11 需先在安全中心手动关闭「篡改保护」，否则命令将被拒绝。"
-                                                                       Style="{StaticResource TextCaption}"
-                                                                       FontSize="12"
-                                                                       Opacity="0.6"
-                                                                       TextWrapping="Wrap"
-                                                                       Margin="0,0,18,0" />
-                                                        </StackPanel>
-                                                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                                                            <Button Width="86" Height="32" Margin="0,0,6,0" Command="{Binding ToggleDefenderCommand}">
-                                                                <Button.Style>
-                                                                    <Style TargetType="Button" BasedOn="{StaticResource GhostActionButton}">
-                                                                        <Setter Property="Content" Value="关闭防护" />
-                                                                        <Setter Property="Foreground" Value="#C62828" />
-                                                                        <Setter Property="BorderBrush" Value="#C62828" />
-                                                                        <Style.Triggers>
-                                                                            <DataTrigger Binding="{Binding IsDefenderEnabled}" Value="False">
-                                                                                <Setter Property="Content" Value="恢复防护" />
-                                                                                <Setter Property="Foreground" Value="#2E7D32" />
-                                                                                <Setter Property="BorderBrush" Value="#2E7D32" />
-                                                                            </DataTrigger>
-                                                                        </Style.Triggers>
-                                                                    </Style>
-                                                                </Button.Style>
-                                                            </Button>
-                                                            <Button Style="{StaticResource MaterialDesignIconButton}"
-                                                                    Width="32"
-                                                                    Height="32"
-                                                                    Command="{Binding RefreshSystemStatusCommand}"
-                                                                    ToolTip="刷新状态">
-                                                                <materialDesign:PackIcon Kind="Refresh" Width="20" Height="20" />
-                                                            </Button>
-                                                        </StackPanel>
-                                                    </Grid>
-                                                </materialDesign:Card>
-                        
-                                                </StackPanel>
-                                            </TabItem>
-                                            <TabItem Header="自动更新">
-                                                <StackPanel>
-                                                <materialDesign:Card Padding="14,10" Margin="0,0,0,8">
-                                                    <Grid>
-                                                        <Grid.ColumnDefinitions>
-                                                            <ColumnDefinition Width="*" />
-                                                            <ColumnDefinition Width="Auto" />
-                                                        </Grid.ColumnDefinitions>
-                                                        <StackPanel>
-                                                            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                                                                <TextBlock Text="Windows 自动更新"
-                                                                           Style="{StaticResource TextSubtitle}"
-                                                                           FontWeight="Bold"
-                                                                           VerticalAlignment="Center" />
-                                                                <Border Margin="8,0,0,0" VerticalAlignment="Center">
-                                                                    <Border.Style>
-                                                                        <Style TargetType="Border" BasedOn="{StaticResource BadgeInfo}">
-                                                                            <Style.Triggers>
-                                                                                <DataTrigger Binding="{Binding IsAutoUpdateEnabled}" Value="False">
-                                                                                    <Setter Property="Background" Value="{DynamicResource BrushWarning}" />
-                                                                                </DataTrigger>
-                                                                            </Style.Triggers>
-                                                                        </Style>
-                                                                    </Border.Style>
-                                                                    <TextBlock Foreground="White" FontWeight="Bold" FontSize="11">
-                                                                        <TextBlock.Style>
-                                                                            <Style TargetType="TextBlock">
-                                                                                <Setter Property="Text" Value="自动更新中" />
-                                                                                <Style.Triggers>
-                                                                                    <DataTrigger Binding="{Binding IsAutoUpdateEnabled}" Value="False">
-                                                                                        <Setter Property="Text" Value="已停止" />
-                                                                                    </DataTrigger>
-                                                                                </Style.Triggers>
-                                                                            </Style>
-                                                                        </TextBlock.Style>
-                                                                    </TextBlock>
-                                                                </Border>
-                                                            </StackPanel>
-                                                            <TextBlock Text="停止 Windows 后台自动更新，或手动触发立即检查并安装所有可用更新（以前台最高优先级下载安装，速度最快）。"
-                                                                       Style="{StaticResource TextCaption}"
-                                                                       FontSize="12"
-                                                                       Opacity="0.6"
-                                                                       TextWrapping="Wrap"
-                                                                       Margin="0,0,18,0" />
-                                                        </StackPanel>
-                                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,0,0">
-                                                            <Button Width="86" Height="32" Margin="0,0,0,6" Command="{Binding ToggleAutoUpdateCommand}">
-                                                                <Button.Style>
-                                                                    <Style TargetType="Button" BasedOn="{StaticResource GhostActionButton}">
-                                                                        <Setter Property="Content" Value="停止更新" />
-                                                                        <Setter Property="Foreground" Value="#C62828" />
-                                                                        <Setter Property="BorderBrush" Value="#C62828" />
-                                                                        <Style.Triggers>
-                                                                            <DataTrigger Binding="{Binding IsAutoUpdateEnabled}" Value="False">
-                                                                                <Setter Property="Content" Value="恢复更新" />
-                                                                                <Setter Property="Foreground" Value="#1565C0" />
-                                                                                <Setter Property="BorderBrush" Value="#1565C0" />
-                                                                            </DataTrigger>
-                                                                        </Style.Triggers>
-                                                                    </Style>
-                                                                </Button.Style>
-                                                            </Button>
-                                                            <Button Width="86"
-                                                                    Height="32"
-                                                                    Content="立即更新"
-                                                                    Command="{Binding TriggerUpdateNowCommand}"
-                                                                    Style="{StaticResource PrimaryActionButton}" />
-                                                        </StackPanel>
-                                                    </Grid>
-                                                </materialDesign:Card>
-                        
-                                                <TextBlock Text="{Binding SystemStatusMessage}"
-                                                           Style="{StaticResource TextCaption}"
-                                                           Opacity="0.7"
-                                                           TextWrapping="Wrap"
-                                                           Margin="4,0,0,8" />
-                        
-                                                <materialDesign:Card Padding="14,10" Margin="0,0,0,8" Background="{DynamicResource PrimaryHueLightBrush}">
-                                                    <Grid>
-                                                        <Grid.ColumnDefinitions>
-                                                            <ColumnDefinition Width="Auto" />
-                                                            <ColumnDefinition Width="*" />
-                                                        </Grid.ColumnDefinitions>
-                                                        <TextBlock Grid.Column="0" Text="温馨提示" Style="{StaticResource TextSubtitle}" Foreground="White" FontWeight="Bold" Margin="0,0,14,0" />
-                                                        <TextBlock Text="部分优化操作需要管理员权限，执行过程中请留意系统弹出的 UAC 授权窗口。"
-                                                                   Grid.Column="1"
-                                                                   Style="{StaticResource TextCaption}"
-                                                                   FontSize="12"
-                                                                   Foreground="White"
-                                                                   Opacity="0.9"
-                                                                   TextWrapping="Wrap"
-                                                                   VerticalAlignment="Center" />
-                                                    </Grid>
-                                                </materialDesign:Card>
-                        
-                                                </StackPanel>
-                                            </TabItem>
-                                            <TabItem Header="自动优化">
-                                                <StackPanel>
-                                                <materialDesign:Card Padding="14,10" Margin="0,0,0,8">
-                                                    <StackPanel>
-                                                        <TextBlock Text="自动优化与报告"
-                                                                   Style="{StaticResource TextSubtitle}"
-                                                                   FontWeight="Bold" />
-                                                        <TextBlock Text="按白名单步骤自动执行系统优化，完成后自动生成可追溯报告。"
-                                                                   Style="{StaticResource TextCaption}"
-                                                                   FontSize="12"
-                                                                   Opacity="0.65"
-                                                                   Margin="0,3,0,8"
-                                                                   TextWrapping="Wrap" />
-                                                        <StackPanel Orientation="Horizontal">
-                                                            <Button Content="开始自动优化"
-                                                                    Height="32"
-                                                                    Style="{StaticResource PrimaryActionButton}"
-                                                                    Command="{Binding StartAutoOptimizeCommand}" />
-                                                            <ProgressBar Width="22" Height="22"
-                                                                         Margin="10,0,0,0"
-                                                                         IsIndeterminate="True"
-                                                                         Visibility="{Binding IsAutoOptimizeBusy, Converter={StaticResource BoolToVis}}"
-                                                                         Style="{StaticResource MaterialDesignCircularProgressBar}" />
-                                                        </StackPanel>
-                                                        <TextBlock Text="{Binding AutoOptimizeStatusMessage}"
-                                                                   Style="{StaticResource TextCaption}"
-                                                                   Margin="0,6,0,6"
-                                                                   TextWrapping="Wrap" />
-                        
-                                                        <DataGrid ItemsSource="{Binding OptimizationReports}"
-                                                                  AutoGenerateColumns="False"
-                                                                  CanUserAddRows="False"
-                                                                  SelectionMode="Single"
-                                                                  MinHeight="120"
-                                                                  MaxHeight="220"
-                                                                  VerticalScrollBarVisibility="Auto"
-                                                                  GridLinesVisibility="Horizontal"
-                                                                  HeadersVisibility="Column"
-                                                                  Margin="0,0,0,6">
-                                                            <DataGrid.Columns>
-                                                                <DataGridTemplateColumn Header="选择" Width="58">
-                                                                    <DataGridTemplateColumn.CellTemplate>
-                                                                        <DataTemplate>
-                                                                            <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                                                      HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                                                        </DataTemplate>
-                                                                    </DataGridTemplateColumn.CellTemplate>
-                                                                </DataGridTemplateColumn>
-                                                                <DataGridTextColumn Header="时间"
-                                                                                    Width="165"
-                                                                                    Binding="{Binding StartedAt, StringFormat=yyyy-MM-dd HH:mm:ss}" />
-                                                                <DataGridTextColumn Header="类型" Width="92" Binding="{Binding ReportTypeDisplay}" />
-                                                                <DataGridTextColumn Header="释放空间" Width="120" Binding="{Binding TotalBytesFreedDisplay}" />
-                                                                <DataGridTextColumn Header="摘要" Width="*" Binding="{Binding Summary}" />
-                                                                <DataGridTemplateColumn Header="详情" Width="78">
-                                                                    <DataGridTemplateColumn.CellTemplate>
-                                                                        <DataTemplate>
-                                                                            <Button Content="查看"
-                                                                                    Padding="8,2"
-                                                                                    Command="{Binding DataContext.ShowReportDetailsCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
-                                                                                    CommandParameter="{Binding}" />
-                                                                        </DataTemplate>
-                                                                    </DataGridTemplateColumn.CellTemplate>
-                                                                </DataGridTemplateColumn>
-                                                            </DataGrid.Columns>
-                                                        </DataGrid>
-                        
-                                                        <Button Content="删除选中"
-                                                                Width="96"
-                                                                Height="32"
-                                                                HorizontalAlignment="Right"
-                                                                Command="{Binding DeleteSelectedReportsCommand}" />
-                                                    </StackPanel>
-                                                </materialDesign:Card>
-                        
-                                                </StackPanel>
-                                            </TabItem>
-                                            <TabItem Header="垃圾清理">
-                                                <StackPanel>
-                                                <materialDesign:Card Padding="14,10" Margin="0,0,0,8">
-                                                    <StackPanel>
-                                                        <TextBlock Text="垃圾清理"
-                                                                   Style="{StaticResource TextSubtitle}"
-                                                                   FontWeight="Bold" />
-                                                        <TextBlock Text="扫描并清理白名单目录中的临时垃圾文件，执行前会进行二次确认。"
-                                                                   Style="{StaticResource TextCaption}"
-                                                                   FontSize="12"
-                                                                   Opacity="0.65"
-                                                                   Margin="0,3,0,8"
-                                                                   TextWrapping="Wrap" />
-                        
-                                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                                                            <Button Content="开始扫描"
-                                                                    Height="32"
-                                                                    Style="{StaticResource PrimaryActionButton}"
-                                                                    Command="{Binding StartJunkScanCommand}" />
-                                                            <Button Content="立即清理"
-                                                                    Height="32"
-                                                                    Margin="8,0,0,0"
-                                                                    Command="{Binding RunJunkCleanupCommand}" />
-                                                            <Button Content="导出报告"
-                                                                    Height="32"
-                                                                    Margin="8,0,0,0"
-                                                                    Command="{Binding ExportJunkCleanupPlanCommand}" />
-                                                            <ProgressBar Width="22" Height="22"
-                                                                         Margin="10,0,0,0"
-                                                                         IsIndeterminate="True"
-                                                                         Visibility="{Binding IsJunkBusy, Converter={StaticResource BoolToVis}}"
-                                                                         Style="{StaticResource MaterialDesignCircularProgressBar}" />
-                                                        </StackPanel>
-                        
-                                                        <TextBlock Text="{Binding JunkStatusMessage}"
-                                                                   Style="{StaticResource TextCaption}"
-                                                                   TextWrapping="Wrap"
-                                                                   Margin="0,0,0,6" />
-                        
-                                                        <DataGrid ItemsSource="{Binding JunkCandidates}"
-                                                                  AutoGenerateColumns="False"
-                                                                  CanUserAddRows="False"
-                                                                  MinHeight="110"
-                                                                  MaxHeight="210"
-                                                                  VerticalScrollBarVisibility="Auto"
-                                                                  GridLinesVisibility="Horizontal">
-                                                            <DataGrid.Columns>
-                                                                <DataGridTemplateColumn Header="选择" Width="58">
-                                                                    <DataGridTemplateColumn.CellTemplate>
-                                                                        <DataTemplate>
-                                                                            <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" HorizontalAlignment="Center" />
-                                                                        </DataTemplate>
-                                                                    </DataGridTemplateColumn.CellTemplate>
-                                                                </DataGridTemplateColumn>
-                                                                <DataGridTextColumn Header="类别" Width="100" Binding="{Binding CategoryDisplay}" />
-                                                                <DataGridTextColumn Header="大小" Width="90" Binding="{Binding BytesDisplay}" />
-                                                                <DataGridTextColumn Header="风险" Width="70" Binding="{Binding RiskDisplay}" />
-                                                                <DataGridTextColumn Header="建议" Width="160" Binding="{Binding AdviceDisplay}" />
-                                                                <DataGridTextColumn Header="路径" Width="*" Binding="{Binding Path}" />
-                                                                <DataGridTextColumn Header="说明" Width="190" Binding="{Binding Reason}" />
-                                                            </DataGrid.Columns>
-                                                        </DataGrid>
-                                                    </StackPanel>
-                                                </materialDesign:Card>
-                        
-                                                </StackPanel>
-                                            </TabItem>
-                                            <TabItem Header="微信清理">
-                                                <StackPanel>
-                                                <materialDesign:Card Padding="14,10" Margin="0,0,0,8">
-                                                    <StackPanel>
-                                                        <TextBlock Text="微信清理"
-                                                                   Style="{StaticResource TextSubtitle}"
-                                                                   FontWeight="Bold" />
-                                                        <TextBlock Text="微信运行中清理可能导致部分图片/视频缩略图丢失，建议先关闭微信后再清理。"
-                                                                   Foreground="#C62828"
-                                                                   Style="{StaticResource TextCaption}"
-                                                                   FontSize="12"
-                                                                   TextWrapping="Wrap"
-                                                                   Margin="0,3,0,8" />
-                        
-                                                        <Grid Margin="0,0,0,6">
-                                                            <Grid.ColumnDefinitions>
-                                                                <ColumnDefinition Width="2*" />
-                                                                <ColumnDefinition Width="Auto" />
-                                                                <ColumnDefinition Width="2*" />
-                                                                <ColumnDefinition Width="*" />
-                                                            </Grid.ColumnDefinitions>
-                                                            <DatePicker Grid.Column="0" SelectedDate="{Binding WeChatCleanupStartDate}" />
-                                                            <TextBlock Grid.Column="1" Margin="8,0" VerticalAlignment="Center" Text="~" />
-                                                            <DatePicker Grid.Column="2" SelectedDate="{Binding WeChatCleanupEndDate}" />
-                                                            <ComboBox Grid.Column="3" Margin="12,0,0,0"
-                                                                      ItemsSource="{Binding WeChatRoots}"
-                                                                      SelectedItem="{Binding SelectedWeChatRoot}"
-                                                                      DisplayMemberPath="WxIdOrUserName" />
-                                                        </Grid>
-                        
-                                                        <WrapPanel Margin="0,0,0,6">
-                                                            <CheckBox Content="文字" IsChecked="{Binding WeChatCleanupIncludeText}" Margin="0,0,10,4" />
-                                                            <CheckBox Content="图像" IsChecked="{Binding WeChatCleanupIncludeImage}" Margin="0,0,10,4" />
-                                                            <CheckBox Content="视频" IsChecked="{Binding WeChatCleanupIncludeVideo}" Margin="0,0,10,4" />
-                                                            <CheckBox Content="语音" IsChecked="{Binding WeChatCleanupIncludeVoice}" Margin="0,0,10,4" />
-                                                            <CheckBox Content="其它文件" IsChecked="{Binding WeChatCleanupIncludeFile}" Margin="0,0,10,4" />
-                                                            <CheckBox Content="缓存" IsChecked="{Binding WeChatCleanupIncludeCache}" Margin="0,0,10,4" />
-                                                        </WrapPanel>
-                        
-                                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                                                            <Button Content="扫描" Height="32" Command="{Binding ScanWeChatCleanupCommand}" Style="{StaticResource PrimaryActionButton}" />
-                                                            <Button Content="开始清理" Height="32" Margin="8,0,0,0" Command="{Binding StartWeChatCleanupCommand}" />
-                                                            <ProgressBar Width="22" Height="22"
-                                                                         Margin="10,0,0,0"
-                                                                         IsIndeterminate="True"
-                                                                         Visibility="{Binding IsWeChatCleanupBusy, Converter={StaticResource BoolToVis}}"
-                                                                         Style="{StaticResource MaterialDesignCircularProgressBar}" />
-                                                        </StackPanel>
-                        
-                                                        <TextBlock Text="{Binding WeChatCleanupStatusMessage}"
-                                                                   Style="{StaticResource TextCaption}"
-                                                                   TextWrapping="Wrap"
-                                                                   Margin="0,0,0,6" />
-                        
-                                                        <DataGrid ItemsSource="{Binding WeChatCleanupCandidates}"
-                                                                  AutoGenerateColumns="False"
-                                                                  CanUserAddRows="False"
-                                                                  MinHeight="120"
-                                                                  MaxHeight="220"
-                                                                  VerticalScrollBarVisibility="Auto"
-                                                                  GridLinesVisibility="Horizontal">
-                                                            <DataGrid.Columns>
-                                                                <DataGridTemplateColumn Header="选择" Width="58">
-                                                                    <DataGridTemplateColumn.CellTemplate>
-                                                                        <DataTemplate>
-                                                                            <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" HorizontalAlignment="Center" />
-                                                                        </DataTemplate>
-                                                                    </DataGridTemplateColumn.CellTemplate>
-                                                                </DataGridTemplateColumn>
-                                                                <DataGridTextColumn Header="类别" Width="82" Binding="{Binding CategoryDisplay}" />
-                                                                <DataGridTextColumn Header="时间" Width="160" Binding="{Binding LastWriteTime, StringFormat=yyyy-MM-dd HH:mm:ss}" />
-                                                                <DataGridTextColumn Header="大小" Width="90" Binding="{Binding BytesDisplay}" />
-                                                                <DataGridTextColumn Header="风险" Width="70" Binding="{Binding RiskDisplay}" />
-                                                                <DataGridTextColumn Header="建议" Width="150" Binding="{Binding AdviceDisplay}" />
-                                                                <DataGridTextColumn Header="路径" Width="*" Binding="{Binding Path}" />
-                                                            </DataGrid.Columns>
-                                                        </DataGrid>
-                                                    </StackPanel>
-                                                </materialDesign:Card>
-                        
-                                                </StackPanel>
-                                            </TabItem>
-                                            <TabItem Header="微信备份">
-                                                <StackPanel>
-                                                <materialDesign:Card Padding="14,10" Margin="0,0,0,8">
-                                                    <StackPanel>
-                                                        <TextBlock Text="微信备份"
-                                                                   Style="{StaticResource TextSubtitle}"
-                                                                   FontWeight="Bold" />
-                                                        <TextBlock Text="按日期和类别备份为单个 ZIP，包含 manifest.json 与 SHA256 校验信息。"
-                                                                   Style="{StaticResource TextCaption}"
-                                                                   FontSize="12"
-                                                                   Opacity="0.65"
-                                                                   Margin="0,3,0,8"
-                                                                   TextWrapping="Wrap" />
-                        
-                                                        <Grid Margin="0,0,0,6">
-                                                            <Grid.ColumnDefinitions>
-                                                                <ColumnDefinition Width="2*" />
-                                                                <ColumnDefinition Width="Auto" />
-                                                                <ColumnDefinition Width="2*" />
-                                                                <ColumnDefinition Width="*" />
-                                                            </Grid.ColumnDefinitions>
-                                                            <DatePicker Grid.Column="0" SelectedDate="{Binding WeChatBackupStartDate}" />
-                                                            <TextBlock Grid.Column="1" Margin="8,0" VerticalAlignment="Center" Text="~" />
-                                                            <DatePicker Grid.Column="2" SelectedDate="{Binding WeChatBackupEndDate}" />
-                                                            <ComboBox Grid.Column="3" Margin="12,0,0,0"
-                                                                      ItemsSource="{Binding WeChatRoots}"
-                                                                      SelectedItem="{Binding SelectedWeChatRoot}"
-                                                                      DisplayMemberPath="WxIdOrUserName" />
-                                                        </Grid>
-                        
-                                                        <WrapPanel Margin="0,0,0,6">
-                                                            <CheckBox Content="文字" IsChecked="{Binding WeChatBackupIncludeText}" Margin="0,0,10,4" />
-                                                            <CheckBox Content="图像" IsChecked="{Binding WeChatBackupIncludeImage}" Margin="0,0,10,4" />
-                                                            <CheckBox Content="视频" IsChecked="{Binding WeChatBackupIncludeVideo}" Margin="0,0,10,4" />
-                                                            <CheckBox Content="语音" IsChecked="{Binding WeChatBackupIncludeVoice}" Margin="0,0,10,4" />
-                                                            <CheckBox Content="其它文件" IsChecked="{Binding WeChatBackupIncludeFile}" Margin="0,0,10,4" />
-                                                            <CheckBox Content="缓存" IsChecked="{Binding WeChatBackupIncludeCache}" Margin="0,0,10,4" />
-                                                        </WrapPanel>
-                        
-                                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                                                            <Button Content="选择保存目录"
-                                                                    Height="32"
-                                                                    Command="{Binding SelectWeChatBackupOutputFolderCommand}"
-                                                                    Style="{StaticResource GhostActionButton}" />
-                                                            <Button Content="开始备份"
-                                                                    Height="32"
-                                                                    Margin="8,0,0,0"
-                                                                    Command="{Binding StartWeChatBackupCommand}"
-                                                                    Style="{StaticResource PrimaryActionButton}" />
-                                                            <ProgressBar Width="22" Height="22"
-                                                                         Margin="10,0,0,0"
-                                                                         IsIndeterminate="True"
-                                                                         Visibility="{Binding IsWeChatBackupBusy, Converter={StaticResource BoolToVis}}"
-                                                                         Style="{StaticResource MaterialDesignCircularProgressBar}" />
-                                                        </StackPanel>
-                        
-                                                        <TextBlock Text="{Binding WeChatBackupOutputFolder}"
-                                                                   Style="{StaticResource TextCaption}"
-                                                                   Opacity="0.75"
-                                                                   TextWrapping="Wrap" />
-                                                        <TextBlock Text="{Binding WeChatBackupStatusMessage}"
-                                                                   Style="{StaticResource TextCaption}"
-                                                                   Margin="0,4,0,0"
-                                                                   TextWrapping="Wrap" />
-                                                    </StackPanel>
-                                                </materialDesign:Card>
-                        
-                                                </StackPanel>
-                                            </TabItem>
-                                            <TabItem Header="微信恢复">
-                                                <StackPanel>
-                                                <materialDesign:Card Padding="14,10">
-                                                    <StackPanel>
-                                                        <TextBlock Text="微信恢复"
-                                                                   Style="{StaticResource TextSubtitle}"
-                                                                   FontWeight="Bold" />
-                                                        <TextBlock Text="从备份 ZIP 读取 manifest 后恢复到原路径或自定义目录；同名文件自动改名防覆盖。"
-                                                                   Style="{StaticResource TextCaption}"
-                                                                   FontSize="12"
-                                                                   Opacity="0.65"
-                                                                   Margin="0,3,0,8"
-                                                                   TextWrapping="Wrap" />
-                        
-                                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                                                            <Button Content="选择备份文件"
-                                                                    Height="32"
-                                                                    Command="{Binding SelectWeChatRestoreZipCommand}"
-                                                                    Style="{StaticResource GhostActionButton}" />
-                                                            <Button Content="选择恢复目录"
-                                                                    Height="32"
-                                                                    Margin="8,0,0,0"
-                                                                    Command="{Binding SelectWeChatRestoreTargetRootCommand}"
-                                                                    IsEnabled="{Binding RestoreToCustom}"
-                                                                    Style="{StaticResource GhostActionButton}" />
-                                                            <Button Content="开始恢复"
-                                                                    Height="32"
-                                                                    Margin="8,0,0,0"
-                                                                    Command="{Binding StartWeChatRestoreCommand}"
-                                                                    Style="{StaticResource PrimaryActionButton}" />
-                                                            <ProgressBar Width="22" Height="22"
-                                                                         Margin="10,0,0,0"
-                                                                         IsIndeterminate="True"
-                                                                         Visibility="{Binding IsWeChatRestoreBusy, Converter={StaticResource BoolToVis}}"
-                                                                         Style="{StaticResource MaterialDesignCircularProgressBar}" />
-                                                        </StackPanel>
-                        
-                                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                                                            <RadioButton Content="恢复到原微信目录"
-                                                                          IsChecked="{Binding RestoreToOriginal, Mode=TwoWay}"
-                                                                          GroupName="RestoreMode"
-                                                                          Margin="0,0,16,0" />
-                                                            <RadioButton Content="恢复到自定义目录"
-                                                                         IsChecked="{Binding RestoreToCustom, Mode=TwoWay}"
-                                                                         GroupName="RestoreMode" />
-                                                        </StackPanel>
-                        
-                                                        <StackPanel Margin="0,0,0,6">
-                                                            <TextBlock Text="恢复类别" Style="{StaticResource TextHint}" Margin="0,0,0,4" />
-                                                            <WrapPanel>
-                                                                <CheckBox Content="文字" IsChecked="{Binding WeChatRestoreIncludeText}" Margin="0,0,10,4" />
-                                                                <CheckBox Content="图像" IsChecked="{Binding WeChatRestoreIncludeImage}" Margin="0,0,10,4" />
-                                                                <CheckBox Content="视频" IsChecked="{Binding WeChatRestoreIncludeVideo}" Margin="0,0,10,4" />
-                                                                <CheckBox Content="语音" IsChecked="{Binding WeChatRestoreIncludeVoice}" Margin="0,0,10,4" />
-                                                                <CheckBox Content="其它文件" IsChecked="{Binding WeChatRestoreIncludeFile}" Margin="0,0,10,4" />
-                                                                <CheckBox Content="缓存" IsChecked="{Binding WeChatRestoreIncludeCache}" Margin="0,0,10,4" />
-                                                            </WrapPanel>
-                                                        </StackPanel>
-                        
-                                                        <TextBlock Text="{Binding WeChatRestoreZipPath}"
-                                                                   Style="{StaticResource TextCaption}"
-                                                                   Opacity="0.75"
-                                                                   TextWrapping="Wrap" />
-                                                        <TextBlock Text="{Binding WeChatRestoreTargetRoot}"
-                                                                   Style="{StaticResource TextCaption}"
-                                                                   Opacity="0.75"
-                                                                   Margin="0,3,0,0"
-                                                                   TextWrapping="Wrap" />
-                                                        <TextBlock Text="{Binding WeChatRestoreManifestSummary}"
-                                                                   Style="{StaticResource TextCaption}"
-                                                                   Margin="0,5,0,0"
-                                                                   TextWrapping="Wrap" />
-                                                        <TextBlock Text="{Binding WeChatRestoreStatusMessage}"
-                                                                   Style="{StaticResource TextCaption}"
-                                                                   Margin="0,5,0,0"
-                                                                   TextWrapping="Wrap" />
-                        
-                                                        <Border BorderBrush="#E2E8F0"
-                                                                BorderThickness="1"
-                                                                CornerRadius="6"
-                                                                Padding="10,8"
-                                                                Margin="0,8,0,0"
-                                                                Visibility="{Binding HasRecentWeChatBackups, Converter={StaticResource BoolToVis}}">
-                                                            <StackPanel>
-                                                                <TextBlock Text="最近备份" Style="{StaticResource TextSubtitle}" FontSize="13" Margin="0,0,0,6" />
-                                                                <ItemsControl ItemsSource="{Binding RecentWeChatBackups}">
-                                                                    <ItemsControl.ItemTemplate>
-                                                                        <DataTemplate>
-                                                                            <Button Command="{Binding DataContext.OpenRecentWeChatBackupCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                                                    CommandParameter="{Binding}"
-                                                                                    Style="{StaticResource HomeShortcutButtonStyle}"
-                                                                                    Margin="0,0,0,5">
-                                                                                <Border BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="6" Padding="8,6" Background="#FAFBFC">
-                                                                                    <Grid>
-                                                                                        <Grid.ColumnDefinitions>
-                                                                                            <ColumnDefinition Width="*" />
-                                                                                            <ColumnDefinition Width="Auto" />
-                                                                                        </Grid.ColumnDefinitions>
-                                                                                        <StackPanel>
-                                                                                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                                                                                            <TextBlock Text="{Binding DirectoryPath}" Style="{StaticResource TextHint}" TextTrimming="CharacterEllipsis" />
-                                                                                        </StackPanel>
-                                                                                        <StackPanel Grid.Column="1" Margin="8,0,0,0" HorizontalAlignment="Right">
-                                                                                            <TextBlock Text="{Binding SummaryText}" Style="{StaticResource TextHint}" HorizontalAlignment="Right" />
-                                                                                            <TextBlock Text="{Binding TimeText}" Style="{StaticResource TextHint}" FontSize="10" HorizontalAlignment="Right" />
-                                                                                        </StackPanel>
-                                                                                    </Grid>
-                                                                                </Border>
-                                                                            </Button>
-                                                                        </DataTemplate>
-                                                                    </ItemsControl.ItemTemplate>
-                                                                </ItemsControl>
-                                                            </StackPanel>
-                                                        </Border>
-                                                    </StackPanel>
-                                                </materialDesign:Card>
-                                                </StackPanel>
-                                            </TabItem>
-                                        </TabControl>
-                                    </Grid>
-                        
+                        <!-- GIANT CONTENT REMOVED (2026-05-27 XAML split per AGENTS.md 9.3)
+                             All 8 tabs (系统锁定/安全防护/自动更新/自动优化/垃圾清理/微信清理/备份/恢复) now live in
+                             src/MyTools/Views/SystemOptimizationView.xaml (662 lines, loaded on-demand only).
+                             This placeholder keeps the template shell for easy rollback if needed.
+                             The old host is force-collapsed; new <views:SystemOptimizationView/> handles rendering.
+                             MainModulesView.xaml line count reduced significantly. -->
                     </DataTemplate>
                 </ContentControl.Resources>
                 <ContentControl.Style>
@@ -1404,14 +704,35 @@
                         <Setter Property="Visibility" Value="Collapsed" />
                         <Setter Property="ContentTemplate" Value="{x:Null}" />
                         <Style.Triggers>
+                            <!-- Legacy giant template kept for rollback safety but FORCED collapsed when new extracted view is active (perf) -->
                             <DataTrigger Binding="{Binding IsSystemOptimizationVisible}" Value="True">
-                                <Setter Property="Visibility" Value="Visible" />
-                                <Setter Property="ContentTemplate" Value="{StaticResource OptimizationDeferredTemplate}" />
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Setter Property="ContentTemplate" Value="{x:Null}" />
                             </DataTrigger>
                         </Style.Triggers>
                     </Style>
                 </ContentControl.Style>
             </ContentControl>
+
+            <!-- Extracted SystemOptimizationView host (AGENTS.md 9.3 compliant, defers heavy XAML parse & instantiation) -->
+            <ContentControl>
+                <ContentControl.Style>
+                    <Style TargetType="ContentControl">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsSystemOptimizationVisible}" Value="True">
+                                <Setter Property="Visibility" Value="Visible" />
+                                <Setter Property="Content">
+                                    <Setter.Value>
+                                        <views:SystemOptimizationView />
+                                    </Setter.Value>
+                                </Setter>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </ContentControl.Style>
+            </ContentControl>
+
             <ContentControl x:Name="SqlExportHost" Content="{Binding}">
                 <ContentControl.Resources>
                     <DataTemplate x:Key="SqlExportDeferredTemplate">
@@ -1469,7 +790,7 @@
                                                 <RowDefinition Height="*" />
                                             </Grid.RowDefinitions>
                         
-                                            <materialDesign:Card Padding="12" Margin="0,0,0,8">
+                                            <materialDesign:Card Style="{StaticResource PremiumCard}" Padding="12" Margin="0,0,0,8">
                                                 <Grid>
                                                     <Grid.RowDefinitions>
                                                         <RowDefinition Height="Auto" />
@@ -1997,7 +1318,7 @@
                                                 <StackPanel>
                         
                                                 <!-- Hotkey card -->
-                                                <materialDesign:Card Padding="12,10" Margin="0,0,0,8">
+                                                <materialDesign:Card Style="{StaticResource PremiumCard}" Padding="12,10" Margin="0,0,0,8">
                                                     <StackPanel>
                                                         <TextBlock Text="快捷键设置" Style="{StaticResource TextSubtitle}" FontWeight="Bold" Margin="0,0,0,8"/>
                         
@@ -2082,7 +1403,7 @@
                                                 </materialDesign:Card>
                         
                                                 <!-- Behavior card -->
-                                                <materialDesign:Card Padding="12,10" Margin="0,0,0,8">
+                                                <materialDesign:Card Style="{StaticResource PremiumCard}" Padding="12,10" Margin="0,0,0,8">
                                                     <StackPanel>
                                                         <TextBlock Text="截图行为" Style="{StaticResource TextSubtitle}" FontWeight="Bold" Margin="0,0,0,8"/>
                         
@@ -2173,7 +1494,7 @@
                                             <TabItem Header="截图历史">
                                                 <StackPanel>
                                                 <!-- Screenshot history -->
-                                                <materialDesign:Card Padding="12,10" Margin="0,0,0,8">
+                                                <materialDesign:Card Style="{StaticResource PremiumCard}" Padding="12,10" Margin="0,0,0,8">
                                                     <StackPanel>
                                                         <StackPanel Style="{StaticResource SectionHeaderRow}">
                                                             <Border Width="28" Height="28" CornerRadius="8" Background="{StaticResource BrushTealGradient}" Margin="0,0,10,0">
@@ -2267,7 +1588,7 @@
                                             <TabItem Header="录制目录">
                                                 <StackPanel>
                                                 <!-- Recording output folders -->
-                                                <materialDesign:Card Padding="12,10" Margin="0,0,0,8">
+                                                <materialDesign:Card Style="{StaticResource PremiumCard}" Padding="12,10" Margin="0,0,0,8">
                                                     <StackPanel>
                                                         <TextBlock Text="录制输出目录" Style="{StaticResource TextSubtitle}" FontWeight="Bold" Margin="0,0,0,8" />
                                                         <Grid Margin="0,0,0,6">

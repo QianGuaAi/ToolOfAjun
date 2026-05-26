@@ -7488,8 +7488,9 @@ namespace MyTools.ViewModels
                 {
                     return;
                 }
-                Application.Current?.Dispatcher.Invoke(() =>
-                    MessageBox.Show("设置已保存", "完成", MessageBoxButton.OK, MessageBoxImage.Information));
+                // Use BeginInvoke / InvokeAsync to avoid sync block from background save path (perf + reentrancy safety)
+                _ = Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
+                    MessageBox.Show("设置已保存", "完成", MessageBoxButton.OK, MessageBoxImage.Information)));
             }
             catch (Exception ex)
             {
@@ -8018,7 +8019,8 @@ namespace MyTools.ViewModels
                     await TryRegisterHotkeyByIdAsync(HotkeyService.VideoRecordHotkeyId, _pendingVideoRecordModifiers, _pendingVideoRecordKey, true);
                 if (_pendingAudioRecordKey != 0)
                     await TryRegisterHotkeyByIdAsync(HotkeyService.AudioRecordHotkeyId, _pendingAudioRecordModifiers, _pendingAudioRecordKey, true);
-                Application.Current?.Dispatcher.Invoke(() => MessageBox.Show("设置已保存", "完成", MessageBoxButton.OK, MessageBoxImage.Information));
+                // Use BeginInvoke to avoid sync block from background save path (perf + reentrancy safety)
+                _ = Application.Current?.Dispatcher.BeginInvoke(new Action(() => MessageBox.Show("设置已保存", "完成", MessageBoxButton.OK, MessageBoxImage.Information)));
             }
             catch (Exception ex)
             {
@@ -11951,8 +11953,14 @@ namespace MyTools.ViewModels
         {
             if (SelectedWeChatRoot == null)
             {
-                WeChatCleanupStatusMessage = "未检测到本机微信数据。";
-                return;
+                WeChatCleanupStatusMessage = "正在检测微信数据...";
+                EnsureWeChatStartupDataLoading();
+                await Task.Delay(500);
+                if (SelectedWeChatRoot == null)
+                {
+                    WeChatCleanupStatusMessage = "未检测到本机微信数据，请确认已安装微信且有过登录记录。";
+                    return;
+                }
             }
 
             IsWeChatCleanupBusy = true;

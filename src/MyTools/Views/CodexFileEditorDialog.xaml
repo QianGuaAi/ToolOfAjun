@@ -19,19 +19,20 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- Header -->
-        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10">
-            <materialDesign:PackIcon x:Name="HeaderIcon" Kind="FileDocumentOutline" Width="22" Height="22"
-                                     Foreground="#5e72e4" VerticalAlignment="Center" />
-            <TextBlock x:Name="HeaderTitle" FontSize="16" FontWeight="SemiBold"
-                       Margin="8,0,0,0" VerticalAlignment="Center" Text="config.toml" />
-            <TextBlock x:Name="HeaderSub" FontSize="12" Opacity="0.6"
-                       Margin="12,0,0,0" VerticalAlignment="Center" Text="" />
-        </StackPanel>
+        <!-- Premium Header -->
+        <Border Grid.Row="0" Margin="0,0,0,12" CornerRadius="10" Padding="14,10" Background="#1E293B">
+            <StackPanel Orientation="Horizontal">
+                <materialDesign:PackIcon x:Name="HeaderIcon" Kind="FileDocumentOutline" Width="24" Height="24"
+                                         Foreground="White" VerticalAlignment="Center" />
+                <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
+                    <TextBlock x:Name="HeaderTitle" FontSize="16" FontWeight="SemiBold" Foreground="White" Text="config.toml" />
+                    <TextBlock x:Name="HeaderSub" FontSize="12" Foreground="#94A3B8" Text="" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
 
-        <!-- Editor -->
-        <Border Grid.Row="1" CornerRadius="6"
-                BorderBrush="{DynamicResource MaterialDesignDivider}" BorderThickness="1">
+        <!-- Editor - Premium Card -->
+        <materialDesign:Card Grid.Row="1" Style="{StaticResource PremiumCard}" Padding="0">
             <TextBox x:Name="EditorBox"
                      AcceptsReturn="True" AcceptsTab="True"
                      TextWrapping="NoWrap"
@@ -40,24 +41,23 @@
                      FontFamily="Consolas,Cascadia Mono,Menlo,monospace"
                      FontSize="13"
                      BorderThickness="0"
-                     Padding="10"
+                     Padding="12"
                      Background="Transparent" />
-        </Border>
+        </materialDesign:Card>
 
-        <!-- Info -->
-        <Border Grid.Row="2" Background="#FFF8E1" CornerRadius="6" Padding="10" Margin="0,12,0,0">
+        <!-- Info - Premium Warning -->
+        <materialDesign:Card Grid.Row="2" Style="{StaticResource SectionCardDense}" Background="#FEF3C7" BorderBrush="#F59E0B" BorderThickness="1" Padding="10" Margin="0,12,0,0">
             <TextBlock FontSize="11" TextWrapping="Wrap"
                        Text="保存后内容会以 Windows DPAPI（当前用户）加密写入 MyTools.settings.json。若需同步到 ~\.codex\，请回到列表点【应用】。" />
-        </Border>
+        </materialDesign:Card>
 
-        <!-- Buttons -->
+        <!-- Buttons - Premium -->
         <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
             <Button x:Name="CancelButton" Content="关闭" Click="CancelButton_Click"
-                    Style="{StaticResource MaterialDesignOutlinedButton}"
+                    Style="{StaticResource GhostActionButton}"
                     MinWidth="80" Margin="0,0,8,0" IsCancel="True" />
             <Button x:Name="SaveButton" Content="保存" Click="SaveButton_Click"
-                    Style="{StaticResource MaterialDesignRaisedButton}"
-                    Background="#5e72e4" BorderBrush="#5e72e4"
+                    Style="{StaticResource PrimaryActionButton}"
                     MinWidth="80" IsDefault="True" />
         </StackPanel>
     </Grid>

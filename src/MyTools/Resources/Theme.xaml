@@ -31,8 +31,8 @@
     <Color x:Key="BrushCodexStatusExpiredColor">#EF4444</Color>
     <Color x:Key="BrushCodexStatusUnknownColor">#94A3B8</Color>
 
-    <Color x:Key="BrushHeaderGradientStartColor">#F8FAFC</Color>
-    <Color x:Key="BrushHeaderGradientEndColor">#EEF2F7</Color>
+    <Color x:Key="BrushHeaderGradientStartColor">#F1F5F9</Color>
+    <Color x:Key="BrushHeaderGradientEndColor">#E0E7FF</Color>
 
     <SolidColorBrush x:Key="BrushSidebar" Color="{StaticResource BrushSidebarColor}" />
     <SolidColorBrush x:Key="BrushSidebarTop" Color="{StaticResource BrushSidebarTopColor}" />
@@ -91,7 +91,7 @@
     <system:Double x:Key="BottomStatusBarHeight">22</system:Double>
 
     <!-- ============================================================ -->
-    <!-- 强调渐变（用于 Hero / Header / 重点按钮） -->
+    <!-- 强调渐变（用于 Hero / Header / 重点按钮） - 2026 Premium Refresh -->
     <!-- ============================================================ -->
     <LinearGradientBrush x:Key="BrushAccentGradient" StartPoint="0,0" EndPoint="1,1">
         <GradientStop Color="#6366F1" Offset="0" />
@@ -110,9 +110,15 @@
     </LinearGradientBrush>
 
     <LinearGradientBrush x:Key="BrushHeroGradient" StartPoint="0,0" EndPoint="1,1">
-        <GradientStop Color="#F8FAFC" Offset="0" />
-        <GradientStop Color="#E0E7FF" Offset="0.6" />
+        <GradientStop Color="#EEF2FF" Offset="0" />
+        <GradientStop Color="#E0E7FF" Offset="0.5" />
         <GradientStop Color="#FCE7F3" Offset="1" />
+    </LinearGradientBrush>
+
+    <!-- New premium deep header gradient for modern premium feel -->
+    <LinearGradientBrush x:Key="BrushPremiumHeaderGradient" StartPoint="0,0" EndPoint="1,0">
+        <GradientStop Color="#1E293B" Offset="0" />
+        <GradientStop Color="#334155" Offset="1" />
     </LinearGradientBrush>
 
     <!-- ============================================================ -->
@@ -135,7 +141,7 @@
     <Style x:Key="TextSubtitle" TargetType="TextBlock">
         <Setter Property="FontSize" Value="{StaticResource FontSizeSubtitle}" />
         <Setter Property="FontWeight" Value="SemiBold" />
-        <Setter Property="Foreground" Value="#1F2937" />
+        <Setter Property="Foreground" Value="#1E293B" />
     </Style>
 
     <Style x:Key="TextBodyStandard" TargetType="TextBlock">
@@ -208,17 +214,32 @@
     </Style>
 
     <!-- ============================================================ -->
-    <!-- 卡片样式 -->
+    <!-- 卡片样式 - 2026 Premium Visual Refresh (更强层次感 + 优雅悬停) -->
     <!-- ============================================================ -->
     <Style x:Key="SectionCard" TargetType="materialDesign:Card">
-        <Setter Property="UniformCornerRadius" Value="8" />
+        <Setter Property="UniformCornerRadius" Value="10" />
         <Setter Property="Padding" Value="{StaticResource ThicknessCardPadding}" />
         <Setter Property="Margin" Value="{StaticResource ThicknessCardMargin}" />
-        <Setter Property="materialDesign:ShadowAssist.ShadowDepth" Value="Depth2" />
-        <Setter Property="Background" Value="White" />
+        <Setter Property="materialDesign:ShadowAssist.ShadowDepth" Value="Depth3" />
+        <Setter Property="Background" Value="{DynamicResource MaterialDesignPaper}" />
+        <Setter Property="BorderBrush" Value="#E2E8F0" />
+        <Setter Property="BorderThickness" Value="0" />
         <Style.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
-                <Setter Property="materialDesign:ShadowAssist.ShadowDepth" Value="Depth2" />
+                <Setter Property="materialDesign:ShadowAssist.ShadowDepth" Value="Depth4" />
+                <Setter Property="RenderTransform">
+                    <Setter.Value>
+                        <ScaleTransform ScaleX="1.005" ScaleY="1.005" />
+                    </Setter.Value>
+                </Setter>
+                <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
+            </Trigger>
+            <Trigger Property="IsMouseOver" Value="False">
+                <Setter Property="RenderTransform">
+                    <Setter.Value>
+                        <ScaleTransform ScaleX="1" ScaleY="1" />
+                    </Setter.Value>
+                </Setter>
             </Trigger>
         </Style.Triggers>
     </Style>
@@ -229,9 +250,15 @@
     </Style>
 
     <Style x:Key="SectionCardOutlined" TargetType="materialDesign:Card" BasedOn="{StaticResource SectionCard}">
-        <Setter Property="materialDesign:ShadowAssist.ShadowDepth" Value="Depth0" />
-        <Setter Property="BorderBrush" Value="#E2E8F0" />
+        <Setter Property="materialDesign:ShadowAssist.ShadowDepth" Value="Depth1" />
+        <Setter Property="BorderBrush" Value="#CBD5E1" />
         <Setter Property="BorderThickness" Value="1" />
+    </Style>
+
+    <!-- Premium elevated variant for important sections -->
+    <Style x:Key="PremiumCard" TargetType="materialDesign:Card" BasedOn="{StaticResource SectionCard}">
+        <Setter Property="materialDesign:ShadowAssist.ShadowDepth" Value="Depth4" />
+        <Setter Property="Background" Value="{DynamicResource MaterialDesignPaper}" />
     </Style>
 
     <!-- ============================================================ -->
@@ -243,25 +270,49 @@
     </Style>
 
     <!-- ============================================================ -->
-    <!-- 按钮样式（基于 MaterialDesign） -->
+    <!-- 按钮样式（基于 MaterialDesign） - 2026 Premium Refresh -->
     <!-- ============================================================ -->
     <Style x:Key="PrimaryActionButton" TargetType="Button" BasedOn="{StaticResource MaterialDesignRaisedButton}">
         <Setter Property="Height" Value="34" />
         <Setter Property="MinWidth" Value="84" />
-        <Setter Property="Padding" Value="10,0" />
+        <Setter Property="Padding" Value="14,0" />
         <Setter Property="FontSize" Value="{StaticResource FontSizeBodyLarge}" />
         <Setter Property="FontWeight" Value="SemiBold" />
-        <Setter Property="materialDesign:ButtonAssist.CornerRadius" Value="6" />
-        <Setter Property="materialDesign:ElevationAssist.Elevation" Value="Dp0" />
+        <Setter Property="materialDesign:ButtonAssist.CornerRadius" Value="8" />
+        <Setter Property="materialDesign:ElevationAssist.Elevation" Value="Dp2" />
+        <Setter Property="Background" Value="{StaticResource BrushAccentBlue}" />
+        <Setter Property="BorderBrush" Value="{StaticResource BrushAccentBlue}" />
+        <Setter Property="Foreground" Value="White" />
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="materialDesign:ElevationAssist.Elevation" Value="Dp4" />
+                <Setter Property="Opacity" Value="0.95" />
+            </Trigger>
+            <Trigger Property="IsPressed" Value="True">
+                <Setter Property="materialDesign:ElevationAssist.Elevation" Value="Dp1" />
+            </Trigger>
+        </Style.Triggers>
     </Style>
 
     <Style x:Key="GhostActionButton" TargetType="Button" BasedOn="{StaticResource MaterialDesignOutlinedButton}">
         <Setter Property="Height" Value="32" />
         <Setter Property="MinWidth" Value="72" />
-        <Setter Property="Padding" Value="9,0" />
+        <Setter Property="Padding" Value="10,0" />
         <Setter Property="FontSize" Value="{StaticResource FontSizeBodyLarge}" />
         <Setter Property="BorderThickness" Value="1.5" />
-        <Setter Property="materialDesign:ButtonAssist.CornerRadius" Value="6" />
+        <Setter Property="materialDesign:ButtonAssist.CornerRadius" Value="8" />
+        <Setter Property="BorderBrush" Value="#94A3B8" />
+        <Setter Property="Foreground" Value="#334155" />
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="#F1F5F9" />
+                <Setter Property="BorderBrush" Value="{StaticResource BrushAccentBlue}" />
+                <Setter Property="Foreground" Value="{StaticResource BrushAccentBlue}" />
+            </Trigger>
+            <Trigger Property="IsPressed" Value="True">
+                <Setter Property="Background" Value="#E2E8F0" />
+            </Trigger>
+        </Style.Triggers>
     </Style>
 
     <Style x:Key="DangerActionButton" TargetType="Button" BasedOn="{StaticResource PrimaryActionButton}">
@@ -324,6 +375,25 @@
         <Setter Property="VerticalContentAlignment" Value="Center" />
         <Setter Property="FontSize" Value="{StaticResource FontSizeBody}" />
         <Setter Property="materialDesign:HintAssist.IsFloating" Value="False" />
+    </Style>
+
+    <!-- Premium TabControl style for modern look (used across modules) -->
+    <Style x:Key="PremiumMaterialTabControl" TargetType="TabControl" BasedOn="{StaticResource MaterialDesignTabControl}">
+        <Setter Property="materialDesign:ColorZoneAssist.Mode" Value="PrimaryMid" />
+        <Setter Property="Background" Value="{DynamicResource MaterialDesignPaper}" />
+    </Style>
+
+    <!-- Stronger active tab indicator for premium feel -->
+    <Style x:Key="ModernTabItem" TargetType="TabItem" BasedOn="{StaticResource MaterialDesignTabItem}">
+        <Setter Property="Foreground" Value="#475569" />
+        <Style.Triggers>
+            <Trigger Property="IsSelected" Value="True">
+                <Setter Property="Foreground" Value="{StaticResource BrushAccentBlue}" />
+            </Trigger>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Foreground" Value="#1E293B" />
+            </Trigger>
+        </Style.Triggers>
     </Style>
 
     <!-- ============================================================ -->
@@ -390,5 +460,140 @@
         <Setter Property="TextElement.FontSize" Value="11" />
         <Setter Property="TextElement.Foreground" Value="#475569" />
         <Setter Property="TextElement.FontWeight" Value="Medium" />
+    </Style>
+
+    <!-- Shift Legend Chip - consistent premium look for Schedule -->
+    <Style x:Key="ShiftLegendChip" TargetType="Border">
+        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="Padding" Value="6,3" />
+        <Setter Property="Margin" Value="0,0,4,0" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="TextElement.FontSize" Value="11" />
+        <Setter Property="TextElement.FontWeight" Value="Medium" />
+    </Style>
+
+    <!-- ============================================================ -->
+    <!-- Schedule Premium Cell Styles (for custom grid) -->
+    <!-- ============================================================ -->
+    <Style x:Key="ScheduleCellButton" TargetType="Button">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="BorderThickness" Value="0.5" />
+        <Setter Property="BorderBrush" Value="#CBD5E1" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="2">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter Property="BorderBrush" Value="{StaticResource BrushAccentBlue}" />
+                            <Setter Property="BorderThickness" Value="1" />
+                            <Setter Property="Opacity" Value="0.95" />
+                        </Trigger>
+                        <Trigger Property="IsFocused" Value="True">
+                            <Setter Property="BorderBrush" Value="#EF4444" />
+                            <Setter Property="BorderThickness" Value="2" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="ScheduleHeaderCell" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="#475569" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- ============================================================ -->
+    <!-- Modern Premium DataGrid (全局表格美化) -->
+    <!-- ============================================================ -->
+    <Style x:Key="ModernDataGrid" TargetType="DataGrid" BasedOn="{StaticResource MaterialDesignDataGrid}">
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BorderBrush" Value="#E2E8F0" />
+        <Setter Property="Background" Value="{DynamicResource MaterialDesignPaper}" />
+        <Setter Property="RowBackground" Value="{DynamicResource MaterialDesignPaper}" />
+        <Setter Property="AlternatingRowBackground" Value="#F8FAFC" />
+        <Setter Property="HorizontalGridLinesBrush" Value="#F1F5F9" />
+        <Setter Property="VerticalGridLinesBrush" Value="#F1F5F9" />
+        <Setter Property="FontSize" Value="{StaticResource FontSizeBody}" />
+        <Setter Property="RowHeight" Value="32" />
+        <Setter Property="ColumnHeaderHeight" Value="34" />
+        <Setter Property="HeadersVisibility" Value="Column" />
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <!-- subtle lift on container if wanted -->
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- DataGrid column header premium style -->
+    <Style x:Key="ModernDataGridColumnHeader" TargetType="DataGridColumnHeader" BasedOn="{StaticResource MaterialDesignDataGridColumnHeader}">
+        <Setter Property="Background" Value="#F1F5F9" />
+        <Setter Property="Foreground" Value="#334155" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="FontSize" Value="{StaticResource FontSizeBody}" />
+        <Setter Property="Padding" Value="8,6" />
+        <Setter Property="BorderBrush" Value="#E2E8F0" />
+        <Setter Property="BorderThickness" Value="0,0,1,1" />
+    </Style>
+
+    <!-- Modern Premium ScrollBar -->
+    <Style x:Key="ModernScrollBar" TargetType="ScrollBar" BasedOn="{StaticResource MaterialDesignScrollBar}">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+    </Style>
+
+    <!-- Global Premium Focus Visual (modern blue ring) -->
+    <Style x:Key="PremiumFocusVisual" TargetType="Control">
+        <Setter Property="FocusVisualStyle">
+            <Setter.Value>
+                <Style TargetType="Control">
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate>
+                                <Rectangle Stroke="{StaticResource BrushAccentBlue}" 
+                                           StrokeThickness="2" 
+                                           StrokeDashArray="1,1"
+                                           RadiusX="4" RadiusY="4"
+                                           Margin="-2" />
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Premium ListView / GridView item hover -->
+    <Style x:Key="PremiumListViewItem" TargetType="ListViewItem">
+        <Setter Property="Padding" Value="4,2" />
+        <Setter Property="Margin" Value="0,1" />
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="#F1F5F9" />
+            </Trigger>
+            <Trigger Property="IsSelected" Value="True">
+                <Setter Property="Background" Value="#DBEAFE" />
+                <Setter Property="Foreground" Value="#1E40AF" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- Premium Tooltip style -->
+    <Style x:Key="PremiumToolTip" TargetType="ToolTip" BasedOn="{StaticResource MaterialDesignToolTip}">
+        <Setter Property="Background" Value="#1E293B" />
+        <Setter Property="Foreground" Value="#F8FAFC" />
+        <Setter Property="Padding" Value="10,6" />
+        <Setter Property="FontSize" Value="12" />
     </Style>
 </ResourceDictionary>

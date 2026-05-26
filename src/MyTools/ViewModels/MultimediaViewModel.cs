@@ -556,7 +556,10 @@ namespace MyTools.ViewModels
         {
             try
             {
-                var image = await Task.Run(() => LoadBitmap(filePath));
+                // Preview uses downsampled decode for large photos (addresses perf with 100+ big images folders)
+                // Immersive uses higher res (or full if null)
+                int? decodeWidth = immersive ? 1920 : 960;
+                var image = await Task.Run(() => LoadBitmap(filePath, decodeWidth));
                 if (immersive)
                     ImmersiveImageSource = image;
                 else
@@ -571,15 +574,25 @@ namespace MyTools.ViewModels
             }
         }
 
-        private static BitmapImage LoadBitmap(string filePath)
+        internal static BitmapImage LoadBitmap(string filePath, int? decodePixelWidth = null)
         {
             var bitmap = new BitmapImage();
             bitmap.BeginInit();
             bitmap.CacheOption = BitmapCacheOption.OnLoad;
+            if (decodePixelWidth.HasValue && decodePixelWidth.Value > 0)
+            {
+                bitmap.DecodePixelWidth = decodePixelWidth.Value;
+            }
             bitmap.UriSource = new Uri(filePath);
             bitmap.EndInit();
             bitmap.Freeze();
             return bitmap;
+        }
+
+        // Small decoded thumbnail helper for MediaFileItem list performance
+        private static BitmapImage LoadBitmapForThumbnail(string filePath)
+        {
+            return LoadBitmap(filePath, 160);
         }
 
         private bool CanEnterImmersive()
@@ -805,6 +818,39 @@ namespace MyTools.ViewModels
         {
             get => _isChecked;
             set { _isChecked = value; OnPropertyChanged(); }
+        }
+
+        private BitmapImage _thumbnail;
+        public BitmapImage Thumbnail
+        {
+            get
+            {
+                if (_thumbnail == null && Kind == MediaKind.Image)
+                {
+                    // Lazy small thumbnail for list performance in large folders (100+ images)
+                    _ = Task.Run(() =>
+                    {
+                        try
+                        {
+                            // Small decoded thumbnail for list perf (duplicated logic to avoid nested class visibility)
+                            var bmp = new BitmapImage();
+                            bmp.BeginInit();
+                            bmp.CacheOption = BitmapCacheOption.OnLoad;
+                            bmp.DecodePixelWidth = 160;
+                            bmp.UriSource = new Uri(Path);
+                            bmp.EndInit();
+                            bmp.Freeze();
+                            System.Windows.Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
+                            {
+                                _thumbnail = bmp;
+                                OnPropertyChanged(nameof(Thumbnail));
+                            }));
+                        }
+                        catch { }
+                    });
+                }
+                return _thumbnail;
+            }
         }
 
         public event PropertyChangedEventHandler PropertyChanged;
