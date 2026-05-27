@@ -1455,3 +1455,14 @@
 - 调整 `DeferredUiResourceService`，在进入非首页模块前按顺序合并 MahApps、MaterialDesign 与本项目主题资源，避免 `Theme.xaml` 查找不到 `MaterialDesignRaisedButton`、`MaterialDesignTabControl` 等样式。
 - `MainViewModel.SwitchModule` 在切换非首页模块前先确保延迟 UI 资源加载完成，避免 `CurrentModule` 触发视图显示后再补资源。
 - Release 构建通过；UI Automation 已点击“设置(P)”并确认进入“系统 / 系统设置”，未出现运行错误对话框。
+
+## [2026-05-27] Codex 账号轮换交接修复
+- 修复“加入轮换”和“优先级”修改后未立即保存、未刷新预览和按钮状态的问题。
+- 保存 Codex 档案时补充 `EnableRotation` 与 `RotationPriority` 字段，避免重启后轮换设置丢失。
+- 轮换成功后更新目标账号 `LastAppliedAt`，确保同优先级账号按最近使用时间继续轮换。
+- 修正文档中 `auth.json` 的控制字符显示问题，并记录 `~/.codex/logs_2.sqlite` 可用于后续 429 / 配额检测。
+- 复测发现 Codex Desktop 已运行后端不会热加载新写入的 `auth.json`；轮换成功提示、托盘通知和功能说明改为“已写入配置，重启 Codex App 后生效”。
+- 继续核验 Codex Desktop 26.519：Windows 本地 app-server 使用私有 stdio transport，daemon/remote-control 生命周期命令返回“only supported on Unix platforms”；外部工具无法稳定触发无重启账号热切换。
+- 新增 `CodexDesktopService` 与面板"重启 Codex"按钮：轮换后可选择温和关闭并重新打开 Codex App，等待主进程退出后再启动，尽量保留已保存对话历史；不会强制结束未正常退出的进程，避免硬中断当前工作。
+- 修复"重启 Codex"只关闭带窗口主进程、未处理遗留 `Codex.exe/codex.exe` 后端进程的问题：现在会识别 `WindowsApps\OpenAI.Codex_*` 与 `%LOCALAPPDATA%\OpenAI\Codex\` 下的 Codex 进程，先请求主窗口退出，必要时结束遗留 Codex App 进程，再通过 AppUserModelId 重新打开并等待检测新进程。
+- 验证：正式 Release 目录被当前运行中的 `MyTools.exe` PID 17668 锁定，改用 `artifacts\verify-codex-restart\` 独立输出目录构建，0 warning / 0 error。

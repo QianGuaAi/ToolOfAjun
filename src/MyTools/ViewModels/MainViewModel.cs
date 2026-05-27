@@ -166,6 +166,8 @@ namespace MyTools.ViewModels
         private string _audioRecordHotkeyText = "\u672a\u8bbe\u7f6e";
         private bool _isCapturingAudioRecordHotkey;
         private string _codexProfilesStatusMessage = "拖入包含 config.toml 和 auth.json 的文件夹，生成可应用的 Codex 配置记录。";
+        private string _codexNextSwitchPreview = "无可用轮换目标";
+        private CodexRotationSettings _codexRotationSettings = new CodexRotationSettings();
         private bool _isAutoStartEnabled;
         private FileHashResult _currentFileHashResult;
         private string _fileHashResult = string.Empty;
@@ -239,6 +241,9 @@ namespace MyTools.ViewModels
         private readonly AsyncRelayCommand _restoreLastCodexBackupCommand;
         private readonly AsyncRelayCommand _exportCodexProfilesEncBoxCommand;
         private readonly AsyncRelayCommand _importCodexProfilesEncBoxCommand;
+        private readonly AsyncRelayCommand _rotateToNextCodexProfileCommand;
+        private readonly AsyncRelayCommand _restartCodexDesktopCommand;
+        private readonly AsyncRelayParameterCommand _toggleCodexProfileRotationCommand;
         private readonly AsyncRelayCommand _openRecordRegionCommand;
         private readonly AsyncRelayCommand _toggleAudioRecordingCommand;
         private readonly AsyncRelayCommand _refreshInstalledProgramsCommand;
@@ -573,6 +578,12 @@ namespace MyTools.ViewModels
             DeleteCodexProfileCommand = new AsyncRelayParameterCommand(DeleteCodexProfileAsync, parameter => parameter is CodexProfileItem);
             EditCodexConfigTomlCommand = new AsyncRelayParameterCommand(p => EditCodexFileAsync(p, CodexConfigProfileService.ConfigFileName), parameter => parameter is CodexProfileItem);
             EditCodexAuthJsonCommand = new AsyncRelayParameterCommand(p => EditCodexFileAsync(p, CodexConfigProfileService.AuthFileName), parameter => parameter is CodexProfileItem);
+            _rotateToNextCodexProfileCommand = new AsyncRelayCommand(RotateToNextCodexProfileAsync, () => IsCodexRotationAvailable);
+            RotateToNextCodexProfileCommand = _rotateToNextCodexProfileCommand;
+            _restartCodexDesktopCommand = new AsyncRelayCommand(RestartCodexDesktopAsync);
+            RestartCodexDesktopCommand = _restartCodexDesktopCommand;
+            _toggleCodexProfileRotationCommand = new AsyncRelayParameterCommand(ToggleCodexProfileRotationAsync, parameter => parameter is CodexProfileItem);
+            ToggleCodexProfileRotationCommand = _toggleCodexProfileRotationCommand;
 
             CurrentModule = "Home";
             ScheduleStartupBackgroundLoads();
@@ -1839,6 +1850,46 @@ namespace MyTools.ViewModels
         public ICommand DeleteCodexProfileCommand { get; }
         public ICommand EditCodexConfigTomlCommand { get; }
         public ICommand EditCodexAuthJsonCommand { get; }
+        public ICommand RotateToNextCodexProfileCommand { get; }
+        public ICommand RestartCodexDesktopCommand { get; }
+        public ICommand ToggleCodexProfileRotationCommand { get; }
+
+        public string CodexNextSwitchPreview
+        {
+            get => _codexNextSwitchPreview;
+            private set
+            {
+                if (string.Equals(_codexNextSwitchPreview, value, StringComparison.Ordinal)) return;
+                _codexNextSwitchPreview = value ?? "无可用轮换目标";
+                OnPropertyChanged();
+            }
+        }
+
+        public CodexRotationSettings CodexRotationSettings
+        {
+            get => _codexRotationSettings;
+            set
+            {
+                if (ReferenceEquals(_codexRotationSettings, value)) return;
+                _codexRotationSettings = value ?? new CodexRotationSettings();
+                OnPropertyChanged();
+            }
+        }
+
+        public bool IsCodexRotationAvailable
+        {
+            get
+            {
+                if (CodexProfiles == null) return false;
+                var current = CodexProfiles.FirstOrDefault(p => p != null && p.IsActive);
+                if (current == null) return false;
+
+                return CodexProfiles.Any(p => p != null
+                    && p.EnableRotation
+                    && p.Status != CodexProfileLibraryService.StatusExpired
+                    && !string.Equals(p.DisplayName, current.DisplayName, StringComparison.Ordinal));
+            }
+        }
 
         public bool IsVideoRecording
         {
@@ -3337,6 +3388,7 @@ namespace MyTools.ViewModels
                     CodexProfilesStatusMessage = CodexProfiles.Count == 0
                         ? "未保存 Codex 账号档案。请先在 Codex CLI 登录一次，然后点击导入当前账号。"
                         : $"已加载 {CodexProfiles.Count} 个 Codex 账号档案。本机：{Environment.MachineName}";
+                    UpdateCodexRotationState();
                 });
             }
             catch (Exception ex)
@@ -3458,6 +3510,13 @@ namespace MyTools.ViewModels
             {
                 SafeFireAndForget(SaveCodexProfilesAsync());
             }
+
+            if (e.PropertyName == nameof(CodexProfileItem.EnableRotation)
+                || e.PropertyName == nameof(CodexProfileItem.RotationPriority))
+            {
+                UpdateCodexRotationState();
+                SafeFireAndForget(SaveCodexProfilesAsync());
+            }
         }
 
         private async Task SaveCodexProfilesAsync()
@@ -3495,7 +3554,9 @@ namespace MyTools.ViewModels
                             ProtectedAuthJsonBase64 = item.ProtectedAuthJsonBase64 ?? item.AuthJsonContentProtected,
                             ConfigTomlContentProtected = item.ProtectedConfigTomlBase64 ?? item.ConfigTomlContentProtected,
                             AuthJsonContentProtected = item.ProtectedAuthJsonBase64 ?? item.AuthJsonContentProtected,
-                            Status = item.Status ?? CodexProfileLibraryService.StatusUnknown
+                            Status = item.Status ?? CodexProfileLibraryService.StatusUnknown,
+                            EnableRotation = item.EnableRotation,
+                            RotationPriority = item.RotationPriority
                         };
                     })
                     .ToList()
@@ -3572,6 +3633,7 @@ namespace MyTools.ViewModels
                 SortCodexProfilesByLastApplied();
                 await SaveCodexProfilesAsync();
                 AppLogService.Information("Switched Codex profile to {DisplayName}, backup at {BackupPath}", SafeCodexLogName(item.DisplayName), backupPath ?? string.Empty);
+                UpdateCodexRotationState();
                 MessageBox.Show(
                     $"已成功切换到「{item.DisplayName}」。\n\n目标目录：{result.TargetFolderPath}\n请重启 Codex 或重新打开终端后使用。",
                     "Codex 账号切换成功",
@@ -4072,6 +4134,117 @@ namespace MyTools.ViewModels
             CodexProfilesStatusMessage = $"已删除「{item.DisplayName}」。";
             await SaveCodexProfilesAsync();
             AppLogService.Information("Deleted Codex profile {DisplayName}", SafeCodexLogName(item.DisplayName));
+            UpdateCodexRotationState();
+        }
+
+        private async Task RotateToNextCodexProfileAsync()
+        {
+            var current = CodexProfiles?.FirstOrDefault(p => p != null && p.IsActive);
+            if (current == null)
+            {
+                CodexProfilesStatusMessage = "未找到当前激活的 Codex 账号";
+                return;
+            }
+
+            await SaveCodexProfilesAsync();
+            CodexProfilesStatusMessage = $"正在切换 Codex 账号...";
+            var result = await CodexRotationService.RotateToNextAsync(
+                current, CodexRotationSettings.NotifyOnSwitch, CancellationToken.None);
+
+            if (result.Success)
+            {
+                current.IsActive = false;
+                var next = CodexProfiles?.FirstOrDefault(p => p != null && p.DisplayName == result.ToProfile);
+                if (next != null)
+                {
+                    next.IsActive = true;
+                    next.LastAppliedAt = DateTime.Now;
+                    next.StatusMessage = $"已轮换：{next.LastAppliedAt:yyyy-MM-dd HH:mm:ss}";
+                }
+
+                CodexProfilesStatusMessage = $"已写入：{result.FromProfile} → {result.ToProfile}。请重启 Codex App 后使用。";
+                SortCodexProfilesByLastApplied();
+                await SaveCodexProfilesAsync();
+                UpdateCodexRotationState();
+                var restartNow = MessageBox.Show(
+                    $"已把 Codex 配置写入为「{result.ToProfile}」。\n\n当前已运行的 Codex App 后端不会热加载 auth.json。是否现在温和重启 Codex App？\n\n已保存的对话历史通常会保留；正在生成的回复或正在执行的命令会被中断。请确认当前 Codex 没有正在工作。",
+                    "Codex 账号轮换已写入",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Information);
+                if (restartNow == MessageBoxResult.Yes)
+                {
+                    await RestartCodexDesktopCoreAsync();
+                }
+            }
+            else
+            {
+                CodexProfilesStatusMessage = $"轮换失败：{result.Message}";
+            }
+        }
+
+        private async Task RestartCodexDesktopAsync()
+        {
+            var confirm = MessageBox.Show(
+                "将关闭并重新打开 Codex App。\n\n工具会先请求 Codex 正常退出；如果仍有遗留的 Codex 后端进程未退出，会结束这些进程后再重新打开。\n\n已保存的对话历史通常会保留；正在生成的回复或正在执行的命令会被中断。请确认当前 Codex 没有正在生成内容。现在重启吗？",
+                "重启 Codex App",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+            if (confirm != MessageBoxResult.Yes)
+            {
+                return;
+            }
+
+            await RestartCodexDesktopCoreAsync();
+        }
+
+        private async Task RestartCodexDesktopCoreAsync()
+        {
+            CodexProfilesStatusMessage = "正在重启 Codex App...";
+            var result = await CodexDesktopService.RestartAsync(CancellationToken.None);
+            CodexProfilesStatusMessage = result.Message;
+            MessageBox.Show(
+                result.Message,
+                result.Success ? "Codex App 已重启" : "Codex App 未完成重启",
+                MessageBoxButton.OK,
+                result.Success ? MessageBoxImage.Information : MessageBoxImage.Warning);
+        }
+
+        private async Task ToggleCodexProfileRotationAsync(object parameter)
+        {
+            if (!(parameter is CodexProfileItem item)) return;
+            item.EnableRotation = !item.EnableRotation;
+            await SaveCodexProfilesAsync();
+            UpdateCodexRotationState();
+        }
+
+        private void UpdateCodexNextSwitchPreview()
+        {
+            var current = CodexProfiles?.FirstOrDefault(p => p != null && p.IsActive);
+            if (current == null)
+            {
+                CodexNextSwitchPreview = "无可用轮换目标";
+                return;
+            }
+
+            var next = CodexProfiles?
+                .Where(p => p != null
+                            && p.EnableRotation
+                            && p.Status != CodexProfileLibraryService.StatusExpired
+                            && !string.Equals(p.DisplayName, current.DisplayName, StringComparison.Ordinal))
+                .OrderBy(p => p.RotationPriority)
+                .ThenBy(p => p.LastAppliedAt ?? DateTime.MinValue)
+                .FirstOrDefault();
+
+            CodexNextSwitchPreview = next == null
+                ? "无可用轮换目标"
+                : $"当前：{current.DisplayName} → 切换至：{next.DisplayName}";
+        }
+
+        private void UpdateCodexRotationState()
+        {
+            OnPropertyChanged(nameof(IsCodexRotationAvailable));
+            UpdateCodexNextSwitchPreview();
+            _rotateToNextCodexProfileCommand?.RaiseCanExecuteChanged();
         }
 
         private static string SafeCodexLogName(string value)
@@ -12718,6 +12891,8 @@ namespace MyTools.ViewModels
         private string _statusMessage;
         private string _configTomlContentProtected;
         private string _authJsonContentProtected;
+        private bool _enableRotation;
+        private int _rotationPriority;
 
         public string DisplayName
         {
@@ -12943,6 +13118,28 @@ namespace MyTools.ViewModels
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(HasEmbeddedContent));
                 OnPropertyChanged(nameof(ContentStorageSummary));
+            }
+        }
+
+        public bool EnableRotation
+        {
+            get => _enableRotation;
+            set
+            {
+                if (_enableRotation == value) return;
+                _enableRotation = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public int RotationPriority
+        {
+            get => _rotationPriority;
+            set
+            {
+                if (_rotationPriority == value) return;
+                _rotationPriority = value;
+                OnPropertyChanged();
             }
         }
 

@@ -2272,13 +2272,45 @@
                                                 Content="回滚上次切换"
                                                 Command="{Binding RestoreLastCodexBackupCommand}" />
                                     </WrapPanel>
+                                    <Border Background="{DynamicResource BrushCard}" CornerRadius="4" Padding="12,8" Margin="0,8,0,0">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0"
+                                                    Content="立即轮换"
+                                                    Command="{Binding RotateToNextCodexProfileCommand}"
+                                                    IsEnabled="{Binding IsCodexRotationAvailable}"
+                                                    Style="{StaticResource MaterialDesignOutlinedButton}"
+                                                    Padding="12,4" />
+                                            <Button Grid.Column="1"
+                                                    Content="重启 Codex"
+                                                    Command="{Binding RestartCodexDesktopCommand}"
+                                                    Style="{StaticResource MaterialDesignOutlinedButton}"
+                                                    Padding="12,4"
+                                                    Margin="8,0,0,0" />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="{Binding CodexNextSwitchPreview}"
+                                                       Margin="12,0,0,0"
+                                                       VerticalAlignment="Center"
+                                                       Foreground="{DynamicResource MaterialDesignBodyLight}" />
+                                            <CheckBox Grid.Column="3"
+                                                      Content="轮换后通知"
+                                                      IsChecked="{Binding CodexRotationSettings.NotifyOnSwitch}"
+                                                      VerticalAlignment="Center"
+                                                      Style="{StaticResource MaterialDesignCheckBox}" />
+                                        </Grid>
+                                    </Border>
                                     <StackPanel Orientation="Horizontal">
                                         <Border Width="32" Height="32" CornerRadius="8" Background="{StaticResource BrushTealGradient}" Margin="0,0,10,0" VerticalAlignment="Center">
                                             <materialDesign:PackIcon Kind="FolderCogOutline" Width="16" Height="16" Foreground="White" VerticalAlignment="Center" HorizontalAlignment="Center" />
                                         </Border>
                                         <StackPanel VerticalAlignment="Center">
                                             <TextBlock Text="Codex 账号切换器" Style="{StaticResource TextHeadline}" />
-                                            <TextBlock Text="本地加密保存多个账号档案，点击切换后重启 Codex 使用" Style="{StaticResource TextCaption}" Margin="0,1,0,0" />
+                                            <TextBlock Text="本地加密保存多个账号档案，切换后可温和重启并继续原会话" Style="{StaticResource TextCaption}" Margin="0,1,0,0" />
                                         </StackPanel>
                                     </StackPanel>
                                 </DockPanel>
@@ -2464,6 +2496,19 @@
                                                             <materialDesign:PackIcon Kind="DeleteOutline" Width="17" Height="17" />
                                                         </Button>
                                                     </WrapPanel>
+                                                    <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                                        <CheckBox Content="加入轮换"
+                                                                  IsChecked="{Binding EnableRotation, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                                  VerticalAlignment="Center"
+                                                                  Style="{StaticResource MaterialDesignCheckBox}"/>
+                                                        <TextBlock Text="优先级:" Margin="12,0,4,0" VerticalAlignment="Center"
+                                                                   Foreground="{DynamicResource MaterialDesignBodyLight}"
+                                                                   Style="{StaticResource MaterialDesignCaptionTextBlock}"/>
+                                                        <TextBox Text="{Binding RotationPriority, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                                 Width="44" VerticalAlignment="Center"
+                                                                 Style="{StaticResource MaterialDesignTextBox}"
+                                                                 ToolTip="数字越小优先级越高"/>
+                                                    </StackPanel>
                                                 </Grid>
                                             </materialDesign:Card>
                                         </DataTemplate>

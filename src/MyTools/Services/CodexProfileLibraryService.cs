@@ -26,6 +26,7 @@ namespace MyTools.Services
         private const string ExportHeader = "CDXB";
         private const string ExportPortableKind = "portable-codex-profiles-v2";
         private static readonly SemaphoreSlim FileLock = new SemaphoreSlim(1, 1);
+        private static CodexProfilesFile _cachedProfiles;
 
         public static string RootFolderPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MyTools", "Codex");
         public static string ProfilesFilePath => Path.Combine(RootFolderPath, "profiles.json");
@@ -44,6 +45,7 @@ namespace MyTools.Services
                     var jsonBytes = CodexConfigProfileService.UnprotectBytesFromBase64(protectedText);
                     var file = DeserializeProfilesFile(jsonBytes);
                     NormalizeProfilesFile(file);
+                    _cachedProfiles = file;
                     return file;
                 }
 
@@ -53,17 +55,24 @@ namespace MyTools.Services
                     await SaveCoreAsync(migrated, ct).ConfigureAwait(false);
                 }
 
+                _cachedProfiles = migrated;
                 return migrated;
             }
             catch (Exception ex)
             {
                 AppLogService.Error(new InvalidOperationException(ex.Message), "Loading Codex profile library failed with {ErrorType}", ex.GetType().Name);
-                return CreateEmptyProfilesFile();
+                _cachedProfiles = CreateEmptyProfilesFile();
+                return _cachedProfiles;
             }
             finally
             {
                 FileLock.Release();
             }
+        }
+
+        public static CodexProfilesFile GetCachedProfiles()
+        {
+            return _cachedProfiles ?? CreateEmptyProfilesFile();
         }
 
         public static async Task SaveAsync(CodexProfilesFile file, CancellationToken ct)
@@ -77,6 +86,7 @@ namespace MyTools.Services
             try
             {
                 await SaveCoreAsync(file, ct).ConfigureAwait(false);
+                _cachedProfiles = file;
             }
             finally
             {
@@ -463,7 +473,9 @@ namespace MyTools.Services
                     RefreshTokenExpiresAt = null,
                     Status = item.Status ?? ComputeStatus(item.AccessTokenExpiresAt ?? ParseAccessTokenExp(authJsonBytes)),
                     ConfigTomlBase64 = Convert.ToBase64String(configTomlBytes),
-                    AuthJsonBase64 = Convert.ToBase64String(authJsonBytes)
+                    AuthJsonBase64 = Convert.ToBase64String(authJsonBytes),
+                    EnableRotation = item.EnableRotation,
+                    RotationPriority = item.RotationPriority
                 });
             }
 
@@ -575,7 +587,9 @@ namespace MyTools.Services
                     ProtectedAuthJsonBase64 = protectedAuth,
                     ConfigTomlContentProtected = protectedConfig,
                     AuthJsonContentProtected = protectedAuth,
-                    Status = ComputeStatus(accessExp)
+                    Status = ComputeStatus(accessExp),
+                    EnableRotation = imported.EnableRotation,
+                    RotationPriority = imported.RotationPriority
                 };
                 file.items.Add(item);
             }
@@ -695,6 +709,8 @@ namespace MyTools.Services
             item.AuthJsonContentProtected = item.ProtectedAuthJsonBase64;
             item.RefreshTokenExpiresAt = null;
             item.Status = ComputeStatus(item.AccessTokenExpiresAt);
+            item.EnableRotation = item.EnableRotation;
+            item.RotationPriority = item.RotationPriority;
         }
 
         private static async Task<CodexProfilesFile> TryLoadLegacyProfilesAsync(CancellationToken ct)
@@ -721,7 +737,9 @@ namespace MyTools.Services
                     ProtectedConfigTomlBase64 = profile.ConfigTomlContentProtected ?? string.Empty,
                     ProtectedAuthJsonBase64 = profile.AuthJsonContentProtected ?? string.Empty,
                     ConfigTomlContentProtected = profile.ConfigTomlContentProtected ?? string.Empty,
-                    AuthJsonContentProtected = profile.AuthJsonContentProtected ?? string.Empty
+                    AuthJsonContentProtected = profile.AuthJsonContentProtected ?? string.Empty,
+                    EnableRotation = false,
+                    RotationPriority = 0
                 };
 
                 var authBytes = CodexConfigProfileService.UnprotectBytesFromBase64(item.ProtectedAuthJsonBase64);
@@ -953,6 +971,8 @@ namespace MyTools.Services
         public string Status { get; set; }
         public string ConfigTomlBase64 { get; set; }
         public string AuthJsonBase64 { get; set; }
+        public bool EnableRotation { get; set; }
+        public int RotationPriority { get; set; }
     }
 
     public class CodexActiveFile
