@@ -11,14 +11,14 @@ namespace MyTools.Services
     ///   2. 周末（周六+周日）连续休息 2 天，并尽量均衡
     ///   3. 休息日尽量安排在节假日（含周末+法定节假日），并尽量均衡
     ///   4. 节假日休 ≥ 4 天 / 人，并尽量均衡
-    ///   5. 总休 ≥ 8 天 / 人，并尽量均衡
+    ///   5. 总休 ≥ 9 天 / 人，并尽量均衡
     /// 每日总休数按 DailyRestQuotas 的硬性配额执行；用户手动修改 (IsManual=true) 不会被改写。
     /// </summary>
     public static class ShiftAutoOptimizer
     {
         private const double Epsilon = 0.001;
         private const int MaxConsecutiveWork = 5;
-        private const int TargetTotalRest = 8;
+        private const int TargetTotalRest = 9;
         private const int TargetHolidayRest = 4;
 
         public class OptimizeResult
@@ -336,8 +336,16 @@ namespace MyTools.Services
                             // P4 节假日休 ≥ 4：高于 P5
                             if (isHoliday[d])
                                 score += Math.Max(0, TargetHolidayRest - CountHolidayRested(i)) * 200;
-                            // P5 总休 ≥ 8：基线
+                            // P5 总休 ≥ 9：基线
                             score += Math.Max(0, TargetTotalRest - TotalRest(i)) * 50;
+                            var previousFullRest = d > 0 && ShiftCodes.RestDays(sched.Employees[i].Cells[d - 1].Code) >= 1.0;
+                            var nextFullRest = d + 1 < days && ShiftCodes.RestDays(sched.Employees[i].Cells[d + 1].Code) >= 1.0;
+                            if (previousFullRest || nextFullRest) score += 12;
+                            if (!previousFullRest && !nextFullRest) score -= 12;
+                            if (d >= 2
+                                && ShiftCodes.RestDays(sched.Employees[i].Cells[d - 2].Code) >= 1.0
+                                && ShiftCodes.IsWork(sched.Employees[i].Cells[d - 1].Code))
+                                score -= 12;
                             // 抑制 3 连休
                             int prevRest = CountConsecutiveRestBefore(sched, i, d);
                             if (prevRest >= 2) score -= 300;
@@ -632,6 +640,12 @@ namespace MyTools.Services
                 if (maxRun > MaxConsecutiveWork)
                 {
                     yield return $"{sched.Employees[i].Name} 连续上班 {maxRun} 天（应≤{MaxConsecutiveWork}）。";
+                }
+
+                var totalRest = ComputeTotalRest(sched.Employees[i]);
+                if (totalRest < TargetTotalRest - Epsilon)
+                {
+                    yield return $"{sched.Employees[i].Name} 本月休息 {FormatNumber(totalRest)} 天，低于硬性要求 {TargetTotalRest} 天。";
                 }
             }
         }

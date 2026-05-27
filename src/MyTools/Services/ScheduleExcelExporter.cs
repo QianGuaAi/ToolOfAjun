@@ -24,7 +24,7 @@ namespace MyTools.Services
     {
         // 颜色（RRGGBB）
         private const string HeaderBg = "F1F3F6";
-        private const string HolidayBg = "FFF4E6";
+        private const string HolidayBg = "99F6E4";
         private const string CellBorder = "BDBDBD";
         private const string White = "FFFFFF";
 
@@ -210,7 +210,7 @@ namespace MyTools.Services
 
                 // 统计
                 WriteNum(w, Cell(2 + days, rowIdx), FormatStat(work), styles.S("stat"));
-                WriteNum(w, Cell(3 + days, rowIdx), FormatStat(rest), styles.S(rest < 8 ? "statBad" : "stat"));
+                WriteNum(w, Cell(3 + days, rowIdx), FormatStat(rest), styles.S(rest < 9 ? "statBad" : "stat"));
                 WriteNum(w, Cell(4 + days, rowIdx), maxRun.ToString(CultureInfo.InvariantCulture), styles.S(maxRun > 5 ? "statBad" : "stat"));
 
                 w.WriteEndElement();
@@ -369,7 +369,7 @@ namespace MyTools.Services
                     // 字体：白底用黑字、深底用白字
                     shiftFontIdx[kv.Key] = string.Equals(kv.Value.fg, White, StringComparison.OrdinalIgnoreCase) ? FONT_BOLD_WHITE : FONT_BOLD;
                 }
-                int fillEmptyHoliday = FillSolid("FFF8F0");
+                int fillEmptyHoliday = FillSolid("CCFBF1");
 
                 // 边框：1=四向细边
                 const int BORDER_THIN = 1;
