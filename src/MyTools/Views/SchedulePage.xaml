@@ -147,12 +147,12 @@
                 <WrapPanel>
                     <TextBlock Text="图例" FontSize="11" FontWeight="SemiBold" Margin="0,0,8,0" VerticalAlignment="Center" />
                     <Border Style="{StaticResource ShiftLegendChip}" Background="White"><TextBlock Text="白" /></Border>
-                    <Border Style="{StaticResource ShiftLegendChip}" Background="#E0E7FF"><TextBlock Text="卡" /></Border>
-                    <Border Style="{StaticResource ShiftLegendChip}" Background="#CFFAFE"><TextBlock Text="副" /></Border>
+                    <Border Style="{StaticResource ShiftLegendChip}" Background="#FBCFE8"><TextBlock Text="卡" /></Border>
+                    <Border Style="{StaticResource ShiftLegendChip}" Background="#991B1B"><TextBlock Text="副" Foreground="White" /></Border>
                     <Border Style="{StaticResource ShiftLegendChip}" Background="#FEE2E2"><TextBlock Text="感" /></Border>
                     <Border Style="{StaticResource ShiftLegendChip}" Background="#1F2937"><TextBlock Text="夜" Foreground="White" /></Border>
                     <Border Style="{StaticResource ShiftLegendChip}" Background="#475569"><TextBlock Text="小" Foreground="White" /></Border>
-                    <Border Style="{StaticResource ShiftLegendChip}" Background="#D1FAE5"><TextBlock Text="休" /></Border>
+                    <Border Style="{StaticResource ShiftLegendChip}" Background="#FDECC8"><TextBlock Text="休" /></Border>
                     <Border Style="{StaticResource ShiftLegendChip}" Background="#A7F3D0"><TextBlock Text="公" /></Border>
                     <Border Style="{StaticResource ShiftLegendChip}" Background="#FEF3C7"><TextBlock Text="午" /></Border>
                     <TextBlock FontSize="11" Opacity="0.78" TextWrapping="Wrap" Text="小1=小→夜→休→休。单击格子选班次。" Margin="4,0,0,0" />

@@ -1,8 +1,15 @@
 # 开发记录
 
+## [2026-05-28] 排班颜色调整后重新打包安装程序
+- 结束占用 Release 输出的旧 `MyTools.exe` 进程后，重新执行 `scripts\Build-Installer.ps1`。
+- 重新构建主程序、卸载器、payload zip 和安装器，安装包已包含排班特殊班次警告、节假日/休/卡/副颜色调整。
+- 输出安装包：`artifacts\installer\MyToolsSetup.exe`，大小 41.19 MB，SHA256 = `011AE3092FB6243441AFB90247844088BFE53AE30719691C55EFB49CA8D1F10D`。
+- 验证：安装包脚本退出码 0，主程序、卸载器和安装器构建均为 0 警告 0 错误。
+
 ## [2026-05-28] 排班特殊班次警告与节假日底色修正
-- `ScheduleViewModel` 将“副 / 卡 / 感”日级警告提前到低优先级警告首位，并明确三类任意一项每出现一次计 1 次，合计 2 次及以上即提示。
-- `SchedulePage` 将周末/节假日表头和班次格底色改为蓝绿色，节假日班次文字统一使用黑色保证可读性。
+- `ScheduleViewModel` 将“副 / 卡 / 感”日级警告改为同一列同一种代码出现 2 次及以上才提示；“副+卡”等混合出现不再提示。
+- `SchedulePage` 将周末/节假日整列底色改为浅蓝色，并将“休”值单元格底色改为米黄色。
+- `SchedulePage` 与 `ScheduleExcelExporter` 将“卡”值单元格改为粉红色，“副”值单元格改为深红色白字；节假日列中这两类值仍优先显示班次色。
 - 同步修正排班界面统计和 Excel 导出中残留的 8 天休息判断为 9 天。
 - 验证：`dotnet build src\MyTools\MyTools.csproj -c Release -p:OutputPath=c:\ToolOfAjun\output\buildcheck\MyTools\` 通过，0 警告 0 错误。
 

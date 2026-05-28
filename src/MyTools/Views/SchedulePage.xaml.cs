@@ -45,17 +45,16 @@ namespace MyTools.Views
         private const int EmployeeRowOverscan = 12; // Increased for smoother scrolling on large rosters (perf optimization)
         private static readonly string[] DowZh = { "日", "一", "二", "三", "四", "五", "六" };
         private static readonly Brush HeaderBg = FrozenBrush(0xF1, 0xF5, 0xF9);
-        private static readonly Brush HolidayHeaderBg = FrozenBrush(0x99, 0xF6, 0xE4);
+        private static readonly Brush HolidayColumnBg = FrozenBrush(0xDB, 0xEA, 0xFE);
         private static readonly Brush QuotaMismatchBg = FrozenBrush(0xFE, 0xE2, 0xE2);
-        private static readonly Brush EmptyHolidayBg = FrozenBrush(0xCC, 0xFB, 0xF1);
         private static readonly Brush BorderBg = FrozenBrush(0xE2, 0xE8, 0xF0);
         private static readonly Brush CellDayBg = FrozenBrush(0xFF, 0xFF, 0xFF);
-        private static readonly Brush CellCardBg = FrozenBrush(0xE0, 0xE7, 0xFF);
-        private static readonly Brush CellDeputyBg = FrozenBrush(0xC0, 0xF0, 0xFC);
+        private static readonly Brush CellCardBg = FrozenBrush(0xFB, 0xCF, 0xE8);
+        private static readonly Brush CellDeputyBg = FrozenBrush(0x99, 0x1B, 0x1B);
         private static readonly Brush CellInfectBg = FrozenBrush(0xFE, 0xE2, 0xE2);
         private static readonly Brush CellBigBg = FrozenBrush(0x1E, 0x29, 0x3B);
         private static readonly Brush CellSmallBg = FrozenBrush(0x47, 0x55, 0x69);
-        private static readonly Brush CellRestBg = FrozenBrush(0xD1, 0xFA, 0xE5);
+        private static readonly Brush CellRestBg = FrozenBrush(0xFD, 0xEC, 0xC8);
         private static readonly Brush CellPublicBg = FrozenBrush(0xA7, 0xF3, 0xD0);
         private static readonly Brush CellHalfBg = FrozenBrush(0xFE, 0xF3, 0xC7);
         private static readonly Brush SerialTextFg = FrozenBrush(0x64, 0x74, 0x8B);
@@ -326,7 +325,7 @@ namespace MyTools.Views
             for (int d = 0; d < days; d++)
             {
                 var date = sched.DateOf(d);
-                var bg = _holidayByDay[d] ? HolidayHeaderBg : HeaderBg;
+                var bg = _holidayByDay[d] ? HolidayColumnBg : HeaderBg;
                 ScheduleHost.Children.Add(MakeHeaderCell(DowZh[(int)date.DayOfWeek], 0, 1 + d, bg, false));
             }
             ScheduleHost.Children.Add(MakeHeaderCell("上班", 0, 1 + days, HeaderBg, true));
@@ -338,7 +337,7 @@ namespace MyTools.Views
             ScheduleHost.Children.Add(MakeHeaderCell("日期", 1, 0, HeaderBg, true));
             for (int d = 0; d < days; d++)
             {
-                var bg = _holidayByDay[d] ? HolidayHeaderBg : HeaderBg;
+                var bg = _holidayByDay[d] ? HolidayColumnBg : HeaderBg;
                 ScheduleHost.Children.Add(MakeHeaderCell((d + 1).ToString(), 1, 1 + d, bg, false));
             }
             ScheduleHost.Children.Add(MakeHeaderCell("", 1, 1 + days, HeaderBg, false));
@@ -353,7 +352,7 @@ namespace MyTools.Views
                 double quota = (d < sched.DailyRestQuotas.Count) ? sched.DailyRestQuotas[d] : 0;
                 double actual = _vm.ComputeColumnRestCount(d);
                 var matched = IsQuotaMatched(actual, quota);
-                var actualCell = MakeHeaderCell(FormatStat(actual), 2, 1 + d, matched ? HeaderBg : QuotaMismatchBg, false);
+                var actualCell = MakeHeaderCell(FormatStat(actual), 2, 1 + d, GetColumnStatBg(d, matched), false);
                 if (actualCell is Border ab && ab.Child is TextBlock atb)
                 {
                     atb.Foreground = matched ? Brushes.DarkSlateGray : Brushes.Crimson;
@@ -402,7 +401,7 @@ namespace MyTools.Views
                         quotaTextBox.Text = FormatStat(sched.DailyRestQuotas[dayIdx]);
                     }
                 };
-                var quotaBorder = WrapBorder(quotaTextBox, 3, 1 + d, matched ? HeaderBg : QuotaMismatchBg);
+                var quotaBorder = WrapBorder(quotaTextBox, 3, 1 + d, GetColumnStatBg(d, matched));
                 _quotaTextBoxes[d] = quotaTextBox;
                 _quotaBorders[d] = quotaBorder;
                 ScheduleHost.Children.Add(quotaBorder);
@@ -622,7 +621,7 @@ namespace MyTools.Views
                 var quota = day < sched.DailyRestQuotas.Count ? sched.DailyRestQuotas[day] : 0;
                 var actual = _vm.ComputeColumnRestCount(day);
                 var matched = IsQuotaMatched(actual, quota);
-                var bg = matched ? HeaderBg : QuotaMismatchBg;
+                var bg = GetColumnStatBg(day, matched);
                 var tooltip = BuildQuotaTooltip(actual, quota, matched);
 
                 if (_actualRestTexts != null && _actualRestTexts[day] != null)
@@ -721,7 +720,10 @@ namespace MyTools.Views
         private static Brush ResolveCellBg(ShiftCell cell, bool isHoliday)
         {
             var code = ShiftCodes.Normalize(cell?.Code);
-            if (isHoliday) return EmptyHolidayBg;
+            if (code == ShiftCodes.Rest) return CellRestBg;
+            if (code == ShiftCodes.Card) return CellCardBg;
+            if (code == ShiftCodes.Deputy) return CellDeputyBg;
+            if (isHoliday) return HolidayColumnBg;
             if (string.IsNullOrEmpty(code))
             {
                 return Brushes.White;
@@ -729,24 +731,31 @@ namespace MyTools.Views
             switch (code)
             {
                 case "白": return isHoliday ? CellDayBg : Brushes.White;
-                case "卡": return isHoliday ? CellCardBg : Brushes.White;
-                case "副": return CellDeputyBg;
                 case "感": return CellInfectBg;
                 case "大": return CellBigBg;
                 case "小": return CellSmallBg;
-                case "休": return CellRestBg;
                 case "公": return CellPublicBg;
                 case "午": return CellHalfBg;
                 default: return Brushes.White;
             }
         }
 
+        private Brush GetColumnStatBg(int day, bool matched)
+        {
+            if (_holidayByDay != null && day >= 0 && day < _holidayByDay.Length && _holidayByDay[day])
+            {
+                return HolidayColumnBg;
+            }
+
+            return matched ? HeaderBg : QuotaMismatchBg;
+        }
+
         private static Brush ResolveCellFg(ShiftCell cell, bool isHoliday)
         {
-            if (isHoliday) return Brushes.Black;
             var code = ShiftCodes.Normalize(cell?.Code);
             switch (code)
             {
+                case "副":
                 case "大":
                 case "小":
                     return Brushes.White;
@@ -923,12 +932,12 @@ namespace MyTools.Views
             }
 
             Add("白", () => _vm.SetCell(empIdx, dayIdx, ShiftCodes.Day), Brushes.White);
-            Add("卡", () => _vm.SetCell(empIdx, dayIdx, ShiftCodes.Card), new SolidColorBrush(Color.FromRgb(0xE8, 0xEA, 0xF6)));
-            Add("副", () => _vm.SetCell(empIdx, dayIdx, ShiftCodes.Deputy), new SolidColorBrush(Color.FromRgb(0xE0, 0xF7, 0xFA)));
+            Add("卡", () => _vm.SetCell(empIdx, dayIdx, ShiftCodes.Card), new SolidColorBrush(Color.FromRgb(0xFB, 0xCF, 0xE8)));
+            Add("副", () => _vm.SetCell(empIdx, dayIdx, ShiftCodes.Deputy), new SolidColorBrush(Color.FromRgb(0x99, 0x1B, 0x1B)), Brushes.White);
             Add("感", () => _vm.SetCell(empIdx, dayIdx, ShiftCodes.Infect), new SolidColorBrush(Color.FromRgb(0xFF, 0xEB, 0xEE)));
             Add("大夜", () => _vm.SetCell(empIdx, dayIdx, ShiftCodes.Big), new SolidColorBrush(Color.FromRgb(0x37, 0x47, 0x4F)), Brushes.White);
             Add("小", () => _vm.SetCell(empIdx, dayIdx, ShiftCodes.Small), new SolidColorBrush(Color.FromRgb(0x78, 0x90, 0x9C)), Brushes.White);
-            Add("休", () => _vm.SetCell(empIdx, dayIdx, ShiftCodes.Rest), new SolidColorBrush(Color.FromRgb(0xC8, 0xE6, 0xC9)));
+            Add("休", () => _vm.SetCell(empIdx, dayIdx, ShiftCodes.Rest), new SolidColorBrush(Color.FromRgb(0xFD, 0xEC, 0xC8)));
             Add("公", () => _vm.SetCell(empIdx, dayIdx, ShiftCodes.Public), new SolidColorBrush(Color.FromRgb(0xA5, 0xD6, 0xA7)));
             Add("午", () => _vm.SetCell(empIdx, dayIdx, ShiftCodes.Half), new SolidColorBrush(Color.FromRgb(0xFF, 0xF9, 0xC4)));
 

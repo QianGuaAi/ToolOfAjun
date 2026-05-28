@@ -1464,17 +1464,19 @@ namespace MyTools.ViewModels
                     }
                 }
 
-                if (specialCodes.Count >= 2)
+                var duplicateSpecialGroups = specialCodes
+                    .GroupBy(code => code)
+                    .Select(group => new { Code = group.Key, Count = group.Count() })
+                    .Where(group => group.Count >= 2)
+                    .OrderBy(group => SpecialWarningShiftOrder(group.Code));
+
+                foreach (var group in duplicateSpecialGroups)
                 {
-                    var detail = string.Join("、", specialCodes
-                        .GroupBy(code => code)
-                        .OrderBy(group => SpecialWarningShiftOrder(group.Key))
-                        .Select(group => group.Key + group.Count() + "次"));
                     yield return new ScheduleConflictItem
                     {
                         Level = "低",
-                        Title = $"{day + 1} 日副/卡/感合计 {specialCodes.Count} 次",
-                        Detail = $"副、卡、感任意一项每出现一次计 1 次（{detail}），建议低优先级调整。",
+                        Title = $"{day + 1} 日{group.Code}重复 {group.Count} 次",
+                        Detail = $"同一列中“{group.Code}”出现 {group.Count} 次；副、卡、感混合出现但各自未达到 2 次时不警告。",
                         Category = "特殊班次",
                         DayIndex = day
                     };
@@ -1582,31 +1584,6 @@ namespace MyTools.ViewModels
                     });
                 }
 
-                // 规则：同一天"副"+"卡"+"感"同时出现次数 >= 2 时警告
-                int specialCount = 0;
-                foreach (var emp in Current.Employees)
-                {
-                    if (string.IsNullOrWhiteSpace(emp?.Name)) continue;
-                    if (day < emp.Cells.Count)
-                    {
-                        var code = ShiftCodes.Normalize(emp.Cells[day].Code);
-                        if (code == ShiftCodes.Deputy || code == ShiftCodes.Card || code == ShiftCodes.Infect)
-                        {
-                            specialCount++;
-                        }
-                    }
-                }
-                if (specialCount >= 2)
-                {
-                    AddScheduleConflict(new ScheduleConflictItem
-                    {
-                        Level = "高",
-                        Title = $"{day + 1} 日副/卡/感同天 ≥ 2 人",
-                        Detail = $"副+卡+感 共 {specialCount} 人同时排班，疑似重复安排。",
-                        Category = "特殊班次",
-                        DayIndex = day
-                    });
-                }
             }
 
             for (var empIndex = 0; empIndex < Current.Employees.Count; empIndex++)

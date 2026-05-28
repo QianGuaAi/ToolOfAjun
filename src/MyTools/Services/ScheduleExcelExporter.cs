@@ -15,7 +15,7 @@ namespace MyTools.Services
     /// 把排班表导出为带样式的 .xlsx。
     /// 不依赖 Office / OpenXML SDK，自行写 OOXML 包。
     /// 样式保持与 SchedulePage 视觉一致：
-    /// - 周末 / 节假日列：表头淡橙底
+    /// - 周末 / 节假日列：整列浅蓝底
     /// - 班次单元格：按 ShiftCodes 上色（夜/小用深底白字）
     /// - 姓名列、统计列：粗体居中
     /// - 全表四向细边框
@@ -24,21 +24,21 @@ namespace MyTools.Services
     {
         // 颜色（RRGGBB）
         private const string HeaderBg = "F1F5F9";
-        private const string HolidayBg = "FEF3C7";
+        private const string HolidayBg = "DBEAFE";
         private const string CellBorder = "E2E8F0";
         private const string White = "FFFFFF";
-        private const string EmptyHolidayBg = "FFFBEB";
+        private const string EmptyHolidayBg = "DBEAFE";
 
         // Shift code → (bg, fg)
         private static readonly Dictionary<string, (string bg, string fg)> ShiftColors = new Dictionary<string, (string, string)>
         {
             { "白", (White, "000000") },
-            { "卡", ("E0E7FF", "000000") },
-            { "副", ("C0F0FC", "000000") },
+            { "卡", ("FBCFE8", "000000") },
+            { "副", ("991B1B", White) },
             { "感", ("FEE2E2", "000000") },
             { "大", ("1E293B", White) },
             { "小", ("475569", White) },
-            { "休", ("D1FAE5", "000000") },
+            { "休", ("FDECC8", "000000") },
             { "公", ("A7F3D0", "000000") },
             { "午", ("FEF3C7", "000000") },
         };
@@ -202,10 +202,25 @@ namespace MyTools.Services
                     string styleKey;
                     string displayText;
 
-                    if (code == "白")
+                    if (code == ShiftCodes.Rest)
                     {
-                        // 节假日列白格子用浅蓝底+无字；非节假日列用白底+无字
-                        styleKey = holiday ? "holidayDayCell" : "empty";
+                        styleKey = "shift_" + code;
+                        displayText = DisplayShiftCode(code);
+                    }
+                    else if (code == ShiftCodes.Card || code == ShiftCodes.Deputy)
+                    {
+                        styleKey = "shift_" + code;
+                        displayText = DisplayShiftCode(code);
+                    }
+                    else if (holiday)
+                    {
+                        styleKey = "holidayDayCell";
+                        displayText = code == ShiftCodes.Day ? "" :
+                            (!string.IsNullOrEmpty(code) && ShiftColors.ContainsKey(code) ? DisplayShiftCode(code) : "");
+                    }
+                    else if (code == ShiftCodes.Day)
+                    {
+                        styleKey = "empty";
                         displayText = "";
                     }
                     else if (!string.IsNullOrEmpty(code) && ShiftColors.ContainsKey(code))
@@ -215,7 +230,7 @@ namespace MyTools.Services
                     }
                     else
                     {
-                        styleKey = holiday ? "emptyHoliday" : "empty";
+                        styleKey = "empty";
                         displayText = "";
                     }
                     WriteStr(w, Cell(2 + d, rowIdx), displayText, styles.S(styleKey));
