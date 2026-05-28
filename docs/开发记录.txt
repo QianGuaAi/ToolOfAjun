@@ -1,5 +1,17 @@
 # 开发记录
 
+## [2026-05-28] 排班特殊班次警告与节假日底色修正
+- `ScheduleViewModel` 将“副 / 卡 / 感”日级警告提前到低优先级警告首位，并明确三类任意一项每出现一次计 1 次，合计 2 次及以上即提示。
+- `SchedulePage` 将周末/节假日表头和班次格底色改为蓝绿色，节假日班次文字统一使用黑色保证可读性。
+- 同步修正排班界面统计和 Excel 导出中残留的 8 天休息判断为 9 天。
+- 验证：`dotnet build src\MyTools\MyTools.csproj -c Release -p:OutputPath=c:\ToolOfAjun\output\buildcheck\MyTools\` 通过，0 警告 0 错误。
+
+## [2026-05-28] 排班新增 9 天总休硬约束和低优先级警告
+- `ShiftAutoOptimizer` 将每人每月总休目标从 8 天调整为 9 天，并纳入最终硬约束校验。
+- `ScheduleViewModel` 将休息不足升级为高优先级冲突，少于 9 天时阻止无警告结果通过。
+- 冲突侧栏新增低优先级警告：单天休、上一天夹在休息日之间，以及同一天“副 / 卡 / 感”合计 2 次及以上。
+- 验证：`dotnet build src\MyTools\MyTools.csproj -c Release -p:OutputPath=c:\ToolOfAjun\output\buildcheck\MyTools\` 通过，0 警告 0 错误。
+
 ## [2026-05-26] Release 重新编译并打包安装程序
 - 重新执行 `dotnet build src\MyTools\MyTools.csproj -c Release --no-incremental`，主程序输出到 `src\MyTools\bin\Release\net48\MyTools.exe`。
 - 通过 `scripts\Build-Installer.ps1` 重新构建主程序、卸载器和安装器。

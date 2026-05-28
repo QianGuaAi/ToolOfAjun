@@ -124,6 +124,7 @@ namespace MyTools.ViewModels
         public ObservableCollection<ScheduleWeekRestItem> WeeklyRestStats { get; } = new ObservableCollection<ScheduleWeekRestItem>();
         private const int MaxVisibleScheduleConflicts = 300;
         private const int MaxWarningFreeOptimizeAttempts = 99;
+        private const int MinMonthlyRestDays = 9;
         private int _scheduleConflictTotalCount;
         private bool _requireWarningFreeSchedule;
         private bool _isAutoOptimizeWaiting;
@@ -895,13 +896,16 @@ namespace MyTools.ViewModels
                 }
 
                 var rest = employee.Cells == null ? 0 : employee.Cells.Sum(cell => ShiftCodes.RestDays(cell.Code));
-                if (rest < 8)
+                if (rest < MinMonthlyRestDays)
                 {
-                    return $"{employee.Name} 本月休息 {FormatNumber(rest)} 天，低于 8 天。";
+                    return $"{employee.Name} 本月休息 {FormatNumber(rest)} 天，低于硬性要求 {MinMonthlyRestDays} 天。";
                 }
             }
 
-            return string.Empty;
+            var softIssue = BuildLowPriorityScheduleWarnings(schedule)
+                .Select(item => string.IsNullOrWhiteSpace(item.Detail) ? item.Title : item.Title + "：" + item.Detail)
+                .FirstOrDefault();
+            return softIssue ?? string.Empty;
         }
 
         private static ScheduleVersion CloneScheduleVersion(ScheduleVersion source)
@@ -1382,6 +1386,12 @@ namespace MyTools.ViewModels
                 {
                     yield return $"{employee.Name} 连续上班 {maxRun} 天，超过 5 天上限";
                 }
+
+                var rest = employee.Cells == null ? 0 : employee.Cells.Sum(cell => ShiftCodes.RestDays(cell.Code));
+                if (rest < MinMonthlyRestDays)
+                {
+                    yield return $"{employee.Name} 本月休息 {FormatNumber(rest)} 天，低于硬性要求 {MinMonthlyRestDays} 天";
+                }
             }
         }
 
@@ -1431,6 +1441,103 @@ namespace MyTools.ViewModels
             }
 
             return maxRun;
+        }
+
+        private static IEnumerable<ScheduleConflictItem> BuildLowPriorityScheduleWarnings(ScheduleVersion schedule)
+        {
+            if (schedule == null)
+            {
+                yield break;
+            }
+
+            NormalizeScheduleRows(schedule);
+            for (var day = 0; day < schedule.DayCount; day++)
+            {
+                var specialCodes = new List<string>();
+                foreach (var employee in schedule.Employees)
+                {
+                    if (string.IsNullOrWhiteSpace(employee?.Name) || employee.Cells == null || day >= employee.Cells.Count) continue;
+                    var code = ShiftCodes.Normalize(employee.Cells[day].Code);
+                    if (IsSpecialWarningShift(code))
+                    {
+                        specialCodes.Add(code);
+                    }
+                }
+
+                if (specialCodes.Count >= 2)
+                {
+                    var detail = string.Join("、", specialCodes
+                        .GroupBy(code => code)
+                        .OrderBy(group => SpecialWarningShiftOrder(group.Key))
+                        .Select(group => group.Key + group.Count() + "次"));
+                    yield return new ScheduleConflictItem
+                    {
+                        Level = "低",
+                        Title = $"{day + 1} 日副/卡/感合计 {specialCodes.Count} 次",
+                        Detail = $"副、卡、感任意一项每出现一次计 1 次（{detail}），建议低优先级调整。",
+                        Category = "特殊班次",
+                        DayIndex = day
+                    };
+                }
+            }
+
+            for (var empIndex = 0; empIndex < schedule.Employees.Count; empIndex++)
+            {
+                var employee = schedule.Employees[empIndex];
+                if (string.IsNullOrWhiteSpace(employee?.Name)) continue;
+                for (var day = 0; day < schedule.DayCount; day++)
+                {
+                    if (IsFullRest(employee, day) && !IsFullRest(employee, day - 1) && !IsFullRest(employee, day + 1))
+                    {
+                        yield return new ScheduleConflictItem
+                        {
+                            Level = "低",
+                            Title = $"{employee.Name} {day + 1} 日单天休",
+                            Detail = "建议将休息日尽量安排为连续 2 天或以上。",
+                            Category = "休息连续性",
+                            EmployeeIndex = empIndex,
+                            DayIndex = day
+                        };
+                    }
+
+                    if (ShiftCodes.IsWork(employee.Cells[day].Code) && IsFullRest(employee, day - 1) && IsFullRest(employee, day + 1))
+                    {
+                        yield return new ScheduleConflictItem
+                        {
+                            Level = "低",
+                            Title = $"{employee.Name} {day + 1} 日上一天夹在休息日之间",
+                            Detail = "建议尽量避免上一天休一天的节奏。",
+                            Category = "休息连续性",
+                            EmployeeIndex = empIndex,
+                            DayIndex = day
+                        };
+                    }
+                }
+            }
+        }
+
+        private static bool IsFullRest(EmployeeRow employee, int day)
+        {
+            return employee != null
+                && employee.Cells != null
+                && day >= 0
+                && day < employee.Cells.Count
+                && ShiftCodes.RestDays(employee.Cells[day].Code) >= 1.0;
+        }
+
+        private static bool IsSpecialWarningShift(string code)
+        {
+            code = ShiftCodes.Normalize(code);
+            return code == ShiftCodes.Deputy || code == ShiftCodes.Card || code == ShiftCodes.Infect;
+        }
+
+        private static int SpecialWarningShiftOrder(string code)
+        {
+            code = ShiftCodes.Normalize(code);
+            if (code == ShiftCodes.Deputy) return 0;
+            if (code == ShiftCodes.Card) return 1;
+            if (code == ShiftCodes.Infect) return 2;
+            return 3;
         }
 
         private void RefreshScheduleConflicts()
@@ -1519,16 +1626,22 @@ namespace MyTools.ViewModels
                     });
                 }
 
-                if (stats.rest < 8)
+                if (stats.rest < MinMonthlyRestDays)
                 {
                     AddScheduleConflict(new ScheduleConflictItem
                     {
-                        Level = "中",
+                        Level = "高",
                         Title = $"{employee.Name} 休息不足",
-                        Detail = $"本月休息 {FormatNumber(stats.rest)} 天，低于 8 天。",
-                        Category = "人员休息"
+                        Detail = $"本月休息 {FormatNumber(stats.rest)} 天，低于硬性要求 {MinMonthlyRestDays} 天。",
+                        Category = "人员休息",
+                        EmployeeIndex = empIndex
                     });
                 }
+            }
+
+            foreach (var warning in BuildLowPriorityScheduleWarnings(Current))
+            {
+                AddScheduleConflict(warning);
             }
 
             OnPropertyChanged(nameof(HasScheduleConflicts));

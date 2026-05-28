@@ -45,9 +45,9 @@ namespace MyTools.Views
         private const int EmployeeRowOverscan = 12; // Increased for smoother scrolling on large rosters (perf optimization)
         private static readonly string[] DowZh = { "日", "一", "二", "三", "四", "五", "六" };
         private static readonly Brush HeaderBg = FrozenBrush(0xF1, 0xF5, 0xF9);
-        private static readonly Brush HolidayHeaderBg = FrozenBrush(0xFE, 0xF3, 0xC7);
+        private static readonly Brush HolidayHeaderBg = FrozenBrush(0x99, 0xF6, 0xE4);
         private static readonly Brush QuotaMismatchBg = FrozenBrush(0xFE, 0xE2, 0xE2);
-        private static readonly Brush EmptyHolidayBg = FrozenBrush(0xFF, 0xFB, 0xEB);
+        private static readonly Brush EmptyHolidayBg = FrozenBrush(0xCC, 0xFB, 0xF1);
         private static readonly Brush BorderBg = FrozenBrush(0xE2, 0xE8, 0xF0);
         private static readonly Brush CellDayBg = FrozenBrush(0xFF, 0xFF, 0xFF);
         private static readonly Brush CellCardBg = FrozenBrush(0xE0, 0xE7, 0xFF);
@@ -546,7 +546,7 @@ namespace MyTools.Views
                     Content = DisplayCellCode(cell.Code),
                     Style = (Style)FindResource("ScheduleCellButton"),
                     Background = ResolveCellBg(cell, _holidayByDay != null && day < _holidayByDay.Length && _holidayByDay[day]),
-                    Foreground = ResolveCellFg(cell),
+                    Foreground = ResolveCellFg(cell, _holidayByDay != null && day < _holidayByDay.Length && _holidayByDay[day]),
                     IsEnabled = true,
                     Tag = (empIdx, day),
                     FontWeight = cell.IsManual ? FontWeights.Bold : FontWeights.Normal,
@@ -565,7 +565,7 @@ namespace MyTools.Views
             AddEmployeeElement(workTb);
             var restTb = MakeStatCell(stats.rest.ToString(stats.rest % 1 == 0 ? "0" : "0.#", CultureInfo.InvariantCulture), row, 2 + days);
             _restStatTexts[employeeIndex] = GetBorderText(restTb);
-            if (stats.rest < 8) _restStatTexts[employeeIndex].Foreground = Brushes.Crimson;
+            if (stats.rest < 9) _restStatTexts[employeeIndex].Foreground = Brushes.Crimson;
             AddEmployeeElement(restTb);
             var runTb = MakeStatCell(stats.maxRun.ToString(), row, 3 + days);
             _runStatTexts[employeeIndex] = GetBorderText(runTb);
@@ -682,7 +682,7 @@ namespace MyTools.Views
                                         (_focusedEmployeeIndex < 0 || empIdx == _focusedEmployeeIndex);
                     button.Content = DisplayCellCode(cell.Code);
                     button.Background = ResolveCellBg(cell, _holidayByDay != null && day < _holidayByDay.Length && _holidayByDay[day]);
-                    button.Foreground = ResolveCellFg(cell);
+                    button.Foreground = ResolveCellFg(cell, _holidayByDay != null && day < _holidayByDay.Length && _holidayByDay[day]);
                     button.Cursor = Cursors.Hand;
                     button.IsEnabled = true;
                     button.FontWeight = cell.IsManual ? FontWeights.Bold : FontWeights.Normal;
@@ -693,7 +693,7 @@ namespace MyTools.Views
 
                 var stats = _vm.ComputeRowStats(empIdx);
                 SetStatText(_workStatTexts, empIdx, stats.work);
-                SetStatText(_restStatTexts, empIdx, stats.rest, stats.rest < 8);
+                SetStatText(_restStatTexts, empIdx, stats.rest, stats.rest < 9);
                 if (_runStatTexts != null && _runStatTexts[empIdx] != null)
                 {
                     _runStatTexts[empIdx].Text = stats.maxRun.ToString(CultureInfo.InvariantCulture);
@@ -721,9 +721,9 @@ namespace MyTools.Views
         private static Brush ResolveCellBg(ShiftCell cell, bool isHoliday)
         {
             var code = ShiftCodes.Normalize(cell?.Code);
+            if (isHoliday) return EmptyHolidayBg;
             if (string.IsNullOrEmpty(code))
             {
-                if (isHoliday) return EmptyHolidayBg;
                 return Brushes.White;
             }
             switch (code)
@@ -741,8 +741,9 @@ namespace MyTools.Views
             }
         }
 
-        private static Brush ResolveCellFg(ShiftCell cell)
+        private static Brush ResolveCellFg(ShiftCell cell, bool isHoliday)
         {
+            if (isHoliday) return Brushes.Black;
             var code = ShiftCodes.Normalize(cell?.Code);
             switch (code)
             {
