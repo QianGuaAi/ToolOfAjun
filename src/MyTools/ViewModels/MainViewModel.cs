@@ -52,7 +52,7 @@ namespace MyTools.ViewModels
         private string _homeCommandSearchText = string.Empty;
         private ObservableCollection<ScreenshotHistoryItem> _screenshotHistoryItems;
         private string _currentModule;
-        private string _currentSystemSection = "Network";
+        private string _currentSystemSection = "Startup";
         private int _selectedSystemSectionIndex;
         private ScheduleViewModel _schedule;
         private SystemSettingsViewModel _systemSettings;
@@ -345,7 +345,7 @@ namespace MyTools.ViewModels
             ShowHomeCommand = new RelayCommand(() => SwitchModule("Home"));
             ShowNetworkCommand = new RelayCommand(() => ShowSystemSection("Network"));
             ShowStartupCommand = new RelayCommand(() => ShowSystemSection("Startup"));
-            ShowSystemCommand = new RelayCommand(() => ShowSystemSection("Network"));
+            ShowSystemCommand = new RelayCommand(() => ShowSystemSection("Startup"));
             ShowUninstallCommand = new RelayCommand(() => ShowSystemSection("Uninstall"));
             ShowSqlExportCommand = new RelayCommand(() => { SwitchModule("SqlExport"); Refresh(); });
             ShowFrpCommand = new RelayCommand(() => SwitchModule("Frp"));
@@ -2805,7 +2805,7 @@ namespace MyTools.ViewModels
         private static string NormalizeSystemSection(string section)
         {
             if (SystemSectionKeys.Contains(section)) return section;
-            return "Network";
+            return "Startup";
         }
 
         private string BuildCurrentNavigationText()
@@ -2827,7 +2827,7 @@ namespace MyTools.ViewModels
                     case "SystemSettings":
                         return "系统 / 系统设置";
                     default:
-                        return "系统 / 当前网络";
+                        return "系统 / 启动管理";
                 }
             }
 
