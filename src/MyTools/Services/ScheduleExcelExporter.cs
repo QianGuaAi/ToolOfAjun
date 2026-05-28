@@ -23,24 +23,28 @@ namespace MyTools.Services
     public static class ScheduleExcelExporter
     {
         // 颜色（RRGGBB）
-        private const string HeaderBg = "F1F3F6";
-        private const string HolidayBg = "FFF4E6";
-        private const string CellBorder = "BDBDBD";
+        private const string HeaderBg = "F1F5F9";
+        private const string HolidayBg = "FEF3C7";
+        private const string CellBorder = "E2E8F0";
         private const string White = "FFFFFF";
+        private const string EmptyHolidayBg = "FFFBEB";
 
-        // Shift code → 填充色 + 字体色
+        // Shift code → (bg, fg)
         private static readonly Dictionary<string, (string bg, string fg)> ShiftColors = new Dictionary<string, (string, string)>
         {
-            { "白", ("E3F2FD", "000000") },
-            { "卡", ("E8EAF6", "000000") },
-            { "副", ("E0F7FA", "000000") },
-            { "感", ("FFEBEE", "000000") },
-            { "大", ("37474F", White) },
-            { "小", ("78909C", White) },
-            { "休", ("C8E6C9", "000000") },
-            { "公", ("A5D6A7", "000000") },
-            { "午", ("FFF9C4", "000000") },
+            { "白", (White, "000000") },
+            { "卡", ("E0E7FF", "000000") },
+            { "副", ("C0F0FC", "000000") },
+            { "感", ("FEE2E2", "000000") },
+            { "大", ("1E293B", White) },
+            { "小", ("475569", White) },
+            { "休", ("D1FAE5", "000000") },
+            { "公", ("A7F3D0", "000000") },
+            { "午", ("FEF3C7", "000000") },
         };
+
+        // 节假日列"白"格子的蓝底
+        private const string HolidayDayBg = "DBEAFE";
 
         private static readonly string[] DowZh = { "日", "一", "二", "三", "四", "五", "六" };
 
@@ -196,11 +200,25 @@ namespace MyTools.Services
                     var date = sched.DateOf(d);
                     var holiday = HolidayService.IsHoliday(date);
                     string styleKey;
-                    if (!string.IsNullOrEmpty(code) && ShiftColors.ContainsKey(code))
+                    string displayText;
+
+                    if (code == "白")
+                    {
+                        // 节假日列白格子用浅蓝底+无字；非节假日列用白底+无字
+                        styleKey = holiday ? "holidayDayCell" : "empty";
+                        displayText = "";
+                    }
+                    else if (!string.IsNullOrEmpty(code) && ShiftColors.ContainsKey(code))
+                    {
                         styleKey = "shift_" + code;
+                        displayText = DisplayShiftCode(code);
+                    }
                     else
+                    {
                         styleKey = holiday ? "emptyHoliday" : "empty";
-                    WriteStr(w, Cell(2 + d, rowIdx), DisplayShiftCode(code), styles.S(styleKey));
+                        displayText = "";
+                    }
+                    WriteStr(w, Cell(2 + d, rowIdx), displayText, styles.S(styleKey));
 
                     work += ShiftCodes.WorkDays(code);
                     rest += ShiftCodes.RestDays(code);
@@ -369,7 +387,8 @@ namespace MyTools.Services
                     // 字体：白底用黑字、深底用白字
                     shiftFontIdx[kv.Key] = string.Equals(kv.Value.fg, White, StringComparison.OrdinalIgnoreCase) ? FONT_BOLD_WHITE : FONT_BOLD;
                 }
-                int fillEmptyHoliday = FillSolid("FFF8F0");
+                int fillEmptyHoliday = FillSolid(EmptyHolidayBg);
+                int fillHolidayDay = FillSolid(HolidayDayBg);
 
                 // 边框：1=四向细边
                 const int BORDER_THIN = 1;
@@ -394,6 +413,7 @@ namespace MyTools.Services
                 t._keyToIndex["name"] = RegisterXf(FONT_BOLD, fillHeader, BORDER_THIN, CenterAlign);
                 t._keyToIndex["empty"] = RegisterXf(FONT_REG, 0, BORDER_THIN, CenterAlign);
                 t._keyToIndex["emptyHoliday"] = RegisterXf(FONT_REG, fillEmptyHoliday, BORDER_THIN, CenterAlign);
+                t._keyToIndex["holidayDayCell"] = RegisterXf(FONT_REG, fillHolidayDay, BORDER_THIN, CenterAlign);
                 t._keyToIndex["stat"] = RegisterXf(FONT_BOLD, 0, BORDER_THIN, CenterAlign);
                 t._keyToIndex["statGood"] = RegisterXf(FONT_BOLD, fillEmptyHoliday, BORDER_THIN, CenterAlign);
                 t._keyToIndex["statBad"] = RegisterXf(FONT_BOLD_RED, 0, BORDER_THIN, CenterAlign);

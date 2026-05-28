@@ -1474,6 +1474,32 @@ namespace MyTools.ViewModels
                         DayIndex = day
                     });
                 }
+
+                // 规则：同一天"副"+"卡"+"感"同时出现次数 >= 2 时警告
+                int specialCount = 0;
+                foreach (var emp in Current.Employees)
+                {
+                    if (string.IsNullOrWhiteSpace(emp?.Name)) continue;
+                    if (day < emp.Cells.Count)
+                    {
+                        var code = ShiftCodes.Normalize(emp.Cells[day].Code);
+                        if (code == ShiftCodes.Deputy || code == ShiftCodes.Card || code == ShiftCodes.Infect)
+                        {
+                            specialCount++;
+                        }
+                    }
+                }
+                if (specialCount >= 2)
+                {
+                    AddScheduleConflict(new ScheduleConflictItem
+                    {
+                        Level = "高",
+                        Title = $"{day + 1} 日副/卡/感同天 ≥ 2 人",
+                        Detail = $"副+卡+感 共 {specialCount} 人同时排班，疑似重复安排。",
+                        Category = "特殊班次",
+                        DayIndex = day
+                    });
+                }
             }
 
             for (var empIndex = 0; empIndex < Current.Employees.Count; empIndex++)

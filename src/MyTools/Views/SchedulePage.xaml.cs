@@ -49,7 +49,7 @@ namespace MyTools.Views
         private static readonly Brush QuotaMismatchBg = FrozenBrush(0xFE, 0xE2, 0xE2);
         private static readonly Brush EmptyHolidayBg = FrozenBrush(0xFF, 0xFB, 0xEB);
         private static readonly Brush BorderBg = FrozenBrush(0xE2, 0xE8, 0xF0);
-        private static readonly Brush CellDayBg = FrozenBrush(0xDB, 0xEA, 0xFE);
+        private static readonly Brush CellDayBg = FrozenBrush(0xFF, 0xFF, 0xFF);
         private static readonly Brush CellCardBg = FrozenBrush(0xE0, 0xE7, 0xFF);
         private static readonly Brush CellDeputyBg = FrozenBrush(0xC0, 0xF0, 0xFC);
         private static readonly Brush CellInfectBg = FrozenBrush(0xFE, 0xE2, 0xE2);
@@ -728,8 +728,8 @@ namespace MyTools.Views
             }
             switch (code)
             {
-                case "白": return CellDayBg;
-                case "卡": return CellCardBg;
+                case "白": return isHoliday ? CellDayBg : Brushes.White;
+                case "卡": return isHoliday ? CellCardBg : Brushes.White;
                 case "副": return CellDeputyBg;
                 case "感": return CellInfectBg;
                 case "大": return CellBigBg;
@@ -757,6 +757,7 @@ namespace MyTools.Views
         {
             code = ShiftCodes.Normalize(code);
             if (string.IsNullOrEmpty(code)) return "·";
+            if (code == ShiftCodes.Day) return "";
             return code == ShiftCodes.Big ? "大" : code;
         }
 
@@ -920,7 +921,7 @@ namespace MyTools.Views
                 panel.Children.Add(b);
             }
 
-            Add("白", () => _vm.SetCell(empIdx, dayIdx, ShiftCodes.Day), new SolidColorBrush(Color.FromRgb(0xE3, 0xF2, 0xFD)));
+            Add("白", () => _vm.SetCell(empIdx, dayIdx, ShiftCodes.Day), Brushes.White);
             Add("卡", () => _vm.SetCell(empIdx, dayIdx, ShiftCodes.Card), new SolidColorBrush(Color.FromRgb(0xE8, 0xEA, 0xF6)));
             Add("副", () => _vm.SetCell(empIdx, dayIdx, ShiftCodes.Deputy), new SolidColorBrush(Color.FromRgb(0xE0, 0xF7, 0xFA)));
             Add("感", () => _vm.SetCell(empIdx, dayIdx, ShiftCodes.Infect), new SolidColorBrush(Color.FromRgb(0xFF, 0xEB, 0xEE)));

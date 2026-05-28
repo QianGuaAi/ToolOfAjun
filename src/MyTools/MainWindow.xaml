@@ -36,17 +36,11 @@
                                FontWeight="SemiBold"
                                HorizontalAlignment="Center"
                                Margin="0,0,0,8" />
-                    <TextBlock Text="选择顶部菜单或下方入口开始使用"
+                    <TextBlock Text="通过顶部菜单选择功能模块"
                                Foreground="{StaticResource ShellCaptionBrush}"
                                FontSize="13"
                                HorizontalAlignment="Center"
                                Margin="0,0,0,18" />
-                    <UniformGrid Rows="2" Columns="2">
-                        <Button Content="多媒体" Command="{Binding ShowMultimediaCommand}" Height="42" Margin="6" />
-                        <Button Content="系统工具" Command="{Binding ShowSystemCommand}" Height="42" Margin="6" />
-                        <Button Content="SQL 导出" Command="{Binding ShowSqlExportCommand}" Height="42" Margin="6" />
-                        <Button Content="截图工具" Command="{Binding ShowScreenshotCommand}" Height="42" Margin="6" />
-                    </UniformGrid>
                 </StackPanel>
             </Grid>
         </DataTemplate>
@@ -77,6 +71,9 @@
                     <MenuItem Header="系统设置(_G)" Command="{Binding ShowSystemSettingsCommand}" Style="{StaticResource TopMenuItem}" />
                 </MenuItem>
                 <MenuItem Header="工具(_T)" Style="{StaticResource TopMenuItem}">
+                    <MenuItem Header="多媒体(_M)" Command="{Binding ShowMultimediaCommand}" Style="{StaticResource TopMenuItem}" />
+                    <MenuItem Header="截图工具(_S)" Command="{Binding ShowScreenshotCommand}" Style="{StaticResource TopMenuItem}" />
+                    <Separator />
                     <MenuItem Header="SQL 导出(_Q)" Command="{Binding ShowSqlExportCommand}" Style="{StaticResource TopMenuItem}" />
                     <MenuItem Header="FRP 穿透(_F)" Command="{Binding ShowFrpCommand}" Style="{StaticResource TopMenuItem}" />
                     <MenuItem Header="Codex 配置(_C)" Command="{Binding ShowCodexProfilesCommand}" Style="{StaticResource TopMenuItem}" />
@@ -87,7 +84,14 @@
                     <MenuItem Header="截图工具(_S)" Command="{Binding ShowScreenshotCommand}" Style="{StaticResource TopMenuItem}" />
                 </MenuItem>
                 <MenuItem Header="日程(_A)" Command="{Binding ShowScheduleCommand}" Style="{StaticResource TopMenuItem}" />
-                <MenuItem Header="设置(_P)" Command="{Binding ShowSystemSettingsCommand}" Style="{StaticResource TopMenuItem}" />
+                <MenuItem Header="设置(_P)" Style="{StaticResource TopMenuItem}">
+                    <MenuItem Header="系统优化(_O)" Command="{Binding ShowSystemCommand}" Style="{StaticResource TopMenuItem}" />
+                    <Separator />
+                    <MenuItem Header="系统信息(_I)" Command="{Binding ShowSystemInfoCommand}" Style="{StaticResource TopMenuItem}" />
+                    <MenuItem Header="性能测试(_B)" Command="{Binding ShowBenchmarkCommand}" Style="{StaticResource TopMenuItem}" />
+                    <Separator />
+                    <MenuItem Header="系统设置(_G)" Command="{Binding ShowSystemSettingsCommand}" Style="{StaticResource TopMenuItem}" />
+                </MenuItem>
                 <MenuItem Header="帮助(_H)" Style="{StaticResource TopMenuItem}">
                     <MenuItem Header="关于(_A)" Click="MenuAbout_Click" Style="{StaticResource TopMenuItem}" />
                     <Separator />

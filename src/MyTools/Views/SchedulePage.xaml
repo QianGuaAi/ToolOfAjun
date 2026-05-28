@@ -146,7 +146,7 @@
                     BorderBrush="{DynamicResource MaterialDesignDivider}" BorderThickness="0,1,0,0">
                 <WrapPanel>
                     <TextBlock Text="图例" FontSize="11" FontWeight="SemiBold" Margin="0,0,8,0" VerticalAlignment="Center" />
-                    <Border Style="{StaticResource ShiftLegendChip}" Background="#DBEAFE"><TextBlock Text="白" /></Border>
+                    <Border Style="{StaticResource ShiftLegendChip}" Background="White"><TextBlock Text="白" /></Border>
                     <Border Style="{StaticResource ShiftLegendChip}" Background="#E0E7FF"><TextBlock Text="卡" /></Border>
                     <Border Style="{StaticResource ShiftLegendChip}" Background="#CFFAFE"><TextBlock Text="副" /></Border>
                     <Border Style="{StaticResource ShiftLegendChip}" Background="#FEE2E2"><TextBlock Text="感" /></Border>

@@ -52,7 +52,7 @@ namespace MyTools.ViewModels
         private string _homeCommandSearchText = string.Empty;
         private ObservableCollection<ScreenshotHistoryItem> _screenshotHistoryItems;
         private string _currentModule;
-        private string _currentSystemSection = "Optimization";
+        private string _currentSystemSection = "Network";
         private int _selectedSystemSectionIndex;
         private ScheduleViewModel _schedule;
         private SystemSettingsViewModel _systemSettings;
@@ -345,7 +345,7 @@ namespace MyTools.ViewModels
             ShowHomeCommand = new RelayCommand(() => SwitchModule("Home"));
             ShowNetworkCommand = new RelayCommand(() => ShowSystemSection("Network"));
             ShowStartupCommand = new RelayCommand(() => ShowSystemSection("Startup"));
-            ShowSystemCommand = new RelayCommand(() => ShowSystemSection("Optimization"));
+            ShowSystemCommand = new RelayCommand(() => ShowSystemSection("Network"));
             ShowUninstallCommand = new RelayCommand(() => ShowSystemSection("Uninstall"));
             ShowSqlExportCommand = new RelayCommand(() => { SwitchModule("SqlExport"); Refresh(); });
             ShowFrpCommand = new RelayCommand(() => SwitchModule("Frp"));
@@ -2784,7 +2784,7 @@ namespace MyTools.ViewModels
             SafeFireAndForget(AddCodexProfileFoldersAsync(folderPaths));
         }
 
-        private static readonly string[] SystemSectionKeys = { "Optimization", "Network", "Startup", "Uninstall", "SystemInfo", "Benchmark", "SystemSettings" };
+        private static readonly string[] SystemSectionKeys = { "Network", "Startup", "Uninstall", "SystemInfo", "Benchmark", "SystemSettings" };
 
         private void ShowSystemSection(string section)
         {
@@ -2805,7 +2805,7 @@ namespace MyTools.ViewModels
         private static string NormalizeSystemSection(string section)
         {
             if (SystemSectionKeys.Contains(section)) return section;
-            return "Optimization";
+            return "Network";
         }
 
         private string BuildCurrentNavigationText()
@@ -2827,7 +2827,7 @@ namespace MyTools.ViewModels
                     case "SystemSettings":
                         return "系统 / 系统设置";
                     default:
-                        return "系统 / 系统优化";
+                        return "系统 / 当前网络";
                 }
             }
 

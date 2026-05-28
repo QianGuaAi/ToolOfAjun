@@ -33,7 +33,6 @@
                         Style="{StaticResource PremiumMaterialTabControl}"
                         Height="34"
                         Margin="0,0,0,8">
-                <TabItem Header="系统优化" />
                 <TabItem Header="当前网络" />
                 <TabItem Header="启动管理" />
                 <TabItem Header="程序卸载" />
