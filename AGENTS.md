@@ -68,6 +68,7 @@
 2. **高效开发**：优先编写 Service 与 ViewModel，最后打磨 UI。
 3. **分发打包**：编译 Release 时确认 Costura.Fody 已合并资源，产物为单一 `.exe`。
 4. **日志维护**：每次更新后，在 `docs/开发记录.txt` 中按 `## [YYYY-MM-DD] 标题` 格式追加修改点。
+5. **模块逻辑同步**：功能模块有变动时，须同步更新 `docs/程序逻辑.md` 中对应的描述（新增功能增加章节，删除功能移除章节，逻辑变更在原章节内更新）。
 
 ## 七、现有功能模块
 - **WireGuard 连接**：`WireGuardService` 调用本地/系统 `wireguard.exe`，通过 `installtunnelservice` / `uninstalltunnelservice` 控制隧道，结合网卡状态判断连通性。

@@ -31,7 +31,6 @@ namespace MyTools.ViewModels
         public ScheduleViewModel()
         {
             NewCommand = new RelayCommand(NewSchedule);
-            EditCommand = new RelayCommand(ToggleEditMode, () => Current != null);
             SaveCommand = new AsyncRelayCommand(SaveAsync, () => Current != null);
             SaveAsCommand = new AsyncRelayCommand(SaveAsAsync, () => Current != null);
             DeleteVersionCommand = new RelayParameterCommand(DeleteVersion);
@@ -67,13 +66,6 @@ namespace MyTools.ViewModels
             private set
             {
                 _current = value;
-                var shouldEdit = _current != null;
-                if (_isEditing != shouldEdit)
-                {
-                    _isEditing = shouldEdit;
-                    OnPropertyChanged(nameof(IsEditing));
-                    OnPropertyChanged(nameof(EditButtonLabel));
-                }
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(HasCurrent));
                 OnPropertyChanged(nameof(HasEmployees));
@@ -94,25 +86,6 @@ namespace MyTools.ViewModels
             ? "排班"
             : $"{_current.Year}-{_current.Month:00} · {_current.VersionName}";
 
-        // ============================ Edit mode ============================
-        private bool _isEditing;
-        public bool IsEditing
-        {
-            get => _isEditing;
-            private set
-            {
-                if (_isEditing == value) return;
-                _isEditing = value;
-                OnPropertyChanged();
-                OnPropertyChanged(nameof(HeaderTitle));
-                OnPropertyChanged(nameof(EditButtonLabel));
-                ScheduleStructureChanged?.Invoke(this, EventArgs.Empty);
-                CommandManager.InvalidateRequerySuggested();
-            }
-        }
-
-        public string EditButtonLabel => IsEditing ? "退出编辑" : "编辑";
-
         private string _statusMessage = "尚未加载排班表，点击【新建】开始。";
         public string StatusMessage
         {
@@ -127,6 +100,7 @@ namespace MyTools.ViewModels
         private const int MinMonthlyRestDays = 9;
         private int _scheduleConflictTotalCount;
         private bool _requireWarningFreeSchedule;
+        private bool _showSoftWarnings = true;
         private bool _isAutoOptimizeWaiting;
         private int _autoOptimizeAttempt;
         private int _autoOptimizeMaxAttempts = MaxWarningFreeOptimizeAttempts;
@@ -150,6 +124,18 @@ namespace MyTools.ViewModels
                 if (_requireWarningFreeSchedule == value) return;
                 _requireWarningFreeSchedule = value;
                 OnPropertyChanged();
+            }
+        }
+
+        public bool ShowSoftWarnings
+        {
+            get => _showSoftWarnings;
+            set
+            {
+                if (_showSoftWarnings == value) return;
+                _showSoftWarnings = value;
+                OnPropertyChanged();
+                RefreshScheduleConflicts();
             }
         }
 
@@ -238,7 +224,6 @@ namespace MyTools.ViewModels
 
         // ============================ Commands ============================
         public ICommand NewCommand { get; }
-        public ICommand EditCommand { get; }
         public ICommand SaveCommand { get; }
         public ICommand SaveAsCommand { get; }
         public ICommand DeleteVersionCommand { get; }
@@ -527,10 +512,9 @@ namespace MyTools.ViewModels
 
                 var sched = await ScheduleService.CreateNewAsync(year, month, versionName).ConfigureAwait(true);
                 Current = sched;
-                IsEditing = true;
                 StatusMessage = sched.Employees.Count == 0
                     ? $"已新建 {year}-{month:00}/{versionName}（请先添加人员）。"
-                    : $"已新建 {year}-{month:00}/{versionName}，复制了 {sched.Employees.Count} 位人员，可直接编辑。";
+                    : $"已新建 {year}-{month:00}/{versionName}，复制了 {sched.Employees.Count} 位人员。";
             }
             catch (Exception ex)
             {
@@ -554,35 +538,13 @@ namespace MyTools.ViewModels
                     return;
                 }
                 Current = sched;
-                IsEditing = true;
-                StatusMessage = $"已加载 {sched.Year}-{sched.Month:00}/{sched.VersionName}，可直接编辑。";
+                StatusMessage = $"已加载 {sched.Year}-{sched.Month:00}/{sched.VersionName}。";
             }
             catch (Exception ex)
             {
                 AppLogService.Warning("LoadVersion failed: {Msg}", ex.Message);
                 StatusMessage = "加载失败：" + ex.Message;
             }
-        }
-
-        // ============================ Edit ============================
-        private void ToggleEditMode()
-        {
-            if (Current == null) return;
-            EnterEditMode();
-        }
-
-        private void EnterEditMode()
-        {
-            if (Current == null) return;
-            IsEditing = true;
-            StatusMessage = "当前排班表可直接编辑：可单击班次格子选择班次，也可修改姓名和每日需休人数。";
-        }
-
-        private void ExitEditMode()
-        {
-            if (Current == null) return;
-            IsEditing = true;
-            StatusMessage = "当前排班表保持可编辑；如需保留修改请点击保存或另存。";
         }
 
         // ============================ Save ============================
@@ -768,14 +730,14 @@ namespace MyTools.ViewModels
             AutoOptimizeMaxAttempts = MaxWarningFreeOptimizeAttempts;
             AutoOptimizeAttempt = 0;
             AutoOptimizeProgress = 0;
-            AutoOptimizeWaitMessage = "正在生成正确的结果，请等待！";
+            AutoOptimizeWaitMessage = "正在生成合规方案，请稍候…";
             IsAutoOptimizeWaiting = true;
 
             var progress = new Progress<int>(attempt =>
             {
                 AutoOptimizeAttempt = attempt;
                 AutoOptimizeProgress = Math.Min(100, attempt * 100.0 / AutoOptimizeMaxAttempts);
-                AutoOptimizeWaitMessage = $"正在生成正确的结果，请等待！已尝试 {attempt}/{AutoOptimizeMaxAttempts} 次";
+                AutoOptimizeWaitMessage = $"正在尝试第 {attempt} 次…";
             });
 
             try
@@ -809,7 +771,7 @@ namespace MyTools.ViewModels
             finally
             {
                 IsAutoOptimizeWaiting = false;
-                AutoOptimizeWaitMessage = "正在生成正确的结果，请等待！";
+                AutoOptimizeWaitMessage = "正在生成合规方案，请稍候…";
                 AutoOptimizeProgress = 0;
             }
         }
@@ -857,10 +819,10 @@ namespace MyTools.ViewModels
                 return result.Warnings[0];
             }
 
-            return BuildFirstScheduleConflictIssue(schedule);
+            return BuildFirstHardConstraintIssue(schedule);
         }
 
-        private static string BuildFirstScheduleConflictIssue(ScheduleVersion schedule)
+        private static string BuildFirstHardConstraintIssue(ScheduleVersion schedule)
         {
             if (schedule == null)
             {
@@ -902,10 +864,7 @@ namespace MyTools.ViewModels
                 }
             }
 
-            var softIssue = BuildLowPriorityScheduleWarnings(schedule)
-                .Select(item => string.IsNullOrWhiteSpace(item.Detail) ? item.Title : item.Title + "：" + item.Detail)
-                .FirstOrDefault();
-            return softIssue ?? string.Empty;
+            return string.Empty;
         }
 
         private static ScheduleVersion CloneScheduleVersion(ScheduleVersion source)
@@ -1474,7 +1433,7 @@ namespace MyTools.ViewModels
                 {
                     yield return new ScheduleConflictItem
                     {
-                        Level = "低",
+                        Level = ConflictLevel.Soft,
                         Title = $"{day + 1} 日{group.Code}重复 {group.Count} 次",
                         Detail = $"同一列中“{group.Code}”出现 {group.Count} 次；副、卡、感混合出现但各自未达到 2 次时不警告。",
                         Category = "特殊班次",
@@ -1493,7 +1452,7 @@ namespace MyTools.ViewModels
                     {
                         yield return new ScheduleConflictItem
                         {
-                            Level = "低",
+                            Level = ConflictLevel.Soft,
                             Title = $"{employee.Name} {day + 1} 日单天休",
                             Detail = "建议将休息日尽量安排为连续 2 天或以上。",
                             Category = "休息连续性",
@@ -1506,7 +1465,7 @@ namespace MyTools.ViewModels
                     {
                         yield return new ScheduleConflictItem
                         {
-                            Level = "低",
+                            Level = ConflictLevel.Soft,
                             Title = $"{employee.Name} {day + 1} 日上一天夹在休息日之间",
                             Detail = "建议尽量避免上一天休一天的节奏。",
                             Category = "休息连续性",
@@ -1564,7 +1523,7 @@ namespace MyTools.ViewModels
                 {
                     AddScheduleConflict(new ScheduleConflictItem
                     {
-                        Level = "高",
+                        Level = ConflictLevel.Hard,
                         Title = $"{day + 1} 日总休超额",
                         Detail = $"实际 {FormatNumber(actual)} / 目标 {FormatNumber(quota)}，多 {FormatNumber(actual - quota)}。",
                         Category = "每日总休",
@@ -1576,7 +1535,7 @@ namespace MyTools.ViewModels
                     var minAllowed = MinDailyRestAllowed(quota);
                     AddScheduleConflict(new ScheduleConflictItem
                     {
-                        Level = "高",
+                        Level = ConflictLevel.Hard,
                         Title = $"{day + 1} 日总休不足",
                         Detail = $"实际 {FormatNumber(actual)} / 目标 {FormatNumber(quota)}，允许范围 {FormatNumber(minAllowed)}~{FormatNumber(quota)}，少 {FormatNumber(minAllowed - actual)}。",
                         Category = "每日总休",
@@ -1595,7 +1554,7 @@ namespace MyTools.ViewModels
                 {
                     AddScheduleConflict(new ScheduleConflictItem
                     {
-                        Level = "高",
+                        Level = ConflictLevel.Hard,
                         Title = $"{employee.Name} 连续上班 {stats.maxRun} 天",
                         Detail = "建议控制在 5 天以内。",
                         Category = "连续上班",
@@ -1607,7 +1566,7 @@ namespace MyTools.ViewModels
                 {
                     AddScheduleConflict(new ScheduleConflictItem
                     {
-                        Level = "高",
+                        Level = ConflictLevel.Hard,
                         Title = $"{employee.Name} 休息不足",
                         Detail = $"本月休息 {FormatNumber(stats.rest)} 天，低于硬性要求 {MinMonthlyRestDays} 天。",
                         Category = "人员休息",
@@ -1629,6 +1588,7 @@ namespace MyTools.ViewModels
         private void AddScheduleConflict(ScheduleConflictItem item)
         {
             _scheduleConflictTotalCount++;
+            if (item.Level == ConflictLevel.Soft && !_showSoftWarnings) return;
             if (ScheduleConflicts.Count < MaxVisibleScheduleConflicts)
             {
                 ScheduleConflicts.Add(item);
@@ -1811,9 +1771,15 @@ namespace MyTools.ViewModels
         }
     }
 
+    public enum ConflictLevel
+    {
+        Hard,
+        Soft
+    }
+
     public sealed class ScheduleConflictItem
     {
-        public string Level { get; set; }
+        public ConflictLevel Level { get; set; }
         public string Category { get; set; }
         public string Title { get; set; }
         public string Detail { get; set; }

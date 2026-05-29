@@ -9,6 +9,8 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
+        <vm:ConflictLevelToBrushConverter x:Key="LevelToBrush" />
+        <vm:ConflictLevelToTextConverter x:Key="LevelToText" />
         <Style x:Key="ToolbarButton" TargetType="Button" BasedOn="{StaticResource GhostActionButton}">
             <Setter Property="Margin" Value="0,0,6,0" />
             <Setter Property="MinWidth" Value="58" />
@@ -69,7 +71,7 @@
 
                 <TextBlock Grid.Row="2" Margin="10,6,10,10" FontSize="11" Opacity="0.7"
                            TextWrapping="Wrap"
-                           Text="双击加载；工作表加载后可直接编辑。" />
+                           Text="双击左侧版本列表加载。加载后即可直接编辑。" />
             </Grid>
         </Border>
 
@@ -96,6 +98,14 @@
                                   VerticalContentAlignment="Center"
                                   FontSize="12"
                                   ToolTip="勾选后会反复生成，直到生成结果没有冲突警告才显示到表格" />
+                        <CheckBox Content="显示软警告"
+                                  IsChecked="{Binding ShowSoftWarnings, Mode=TwoWay}"
+                                  Height="28"
+                                  Margin="0,0,8,0"
+                                  VerticalAlignment="Center"
+                                  VerticalContentAlignment="Center"
+                                  FontSize="12"
+                                  ToolTip="显示或隐藏软警告（黄色），软警告不影响合规性判定" />
                         <Button Content="清空" Style="{StaticResource ToolbarButton}"
                                 Command="{Binding ClearAllCellsCommand}" ToolTip="清空所有班次单元格，恢复为空白初始状态" />
                         <Button Content="清空随机单元" Style="{StaticResource ToolbarButton}" MinWidth="92"
@@ -259,10 +269,10 @@
                                 <StackPanel>
                                     <DockPanel Margin="0,0,0,2">
                                         <TextBlock DockPanel.Dock="Right"
-                                                   Text="{Binding Level}"
+                                                   Text="{Binding Level, Converter={StaticResource LevelToText}}"
                                                    FontSize="10"
                                                    FontWeight="SemiBold"
-                                                   Foreground="{DynamicResource BrushError}" />
+                                                   Foreground="{Binding Level, Converter={StaticResource LevelToBrush}}" />
                                         <TextBlock Text="{Binding Category}"
                                                    FontSize="10"
                                                    Opacity="0.68"
@@ -304,7 +314,7 @@
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center">
                 <StackPanel>
-                    <TextBlock Text="正在生成正确的结果，请等待！"
+                    <TextBlock Text="正在生成无警告方案，请稍候…"
                                FontSize="16"
                                FontWeight="SemiBold"
                                HorizontalAlignment="Center"
@@ -314,12 +324,17 @@
                                Opacity="0.72"
                                TextWrapping="Wrap"
                                TextAlignment="Center"
-                               Margin="0,0,0,14" />
+                               Margin="0,0,0,6" />
+                    <TextBlock HorizontalAlignment="Center"
+                               Margin="0,0,0,14"
+                               Opacity="0.6">
+                        <Run Text="已尝试 " /><Run Text="{Binding AutoOptimizeAttempt, Mode=OneWay}" /><Run Text=" / " /><Run Text="{Binding AutoOptimizeMaxAttempts, Mode=OneWay}" /><Run Text=" 次" />
+                    </TextBlock>
                     <ProgressBar Minimum="0"
                                  Maximum="100"
                                  Value="{Binding AutoOptimizeProgress, Mode=OneWay}"
                                  Height="8" />
-                    <TextBlock Text="系统正在自动尝试不同方案，成功前不会刷新表格结果。"
+                    <TextBlock Text="系统正在自动尝试不同方案，找到零警告方案后立即停止。"
                                FontSize="11"
                                Opacity="0.62"
                                TextWrapping="Wrap"
