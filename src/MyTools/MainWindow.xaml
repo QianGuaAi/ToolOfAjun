@@ -3,6 +3,7 @@
                  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                  xmlns:viewModels="clr-namespace:MyTools.ViewModels"
                  xmlns:views="clr-namespace:MyTools.Views"
+                 xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
                  Title="阿君的工具"
                  Width="1120"
                  Height="720"
@@ -21,6 +22,12 @@
     </Window.DataContext>
 
     <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Resources/Theme.xaml" />
+                <ResourceDictionary Source="Resources/Illustrations.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
         <DataTemplate x:Key="MainModulesViewTemplate">
             <views:MainModulesView />
         </DataTemplate>
@@ -43,6 +50,24 @@
                                Margin="0,0,0,18" />
                 </StackPanel>
             </Grid>
+        </DataTemplate>
+        <DataTemplate x:Key="NetworkViewTemplate">
+            <views:NetworkView />
+        </DataTemplate>
+        <DataTemplate x:Key="StartupViewTemplate">
+            <views:StartupView />
+        </DataTemplate>
+        <DataTemplate x:Key="UninstallViewTemplate">
+            <views:UninstallView />
+        </DataTemplate>
+        <DataTemplate x:Key="SystemInfoViewTemplate">
+            <views:SystemInfoView />
+        </DataTemplate>
+        <DataTemplate x:Key="BenchmarkViewTemplate">
+            <views:BenchmarkView />
+        </DataTemplate>
+        <DataTemplate x:Key="SystemSettingsViewTemplate">
+            <views:SystemSettingsPage Margin="16,12,16,16" DataContext="{Binding SystemSettings}" />
         </DataTemplate>
     </Window.Resources>
 
@@ -68,6 +93,7 @@
                     <Separator />
                     <MenuItem Header="系统信息(_I)" Command="{Binding ShowSystemInfoCommand}" Style="{StaticResource TopMenuItem}" />
                     <MenuItem Header="性能测试(_B)" Command="{Binding ShowBenchmarkCommand}" Style="{StaticResource TopMenuItem}" />
+                    <Separator />
                     <MenuItem Header="系统设置(_G)" Command="{Binding ShowSystemSettingsCommand}" Style="{StaticResource TopMenuItem}" />
                 </MenuItem>
                 <MenuItem Header="工具(_T)" Style="{StaticResource TopMenuItem}">
@@ -79,19 +105,8 @@
                     <MenuItem Header="Codex 配置(_C)" Command="{Binding ShowCodexProfilesCommand}" Style="{StaticResource TopMenuItem}" />
                     <MenuItem Header="文件验证(_V)" Command="{Binding ShowFileVerifyCommand}" Style="{StaticResource TopMenuItem}" />
                 </MenuItem>
-                <MenuItem Header="多媒体(_M)" Style="{StaticResource TopMenuItem}">
-                    <MenuItem Header="多媒体入口(_M)" Command="{Binding ShowMultimediaCommand}" Style="{StaticResource TopMenuItem}" />
-                    <MenuItem Header="截图工具(_S)" Command="{Binding ShowScreenshotCommand}" Style="{StaticResource TopMenuItem}" />
-                </MenuItem>
                 <MenuItem Header="日程(_A)" Command="{Binding ShowScheduleCommand}" Style="{StaticResource TopMenuItem}" />
-                <MenuItem Header="设置(_P)" Style="{StaticResource TopMenuItem}">
-                    <MenuItem Header="系统优化(_O)" Command="{Binding ShowSystemCommand}" Style="{StaticResource TopMenuItem}" />
-                    <Separator />
-                    <MenuItem Header="系统信息(_I)" Command="{Binding ShowSystemInfoCommand}" Style="{StaticResource TopMenuItem}" />
-                    <MenuItem Header="性能测试(_B)" Command="{Binding ShowBenchmarkCommand}" Style="{StaticResource TopMenuItem}" />
-                    <Separator />
-                    <MenuItem Header="系统设置(_G)" Command="{Binding ShowSystemSettingsCommand}" Style="{StaticResource TopMenuItem}" />
-                </MenuItem>
+                <MenuItem Header="设置(_P)" Command="{Binding ShowSystemSettingsCommand}" Style="{StaticResource TopMenuItem}" />
                 <MenuItem Header="帮助(_H)" Style="{StaticResource TopMenuItem}">
                     <MenuItem Header="关于(_A)" Click="MenuAbout_Click" Style="{StaticResource TopMenuItem}" />
                     <Separator />
@@ -99,7 +114,6 @@
                 </MenuItem>
             </Menu>
         </Border>
-
 
         <Grid Grid.Row="1" Background="{StaticResource ShellFlatBackgroundBrush}">
             <ContentControl x:Name="HomeHost" Content="{Binding}" ContentTemplate="{StaticResource HomeShellTemplate}">
@@ -120,10 +134,6 @@
                         <Setter Property="Visibility" Value="Collapsed" />
                         <Setter Property="ContentTemplate" Value="{x:Null}" />
                         <Style.Triggers>
-                            <DataTrigger Binding="{Binding CurrentModule}" Value="System">
-                                <Setter Property="Visibility" Value="Visible" />
-                                <Setter Property="ContentTemplate" Value="{StaticResource MainModulesViewTemplate}" />
-                            </DataTrigger>
                             <DataTrigger Binding="{Binding CurrentModule}" Value="SqlExport">
                                 <Setter Property="Visibility" Value="Visible" />
                                 <Setter Property="ContentTemplate" Value="{StaticResource MainModulesViewTemplate}" />
@@ -169,6 +179,94 @@
                 </ContentControl.Style>
             </ContentControl>
 
+            <!-- Independent system module panels -->
+            <ContentControl x:Name="NetworkHost" Content="{Binding}" ContentTemplate="{StaticResource NetworkViewTemplate}" Panel.ZIndex="5">
+                <ContentControl.Style>
+                    <Style TargetType="ContentControl">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding CurrentModule}" Value="Network">
+                                <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </ContentControl.Style>
+            </ContentControl>
+            <ContentControl x:Name="StartupHost" Content="{Binding}" ContentTemplate="{StaticResource StartupViewTemplate}" Panel.ZIndex="5">
+                <ContentControl.Style>
+                    <Style TargetType="ContentControl">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding CurrentModule}" Value="Startup">
+                                <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </ContentControl.Style>
+            </ContentControl>
+            <ContentControl x:Name="UninstallHost" Content="{Binding}" ContentTemplate="{StaticResource UninstallViewTemplate}" Panel.ZIndex="5">
+                <ContentControl.Style>
+                    <Style TargetType="ContentControl">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding CurrentModule}" Value="Uninstall">
+                                <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </ContentControl.Style>
+            </ContentControl>
+            <ContentControl x:Name="SystemInfoHost" Content="{Binding}" ContentTemplate="{StaticResource SystemInfoViewTemplate}" Panel.ZIndex="5">
+                <ContentControl.Style>
+                    <Style TargetType="ContentControl">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding CurrentModule}" Value="SystemInfo">
+                                <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </ContentControl.Style>
+            </ContentControl>
+            <ContentControl x:Name="BenchmarkHost" Content="{Binding}" ContentTemplate="{StaticResource BenchmarkViewTemplate}" Panel.ZIndex="5">
+                <ContentControl.Style>
+                    <Style TargetType="ContentControl">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding CurrentModule}" Value="Benchmark">
+                                <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </ContentControl.Style>
+            </ContentControl>
+            <ContentControl x:Name="SystemSettingsHost" Content="{Binding}" ContentTemplate="{StaticResource SystemSettingsViewTemplate}" Panel.ZIndex="5">
+                <ContentControl.Style>
+                    <Style TargetType="ContentControl">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding CurrentModule}" Value="SystemSettings">
+                                <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </ContentControl.Style>
+            </ContentControl>
+            <ContentControl x:Name="OptimizationHost" Content="{Binding}" ContentTemplate="{StaticResource MainModulesViewTemplate}" Panel.ZIndex="5">
+                <ContentControl.Style>
+                    <Style TargetType="ContentControl">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Setter Property="ContentTemplate" Value="{x:Null}" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding CurrentModule}" Value="Optimization">
+                                <Setter Property="Visibility" Value="Visible" />
+                                <Setter Property="ContentTemplate" Value="{StaticResource MainModulesViewTemplate}" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </ContentControl.Style>
+            </ContentControl>
+
         </Grid>
         <StatusBar Grid.Row="2" Style="{StaticResource BottomStatusBar}">
             <StatusBar.ItemsPanel>
@@ -194,4 +292,3 @@
         </StatusBar>
     </Grid>
 </Window>
-

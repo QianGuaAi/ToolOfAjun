@@ -343,22 +343,22 @@ namespace MyTools.ViewModels
 
             RefreshCommand = new RelayCommand(Refresh);
             ShowHomeCommand = new RelayCommand(() => SwitchModule("Home"));
-            ShowNetworkCommand = new RelayCommand(() => ShowSystemSection("Network"));
-            ShowStartupCommand = new RelayCommand(() => ShowSystemSection("Startup"));
-            ShowSystemCommand = new RelayCommand(() => ShowSystemSection("Startup"));
-            ShowUninstallCommand = new RelayCommand(() => ShowSystemSection("Uninstall"));
+            ShowNetworkCommand = new RelayCommand(() => SwitchModule("Network"));
+            ShowStartupCommand = new RelayCommand(() => SwitchModule("Startup"));
+            ShowSystemCommand = new RelayCommand(() => SwitchModule("Optimization"));
+            ShowUninstallCommand = new RelayCommand(() => SwitchModule("Uninstall"));
             ShowSqlExportCommand = new RelayCommand(() => { SwitchModule("SqlExport"); Refresh(); });
             ShowFrpCommand = new RelayCommand(() => SwitchModule("Frp"));
             ShowCodexProfilesCommand = new RelayCommand(() => SwitchModule("CodexProfiles"));
-            ShowSystemInfoCommand = new RelayCommand(() => ShowSystemSection("SystemInfo"));
+            ShowSystemInfoCommand = new RelayCommand(() => SwitchModule("SystemInfo"));
             ShowFileVerifyCommand = new RelayCommand(() => SwitchModule("FileVerify"));
             ShowMultimediaCommand = new RelayCommand(() => ShowMultimedia(MultimediaPreferredFilter.All));
             ShowConvertCommand = new RelayCommand(() => ShowMultimedia(MultimediaPreferredFilter.All));
             ShowImageViewerCommand = new RelayCommand(() => ShowMultimedia(MultimediaPreferredFilter.Image));
             ShowVideoViewerCommand = new RelayCommand(() => ShowMultimedia(MultimediaPreferredFilter.AudioVideo));
-            ShowBenchmarkCommand = new RelayCommand(() => ShowSystemSection("Benchmark"));
+            ShowBenchmarkCommand = new RelayCommand(() => SwitchModule("Benchmark"));
             ShowScheduleCommand = new RelayCommand(() => SwitchModule("Schedule"));
-            ShowSystemSettingsCommand = new RelayCommand(() => ShowSystemSection("SystemSettings"));
+            ShowSystemSettingsCommand = new RelayCommand(() => SwitchModule("SystemSettings"));
             LoadSystemInfoCommand = new AsyncRelayCommand(LoadSystemInfoAsync, () => !_isSystemInfoBusy);
             ToggleHardwareSensorsCommand = new RelayCommand(ToggleHardwareSensors);
             RefreshSensorsOnceCommand = new RelayCommand(() => SensorTimer_OnTick(this, EventArgs.Empty), () => _sensorService != null);
@@ -2788,8 +2788,13 @@ namespace MyTools.ViewModels
 
         private void ShowSystemSection(string section)
         {
+            if (string.Equals(section, "Optimization", StringComparison.Ordinal))
+            {
+                SwitchModule("Optimization");
+                return;
+            }
             var normalized = NormalizeSystemSection(section);
-            SwitchModule("System");
+            SwitchModule(normalized);
             CurrentSystemSection = normalized;
             var index = Array.IndexOf(SystemSectionKeys, normalized);
             if (index < 0) index = 0;
@@ -2810,31 +2815,24 @@ namespace MyTools.ViewModels
 
         private string BuildCurrentNavigationText()
         {
-            if (string.Equals(CurrentModule, "System", StringComparison.Ordinal))
-            {
-                switch (CurrentSystemSection)
-                {
-                    case "Network":
-                        return "系统 / 当前网络";
-                    case "Startup":
-                        return "系统 / 启动管理";
-                    case "Uninstall":
-                        return "系统 / 程序卸载";
-                    case "SystemInfo":
-                        return "系统 / 系统信息";
-                    case "Benchmark":
-                        return "系统 / 性能测试";
-                    case "SystemSettings":
-                        return "系统 / 系统设置";
-                    default:
-                        return "系统 / 启动管理";
-                }
-            }
-
             switch (CurrentModule)
             {
                 case "Home":
                     return "首页";
+                case "Network":
+                    return "当前网络";
+                case "Startup":
+                    return "启动管理";
+                case "Uninstall":
+                    return "程序卸载";
+                case "Optimization":
+                    return "系统优化";
+                case "SystemInfo":
+                    return "系统信息";
+                case "Benchmark":
+                    return "性能测试";
+                case "SystemSettings":
+                    return "系统设置";
                 case "SqlExport":
                     return "SQL 导出";
                 case "Frp":
@@ -3032,7 +3030,31 @@ namespace MyTools.ViewModels
             {
                 AddHomeRecentItem("隧道穿透", "最近进入穿透模块", module, string.Empty, "打开");
             }
-            if (string.Equals(module, "Frp", StringComparison.Ordinal))
+
+            if (string.Equals(module, "Network", StringComparison.Ordinal))
+            {
+                Refresh();
+            }
+            else if (string.Equals(module, "Startup", StringComparison.Ordinal))
+            {
+                Refresh();
+            }
+            else if (string.Equals(module, "Uninstall", StringComparison.Ordinal))
+            {
+                SafeFireAndForget(LoadInstalledProgramsAsync());
+            }
+            else if (string.Equals(module, "SystemInfo", StringComparison.Ordinal))
+            {
+                EnsureSystemInfoSnapshotLoading();
+                SafeFireAndForget(LoadSystemInfoAsync());
+            }
+            else if (string.Equals(module, "Optimization", StringComparison.Ordinal))
+            {
+                EnsureSystemOptimizationDataLoading();
+                EnsureWeChatStartupDataLoading();
+                RefreshSystemStatus();
+            }
+            else if (string.Equals(module, "Frp", StringComparison.Ordinal))
             {
                 EnsureFrpConfigLoading();
             }

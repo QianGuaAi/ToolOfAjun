@@ -1,5 +1,16 @@
 # 开发记录
 
+## [2026-05-29] 系统模块导航扁平化重构
+- 将"当前网络""启动管理""程序卸载""系统信息""性能测试"五个功能从"系统"菜单的复合型 Tab 页抽为独立菜单项和独立 ContentControl。
+- "系统设置"（含备份恢复/桌面背景/Windows 调整）和"系统优化"（含系统锁定/安全防护等 8 个子 Tab）也从"系统"子 Tab 改为独立菜单项，通过 `CurrentModule` 直接触发各自独立视图。
+- 新增 `Views/NetworkView.xaml(.cs)`、`Views/StartupView.xaml(.cs)`、`Views/UninstallView.xaml(.cs)`、`Views/SystemInfoView.xaml(.cs)`、`Views/BenchmarkView.xaml(.cs)` 五个独立 UserControl，内容从 `MainModulesView.xaml` 原巨型 `DeferredTemplate` 中提取。
+- `MainWindow.xaml` 新增对应 DataTemplate 资源和 7 个独立 ContentControl（NetworkHost / StartupHost / UninstallHost / SystemInfoHost / BenchmarkHost / SystemSettingsHost / OptimizationHost），每个通过 `DataTrigger` 根据 `CurrentModule` 直接显示。
+- `MainViewModel.cs` 命令映射简化为直接 `SwitchModule` 调用，`BuildCurrentNavigationText` 扁平化为直接映射表；`SwitchModule` 补充了 Uninstall / SystemInfo / Optimization 三个模块的按需数据加载调用。
+- `MainModulesView.xaml` 从 3756 行降至 2515 行，删除了 NetworkHost / UninstallHost / StartupHost / SystemInfoHost / BenchmarkHost 五个 ContentControl 及其巨型 DataTemplate，以及 `SystemSectionTabs` TabControl、`SystemSettingsViewTemplate` 资源。
+- `MainModulesView.xaml.cs` 无需修改（未使用 `SelectedSystemSectionIndex`）。
+- `MainWindow.xaml` 中的 `SystemSettingsViewTemplate` 保留（由 SystemSettingsHost 使用），`ScheduleViewTemplate` 保留（由 MainModulesView 内的 ContentControl 使用）。
+- 验证：`dotnet build src\MyTools\MyTools.csproj -c Debug` 通过，0 warning / 0 error。
+
 ## [2026-05-28] 排班颜色调整后重新打包安装程序
 - 结束占用 Release 输出的旧 `MyTools.exe` 进程后，重新执行 `scripts\Build-Installer.ps1`。
 - 重新构建主程序、卸载器、payload zip 和安装器，安装包已包含排班特殊班次警告、节假日/休/卡/副颜色调整。
