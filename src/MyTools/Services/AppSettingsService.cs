@@ -75,6 +75,8 @@ namespace MyTools.Services
 
         private static async Task<AppSettings> LoadCoreAsync()
         {
+            CosturaBootstrap.EnsureInitialized();
+
             if (!File.Exists(SettingsPath))
                 return new AppSettings();
 
@@ -88,6 +90,8 @@ namespace MyTools.Services
 
         private static async Task SaveCoreAsync(AppSettings settings)
         {
+            CosturaBootstrap.EnsureInitialized();
+
             Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath) ?? AppDomain.CurrentDomain.BaseDirectory);
             using (var stream = new FileStream(SettingsPath, FileMode.Create, FileAccess.Write, FileShare.None, 4096, useAsync: true))
             using (var writer = new StreamWriter(stream, new UTF8Encoding(false)))

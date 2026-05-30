@@ -17,7 +17,7 @@ namespace MyTools.Services
     /// 样式保持与 SchedulePage 视觉一致：
     /// - 周末 / 节假日列：整列浅蓝底
     /// - 班次单元格：按 ShiftCodes 上色（夜/小用深底白字）
-    /// - 姓名列、统计列：粗体居中
+    /// - 姓名列、统计列：楷体居中
     /// - 全表四向细边框
     /// </summary>
     public static class ScheduleExcelExporter
@@ -374,12 +374,12 @@ namespace MyTools.Services
             {
                 var t = new StyleTable();
 
-                // 字体：0=黑色, 1=白色
-                t._fontsXml.Add("<font><sz val=\"11\"/><name val=\"微软雅黑\"/><color rgb=\"FF000000\"/></font>");
-                t._fontsXml.Add("<font><sz val=\"11\"/><name val=\"微软雅黑\"/><b/><color rgb=\"FF000000\"/></font>");
-                t._fontsXml.Add("<font><sz val=\"11\"/><name val=\"微软雅黑\"/><b/><color rgb=\"FFFFFFFF\"/></font>");
-                t._fontsXml.Add("<font><sz val=\"11\"/><name val=\"微软雅黑\"/><b/><color rgb=\"FFC62828\"/></font>"); // 红色统计
-                const int FONT_REG = 0, FONT_BOLD = 1, FONT_BOLD_WHITE = 2, FONT_BOLD_RED = 3;
+                // 字体：0=黑色, 1=黑色(姓名/统计用), 2=白色(深底班次), 3=红色统计
+                t._fontsXml.Add("<font><sz val=\"11\"/><name val=\"楷体\"/><color rgb=\"FF000000\"/></font>");
+                t._fontsXml.Add("<font><sz val=\"11\"/><name val=\"楷体\"/><color rgb=\"FF000000\"/></font>");
+                t._fontsXml.Add("<font><sz val=\"11\"/><name val=\"楷体\"/><color rgb=\"FFFFFFFF\"/></font>");
+                t._fontsXml.Add("<font><sz val=\"11\"/><name val=\"楷体\"/><color rgb=\"FFC62828\"/></font>");
+                const int FONT_REG = 0, FONT_REG2 = 1, FONT_REG_WHITE = 2, FONT_REG_RED = 3;
 
                 // 填充：0/1 系统占位（none / gray125），后续动态
                 t._fillsXml.Add("<fill><patternFill patternType=\"none\"/></fill>");
@@ -400,7 +400,7 @@ namespace MyTools.Services
                 {
                     shiftFillIdx[kv.Key] = FillSolid(kv.Value.bg);
                     // 字体：白底用黑字、深底用白字
-                    shiftFontIdx[kv.Key] = string.Equals(kv.Value.fg, White, StringComparison.OrdinalIgnoreCase) ? FONT_BOLD_WHITE : FONT_BOLD;
+                    shiftFontIdx[kv.Key] = string.Equals(kv.Value.fg, White, StringComparison.OrdinalIgnoreCase) ? FONT_REG_WHITE : FONT_REG2;
                 }
                 int fillEmptyHoliday = FillSolid(EmptyHolidayBg);
                 int fillHolidayDay = FillSolid(HolidayDayBg);
@@ -423,15 +423,15 @@ namespace MyTools.Services
 
                 const string CenterAlign = "<alignment horizontal=\"center\" vertical=\"center\"/>";
 
-                t._keyToIndex["header"] = RegisterXf(FONT_BOLD, fillHeader, BORDER_THIN, CenterAlign);
-                t._keyToIndex["headerHoliday"] = RegisterXf(FONT_BOLD, fillHoliday, BORDER_THIN, CenterAlign);
-                t._keyToIndex["name"] = RegisterXf(FONT_BOLD, fillHeader, BORDER_THIN, CenterAlign);
+                t._keyToIndex["header"] = RegisterXf(FONT_REG2, fillHeader, BORDER_THIN, CenterAlign);
+                t._keyToIndex["headerHoliday"] = RegisterXf(FONT_REG2, fillHoliday, BORDER_THIN, CenterAlign);
+                t._keyToIndex["name"] = RegisterXf(FONT_REG2, fillHeader, BORDER_THIN, CenterAlign);
                 t._keyToIndex["empty"] = RegisterXf(FONT_REG, 0, BORDER_THIN, CenterAlign);
                 t._keyToIndex["emptyHoliday"] = RegisterXf(FONT_REG, fillEmptyHoliday, BORDER_THIN, CenterAlign);
                 t._keyToIndex["holidayDayCell"] = RegisterXf(FONT_REG, fillHolidayDay, BORDER_THIN, CenterAlign);
-                t._keyToIndex["stat"] = RegisterXf(FONT_BOLD, 0, BORDER_THIN, CenterAlign);
-                t._keyToIndex["statGood"] = RegisterXf(FONT_BOLD, fillEmptyHoliday, BORDER_THIN, CenterAlign);
-                t._keyToIndex["statBad"] = RegisterXf(FONT_BOLD_RED, 0, BORDER_THIN, CenterAlign);
+                t._keyToIndex["stat"] = RegisterXf(FONT_REG2, 0, BORDER_THIN, CenterAlign);
+                t._keyToIndex["statGood"] = RegisterXf(FONT_REG2, fillEmptyHoliday, BORDER_THIN, CenterAlign);
+                t._keyToIndex["statBad"] = RegisterXf(FONT_REG_RED, 0, BORDER_THIN, CenterAlign);
 
                 foreach (var kv in ShiftColors)
                 {

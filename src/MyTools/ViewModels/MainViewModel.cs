@@ -409,7 +409,7 @@ namespace MyTools.ViewModels
                     Refresh();
                 }
             });
-            LockWin10Command = new RelayCommand(LockWin10Version);
+            LockWin10Command = new RelayCommand(LockCurrentWindowsVersion);
             ExitCommand = new RelayCommand(ExitApplication);
             RestoreCommand = new RelayCommand(RestoreWindow);
             OpenLogFolderCommand = new RelayCommand(OpenLogFolder);
@@ -597,6 +597,45 @@ namespace MyTools.ViewModels
             dispatcher.BeginInvoke(
                 DispatcherPriority.ContextIdle,
                 new Action(() => SafeFireAndForget(LoadStartupShellStateAsync())));
+            dispatcher.BeginInvoke(
+                DispatcherPriority.ContextIdle,
+                new Action(() => StartSensorsBackground()));
+        }
+
+        private void StartSensorsBackground()
+        {
+            _sensorService = new HardwareSensorService();
+            if (!_sensorService.TryStart())
+            {
+                SensorStatusMessage = "传感器启动失败：" + (_sensorService.LastError ?? "未知错误。请以管理员身份重新运行 MyTools。");
+                HomeSensorRiskText = "传感器启动失败，无法读取温度风险。";
+                _sensorService.Dispose();
+                _sensorService = null;
+                return;
+            }
+
+            SensorTimer.Tick += SensorTimer_OnTick;
+            ApplySensorRefreshMode();
+            SensorTimer_OnTick(this, EventArgs.Empty);
+            _isSensorsRunning = true;
+            OnPropertyChanged(nameof(IsSensorsRunning));
+
+            if (SensorReadings.Count == 0)
+            {
+                SensorStatusMessage = HardwareSensorService.IsRunningAsAdmin
+                    ? "未读取到传感器数据，硬件可能不被支持。"
+                    : "当前为非管理员模式：温度/风扇/电压通常无法读取。请以管理员身份重启 MyTools。";
+                HomeSensorRiskText = HardwareSensorService.IsRunningAsAdmin
+                    ? "未读取到传感器数据，硬件可能不支持。"
+                    : "未读到传感器：建议以管理员身份重启后查看温度风险。";
+            }
+            else
+            {
+                SensorStatusMessage = HardwareSensorService.IsRunningAsAdmin
+                    ? $"已启用 · {SensorReadings.Count} 项 · {SensorRefreshMode}刷新"
+                    : $"已启用（非管理员，仅 {SensorReadings.Count} 项可读）";
+                HomeSensorRiskText = $"传感器正常：已读取 {SensorReadings.Count} 项，未发现高温或高负载。";
+            }
         }
 
         private async Task LoadStartupShellStateAsync()
@@ -9323,11 +9362,16 @@ namespace MyTools.ViewModels
         private bool _isSystemInfoBusy;
         private string _systemInfoStatusMessage = "点击下方刷新读取硬件信息。";
         private bool _isSensorsRunning;
-        private string _sensorStatusMessage = "点击启用传感器后实时显示 CPU/GPU/主板温度、风扇转速、电压等。";
+        private string _sensorStatusMessage = "正在启动传感器…";
         private DispatcherTimer _sensorTimer;
         private HardwareSensorService _sensorService;
         private string _sensorRefreshMode = "2 秒";
         private string _homeSensorRiskText = "传感器未启用，进入“系统信息”后可开启采集。";
+        private string _cpuTemp = "—";
+        private string _gpuTemp = "—";
+        private string _motherboardTemp = "—";
+        private string _fanRpm = "—";
+        private string _cpuLoad = "—";
 
         public ICommand ShowSystemInfoCommand { get; }
         public ICommand LoadSystemInfoCommand { get; }
@@ -9335,6 +9379,36 @@ namespace MyTools.ViewModels
         public ICommand RefreshSensorsOnceCommand { get; }
 
         public ObservableCollection<SensorReading> SensorReadings { get; } = new ObservableCollection<SensorReading>();
+
+        public string CpuTemp
+        {
+            get => _cpuTemp;
+            private set { _cpuTemp = value; OnPropertyChanged(); }
+        }
+
+        public string GpuTemp
+        {
+            get => _gpuTemp;
+            private set { _gpuTemp = value; OnPropertyChanged(); }
+        }
+
+        public string MotherboardTemp
+        {
+            get => _motherboardTemp;
+            private set { _motherboardTemp = value; OnPropertyChanged(); }
+        }
+
+        public string FanRpm
+        {
+            get => _fanRpm;
+            private set { _fanRpm = value; OnPropertyChanged(); }
+        }
+
+        public string CpuLoad
+        {
+            get => _cpuLoad;
+            private set { _cpuLoad = value; OnPropertyChanged(); }
+        }
 
         private DispatcherTimer SensorTimer
         {
@@ -9432,50 +9506,15 @@ namespace MyTools.ViewModels
 
         private void ToggleHardwareSensors()
         {
-            if (_isSensorsRunning)
-            {
-                SensorTimer.Stop();
-                SensorTimer.Tick -= SensorTimer_OnTick;
-                _sensorService?.Dispose();
-                _sensorService = null;
-                IsSensorsRunning = false;
-                SensorReadings.Clear();
-                SensorStatusMessage = "已停止采集。";
-                HomeSensorRiskText = "传感器未启用，进入“系统信息”后可开启采集。";
-                return;
-            }
-
-            _sensorService = new HardwareSensorService();
-            if (!_sensorService.TryStart())
-            {
-                SensorStatusMessage = "传感器启动失败：" + (_sensorService.LastError ?? "未知错误。请以管理员身份重新运行 MyTools。");
-                HomeSensorRiskText = "传感器启动失败，无法读取温度风险。";
-                _sensorService.Dispose();
-                _sensorService = null;
-                return;
-            }
-
-            SensorTimer.Tick += SensorTimer_OnTick;
-            ApplySensorRefreshMode();
-            SensorTimer_OnTick(this, EventArgs.Empty);
-            IsSensorsRunning = true;
-
-            if (SensorReadings.Count == 0)
-            {
-                SensorStatusMessage = HardwareSensorService.IsRunningAsAdmin
-                    ? "未读取到传感器数据，硬件可能不被支持。"
-                    : "当前为非管理员模式：温度/风扇/电压通常无法读取。请以管理员身份重启 MyTools。";
-                HomeSensorRiskText = HardwareSensorService.IsRunningAsAdmin
-                    ? "未读取到传感器数据，硬件可能不支持。"
-                    : "未读到传感器：建议以管理员身份重启后查看温度风险。";
-            }
-            else
-            {
-                SensorStatusMessage = HardwareSensorService.IsRunningAsAdmin
-                    ? $"已启用 · {SensorReadings.Count} 项 · {SensorRefreshMode}刷新"
-                    : $"已启用（非管理员，仅 {SensorReadings.Count} 项可读）";
-                HomeSensorRiskText = $"传感器正常：已读取 {SensorReadings.Count} 项，未发现高温或高负载。";
-            }
+            SensorTimer.Stop();
+            SensorTimer.Tick -= SensorTimer_OnTick;
+            _sensorService?.Dispose();
+            _sensorService = null;
+            _isSensorsRunning = false;
+            OnPropertyChanged(nameof(IsSensorsRunning));
+            SensorReadings.Clear();
+            SensorStatusMessage = "已停止采集。";
+            HomeSensorRiskText = "传感器已停止，进入“系统信息”后可重新开启采集。";
         }
 
         private void ApplySensorRefreshMode()
@@ -9511,7 +9550,9 @@ namespace MyTools.ViewModels
                     SensorReadings.Add(r);
                 }
 
-                var warning = BuildSensorWarning(SensorReadings);
+                ExtractSensorSummary(readings);
+
+                var warning = BuildSensorWarning(readings);
                 if (!string.IsNullOrWhiteSpace(warning))
                 {
                     SensorStatusMessage = warning;
@@ -9537,6 +9578,51 @@ namespace MyTools.ViewModels
                 AppLogService.Warning("Sensor read failed: {Msg}", ex.Message);
                 HomeSensorRiskText = "传感器读取失败：" + ex.Message;
             }
+        }
+
+        private static readonly HashSet<string> GpuHardwareKinds = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "GpuNvidia", "GpuAmd", "GpuIntel"
+        };
+
+        private void ExtractSensorSummary(IReadOnlyList<SensorReading> readings)
+        {
+            string cpuTempVal = null, gpuTempVal = null, mbTempVal = null, fanVal = null, cpuLoadVal = null;
+
+            foreach (var r in readings)
+            {
+                if (string.Equals(r.SensorKind, "Temperature", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (string.Equals(r.HardwareKind, "Cpu", StringComparison.OrdinalIgnoreCase))
+                        cpuTempVal = r.Value + r.Unit;
+                    else if (GpuHardwareKinds.Contains(r.HardwareKind))
+                        gpuTempVal = r.Value + r.Unit;
+                    else if (string.Equals(r.HardwareKind, "Motherboard", StringComparison.OrdinalIgnoreCase))
+                        mbTempVal = r.Value + r.Unit;
+                    else
+                        AppLogService.InformationIfInitialized("Sensor: Temp HardwareKind={HK} SensorName={SN} Value={V}", r.HardwareKind, r.SensorName, r.Value);
+                }
+                else if (string.Equals(r.SensorKind, "Fan", StringComparison.OrdinalIgnoreCase))
+                {
+                    AppLogService.InformationIfInitialized("Sensor: Fan HardwareKind={HK} SensorName={SN} Value={V}", r.HardwareKind, r.SensorName, r.Value);
+                    if (fanVal == null) fanVal = r.Value + r.Unit;
+                }
+                else if (string.Equals(r.SensorKind, "Load", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (string.Equals(r.HardwareKind, "Cpu", StringComparison.OrdinalIgnoreCase)
+                        && (cpuLoadVal == null || r.SensorName.IndexOf("Total", StringComparison.OrdinalIgnoreCase) >= 0 || r.SensorName.IndexOf("Package", StringComparison.OrdinalIgnoreCase) >= 0))
+                    {
+                        cpuLoadVal = r.Value + r.Unit;
+                    }
+                }
+            }
+
+            if (cpuTempVal != null) CpuTemp = cpuTempVal;
+            if (gpuTempVal != null) GpuTemp = gpuTempVal;
+            if (mbTempVal != null) MotherboardTemp = mbTempVal;
+            if (fanVal != null) FanRpm = fanVal;
+            if (cpuLoadVal != null) CpuLoad = cpuLoadVal;
+            AppLogService.InformationIfInitialized("Sensor summary: cpuTemp={CT} gpuTemp={GT} mbTemp={MT} fan={FR} cpuLoad={CL}", cpuTempVal, gpuTempVal, mbTempVal, fanVal, cpuLoadVal);
         }
 
         private static string BuildSensorWarning(IEnumerable<SensorReading> readings)
@@ -11682,30 +11768,35 @@ namespace MyTools.ViewModels
             }
         }
 
-        private void LockWin10Version()
+        private void LockCurrentWindowsVersion()
         {
             try
             {
-                var os = Environment.OSVersion;
-                if (os.Version.Major == 10 && os.Version.Build < 22000)
+                var os = OsVersionService.MajorVersion;
+                if (os == 0)
                 {
-                    string scriptPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "LockWin10_22H2.ps1");
-
-                    var startInfo = new System.Diagnostics.ProcessStartInfo
-                    {
-                        FileName = "powershell.exe",
-                        Arguments = $"-NoProfile -ExecutionPolicy Bypass -File \"{scriptPath}\"",
-                        UseShellExecute = true,
-                        Verb = "runas"
-                    };
-
-                    System.Diagnostics.Process.Start(startInfo);
-                    MessageBox.Show("命令已提交，请在弹出的 UAC 窗口中确认。", "操作提示", MessageBoxButton.OK, MessageBoxImage.Information);
+                    MessageBox.Show("无法检测当前 Windows 版本。", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
                 }
-                else
+
+                string scriptPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "LockCurrentWindows.ps1");
+
+                if (!System.IO.File.Exists(scriptPath))
                 {
-                    MessageBox.Show("当前系统不是 Windows 10，无需执行此操作。", "版本不匹配", MessageBoxButton.OK, MessageBoxImage.Information);
+                    MessageBox.Show("锁定脚本不存在: " + scriptPath, "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
                 }
+
+                var startInfo = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "powershell.exe",
+                    Arguments = $"-NoProfile -ExecutionPolicy Bypass -File \"{scriptPath}\"",
+                    UseShellExecute = true,
+                    Verb = "runas"
+                };
+
+                System.Diagnostics.Process.Start(startInfo);
+                MessageBox.Show("命令已提交，请在弹出的 UAC 窗口中确认。", "操作提示", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {

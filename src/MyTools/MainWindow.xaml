@@ -22,12 +22,6 @@
     </Window.DataContext>
 
     <Window.Resources>
-        <ResourceDictionary>
-            <ResourceDictionary.MergedDictionaries>
-                <ResourceDictionary Source="Resources/Theme.xaml" />
-                <ResourceDictionary Source="Resources/Illustrations.xaml" />
-            </ResourceDictionary.MergedDictionaries>
-        </ResourceDictionary>
         <DataTemplate x:Key="MainModulesViewTemplate">
             <views:MainModulesView />
         </DataTemplate>
@@ -106,7 +100,6 @@
                     <MenuItem Header="文件验证(_V)" Command="{Binding ShowFileVerifyCommand}" Style="{StaticResource TopMenuItem}" />
                 </MenuItem>
                 <MenuItem Header="日程(_A)" Command="{Binding ShowScheduleCommand}" Style="{StaticResource TopMenuItem}" />
-                <MenuItem Header="设置(_P)" Command="{Binding ShowSystemSettingsCommand}" Style="{StaticResource TopMenuItem}" />
                 <MenuItem Header="帮助(_H)" Style="{StaticResource TopMenuItem}">
                     <MenuItem Header="关于(_A)" Click="MenuAbout_Click" Style="{StaticResource TopMenuItem}" />
                     <Separator />

@@ -1496,3 +1496,27 @@
 - 新增 `CodexDesktopService` 与面板"重启 Codex"按钮：轮换后可选择温和关闭并重新打开 Codex App，等待主进程退出后再启动，尽量保留已保存对话历史；不会强制结束未正常退出的进程，避免硬中断当前工作。
 - 修复"重启 Codex"只关闭带窗口主进程、未处理遗留 `Codex.exe/codex.exe` 后端进程的问题：现在会识别 `WindowsApps\OpenAI.Codex_*` 与 `%LOCALAPPDATA%\OpenAI\Codex\` 下的 Codex 进程，先请求主窗口退出，必要时结束遗留 Codex App 进程，再通过 AppUserModelId 重新打开并等待检测新进程。
 - 验证：正式 Release 目录被当前运行中的 `MyTools.exe` PID 17668 锁定，改用 `artifacts\verify-codex-restart\` 独立输出目录构建，0 warning / 0 error。
+
+## [2026-05-30] 重新打包安装程序
+- 结束占用 Release 输出的本地 `MyTools.exe` 进程后，执行 `scripts\Build-Installer.ps1`。
+- 重新构建主程序、卸载器、payload zip 和安装器，安装包已包含当前 Codex 轮换/重启相关改动。
+- 输出安装包：`artifacts\installer\MyToolsSetup.exe`，大小 43,196,416 bytes，SHA256 = `BFF226D38DA45EFDE0FBEB31E6EE1C13DE64FEEDA534888E0FBD9656DCD366BE`。
+- 验证：主程序、卸载器和安装器构建均为 0 warning / 0 error。
+
+## [2026-05-30] 修复启动 XAML 解析失败
+- 修复 `MainWindow.xaml` 在窗口启动资源中直接合并完整 `Resources\Theme.xaml`，导致 `materialDesign:Card` 在 MaterialDesign 延迟资源加载前被解析并触发 `XamlParseException` 的问题。
+- 启动窗口继续只依赖 `ShellTheme.xaml` 的轻量资源；完整 MaterialDesign 主题仍由 `DeferredUiResourceService` 在进入功能模块前加载。
+- 验证：`dotnet build src\MyTools\MyTools.csproj -c Release --no-incremental` 通过，0 warning / 0 error；直接启动 `src\MyTools\bin\Release\net48\MyTools.exe` 成功显示主窗口，新增启动基线 `OnStartup=281 ms, InitializeComponent=123 ms, Show=157 ms`，未再出现 `XamlParseException`。
+- 重新执行 `scripts\Build-Installer.ps1` 打包安装程序，输出安装包 `artifacts\installer\MyToolsSetup.exe`，大小 43,195,904 bytes，SHA256 = `2E04FCD58901BF56A6D774A2E51A6CE693A8D40D1620C5D2ABE6A44E7B4B7304`。
+
+## [2026-05-30] 修复当前网络退出与日程无响应
+- 修复 `NetworkView.xaml` 直接使用 `StatusToColorConverter` 但未在自身资源中声明的问题，避免进入“当前网络”时触发 `StaticResource` 查找失败并导致 UI 线程异常。
+- 修复 `MainModulesView.xaml` 中已定义 `ScheduleViewTemplate` 但缺少 `ScheduleHost` 的问题，进入“日程”模块时现在会实际挂载 `SchedulePage`。
+- 在 `App.OnStartup` 开始处初始化 Costura 单文件程序集解析器，并在 `AppSettingsService` 读写 JSON 前兜底初始化，避免后台配置读取先于解析器时出现 `Newtonsoft.Json` 找不到。
+- 验证：`dotnet build src\MyTools\MyTools.csproj -c Release --no-incremental` 通过，0 warning / 0 error；自动启动 Release 程序后依次点击“系统 -> 当前网络”和“日程”，进程均保持运行，新增日志中无 `XamlParseException`、`Newtonsoft.Json` 或其他错误。
+- 重新执行 `scripts\Build-Installer.ps1` 打包安装程序，输出安装包 `artifacts\installer\MyToolsSetup.exe`，大小 43,195,904 bytes，SHA256 = `9286CE86DC444FAB1B665142DD57F921DC4D189F08544B6578246FE3F8C444E5`。
+
+## [2026-05-30] 修复系统优化无响应与系统信息退出
+- 修复 `MainModulesView.xaml` 中系统优化面板仍绑定旧 `IsSystemOptimizationVisible` 的问题；主菜单现在切换到 `CurrentModule=Optimization` 时会直接显示 `SystemOptimizationView`。
+- 修复 `SystemInfoView.xaml` 直接使用 `BoolToVis` 与 `InverseBoolToVis` 但未在自身资源中声明的问题，避免点击“系统信息”时触发 `StaticResource` 查找失败并导致 UI 线程异常。
+- 验证：`dotnet build src\MyTools\MyTools.csproj -c Release --no-incremental` 通过，0 warning / 0 error；自动启动 Release 程序后依次点击“系统 -> 系统优化”和“系统 -> 系统信息”，进程均保持运行，新增日志中无 `XamlParseException` 或其他错误。

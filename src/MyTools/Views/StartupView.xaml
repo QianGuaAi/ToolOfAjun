@@ -22,21 +22,21 @@
                 </LinearGradientBrush>
             </Border.Background>
             <DockPanel>
-                <StackPanel DockPanel.Dock="Right"
-                            Orientation="Horizontal"
+                <Button DockPanel.Dock="Right"
+                            Style="{StaticResource MaterialDesignIconButton}"
+                            Command="{Binding RefreshCommand}"
+                            ToolTip="刷新启动项"
                             VerticalAlignment="Center">
-                    <TextBox Width="220"
+                        <materialDesign:PackIcon Kind="Refresh" Width="22" Height="22" />
+                    </Button>
+                    <TextBox DockPanel.Dock="Right"
+                             Width="220"
                              Margin="0,0,10,0"
+                             VerticalAlignment="Center"
                              Text="{Binding StartupSearchText, UpdateSourceTrigger=PropertyChanged}"
                              Style="{StaticResource StandardTextBox}"
                              materialDesign:HintAssist.Hint="搜索名称/发布者/命令/位置/来源" />
-                    <Button Style="{StaticResource MaterialDesignIconButton}"
-                            Command="{Binding RefreshCommand}"
-                            ToolTip="刷新启动项">
-                        <materialDesign:PackIcon Kind="Refresh" Width="22" Height="22" />
-                    </Button>
-                </StackPanel>
-                <StackPanel Orientation="Horizontal">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <Border Width="36" Height="36" CornerRadius="10" Margin="0,0,12,0" VerticalAlignment="Center">
                         <Border.Background>
                             <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">

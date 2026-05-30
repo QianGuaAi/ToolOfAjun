@@ -34,6 +34,8 @@ namespace MyTools
             var onStartupStopwatch = Stopwatch.StartNew();
             try
             {
+                CosturaBootstrap.EnsureInitialized();
+
                 bool isNewInstance;
                 _singleInstanceMutex = new Mutex(true, @"Local\MyTools_SingleInstance", out isNewInstance);
                 if (!isNewInstance)

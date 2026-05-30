@@ -15,19 +15,58 @@ namespace MyTools.Services
         {
             var result = new Dictionary<string, WeChatRoot>(StringComparer.OrdinalIgnoreCase);
 
-            var docsWeChatRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "WeChat Files");
-            AddRootsFromBasePath(result, docsWeChatRoot, WeChatVariant.LegacyWeChat);
+            var docs = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
 
-            var xwechatRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Tencent", "xwechat_files");
+            // Documents\WeChat Files  (旧版桌面微信)
+            var legacyRoot = Path.Combine(docs, "WeChat Files");
+            AddRootsFromBasePath(result, legacyRoot, WeChatVariant.LegacyWeChat);
+
+            // Documents\Tencent Files  (部分桌面微信版本)
+            var tencentFilesRoot = Path.Combine(docs, "Tencent Files");
+            AddRootsFromBasePath(result, tencentFilesRoot, WeChatVariant.LegacyWeChat);
+
+            // 如果 Documents 下没有子目录，说明 Documents 是空目录（Junction 指向 D:\），直接从 D:\Documents 扫描
+            try
+            {
+                if (!Directory.EnumerateFileSystemEntries(docs).Any())
+                {
+                    var realDocs = TryResolveRealDocumentsPath();
+                    if (!string.IsNullOrEmpty(realDocs) && Directory.Exists(realDocs))
+                    {
+                        AddRootsFromBasePath(result, Path.Combine(realDocs, "WeChat Files"), WeChatVariant.LegacyWeChat);
+                        AddRootsFromBasePath(result, Path.Combine(realDocs, "Tencent Files"), WeChatVariant.LegacyWeChat);
+                        AddRootsFromBasePath(result, Path.Combine(realDocs, "xwechat_files"), WeChatVariant.XWechat);
+                        AddRootsFromBasePath(result, Path.Combine(realDocs, "xwechat_files", "all_users"), WeChatVariant.XWechat);
+                    }
+                }
+            }
+            catch
+            {
+                // ignore
+            }
+
+            // Documents\xwechat_files\{wxid}  (新版微信)
+            var xwechatRoot = Path.Combine(docs, "xwechat_files");
             AddRootsFromBasePath(result, xwechatRoot, WeChatVariant.XWechat);
 
-            var registryPath = ReadRegistryFileSavePath();
-            if (!string.IsNullOrWhiteSpace(registryPath))
+            // Documents\xwechat_files\all_users\{wxid}
+            var xwechatAllUsersRoot = Path.Combine(xwechatRoot, "all_users");
+            AddRootsFromBasePath(result, xwechatAllUsersRoot, WeChatVariant.XWechat);
+
+            // AppData\Roaming\Tencent\xwechat_files  (旧版 XWechat)
+            var xwechatAppDataRoot = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "Tencent", "xwechat_files");
+            AddRootsFromBasePath(result, xwechatAppDataRoot, WeChatVariant.XWechat);
+
+            // 注册表自定义目录：HKCU\Software\Tencent\WeChat  和  HKCU\Software\Tencent\Weixin
+            var registryPaths = ReadAllRegistryFileSavePaths();
+            foreach (var kvp in registryPaths)
             {
-                var variant = registryPath.IndexOf("xwechat_files", StringComparison.OrdinalIgnoreCase) >= 0
+                var variant = kvp.Value.IndexOf("xwechat_files", StringComparison.OrdinalIgnoreCase) >= 0
                     ? WeChatVariant.XWechat
                     : WeChatVariant.LegacyWeChat;
-                AddRootsFromBasePath(result, registryPath, variant);
+                AddRootsFromBasePath(result, kvp.Value, variant);
             }
 
             return result.Values
@@ -104,31 +143,62 @@ namespace MyTools.Services
             }
         }
 
-        private static string ReadRegistryFileSavePath()
+        private static IReadOnlyDictionary<string, string> ReadAllRegistryFileSavePaths()
+        {
+            var results = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var keys = new[]
+            {
+                @"Software\Tencent\WeChat",
+                @"Software\Tencent\Weixin"
+            };
+            foreach (var keyPath in keys)
+            {
+                try
+                {
+                    using (var key = Registry.CurrentUser.OpenSubKey(keyPath))
+                    {
+                        var value = key?.GetValue("FileSavePath") as string;
+                        if (!string.IsNullOrWhiteSpace(value) && !value.StartsWith("MyDocument:", StringComparison.OrdinalIgnoreCase))
+                        {
+                            results[keyPath] = value;
+                        }
+                    }
+                }
+                catch
+                {
+                    // ignore
+                }
+            }
+            return results;
+        }
+
+        private static string TryResolveRealDocumentsPath()
         {
             try
             {
-                using (var key = Registry.CurrentUser.OpenSubKey(@"Software\Tencent\WeChat"))
+                // 读取 User Shell Folders 中的可扩展字符串，并展开环境变量
+                using (var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders"))
                 {
-                    var value = key?.GetValue("FileSavePath") as string;
-                    if (string.IsNullOrWhiteSpace(value))
-                    {
-                        return string.Empty;
-                    }
+                    var value = key?.GetValue("Personal") as string;
+                    if (string.IsNullOrWhiteSpace(value)) return null;
 
-                    if (value.StartsWith("MyDocument:", StringComparison.OrdinalIgnoreCase))
-                    {
-                        return string.Empty;
-                    }
+                    var expanded = Environment.ExpandEnvironmentVariables(value);
+                    var resolved = Path.GetFullPath(expanded);
 
-                    return value;
+                    // 只有当展开后的路径与标准 Documents 不同且存在时，才是真正的路径
+                    var standardDocs = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+                    if (!string.Equals(resolved, standardDocs, StringComparison.OrdinalIgnoreCase)
+                        && Directory.Exists(resolved))
+                    {
+                        return resolved;
+                    }
                 }
             }
-            catch (Exception ex)
+            catch
             {
-                AppLogService.Error(ex, "Reading WeChat FileSavePath from registry failed.");
-                return string.Empty;
+                // ignore
             }
+            return null;
         }
 
         private static string Normalize(string path)

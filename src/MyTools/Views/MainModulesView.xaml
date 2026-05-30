@@ -33,7 +33,7 @@
             <Style TargetType="ContentControl">
                 <Setter Property="Visibility" Value="Collapsed" />
                 <Style.Triggers>
-                    <DataTrigger Binding="{Binding IsSystemOptimizationVisible}" Value="True">
+                    <DataTrigger Binding="{Binding CurrentModule}" Value="Optimization">
                         <Setter Property="Visibility" Value="Visible" />
                         <Setter Property="Content">
                             <Setter.Value>
@@ -1514,6 +1514,21 @@
                     <DataTrigger Binding="{Binding CurrentModule}" Value="VideoViewer">
                         <Setter Property="Visibility" Value="Visible" />
                         <Setter Property="ContentTemplate" Value="{StaticResource VideoViewerViewTemplate}" />
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+        </ContentControl.Style>
+    </ContentControl>
+
+    <ContentControl x:Name="ScheduleHost" Content="{Binding}">
+        <ContentControl.Style>
+            <Style TargetType="ContentControl">
+                <Setter Property="Visibility" Value="Collapsed" />
+                <Setter Property="ContentTemplate" Value="{x:Null}" />
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding CurrentModule}" Value="Schedule">
+                        <Setter Property="Visibility" Value="Visible" />
+                        <Setter Property="ContentTemplate" Value="{StaticResource ScheduleViewTemplate}" />
                     </DataTrigger>
                 </Style.Triggers>
             </Style>

@@ -61,8 +61,8 @@
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <StackPanel>
-                                <TextBlock Text="锁定 Windows 10 版本 (22H2)" Style="{StaticResource TextSubtitle}" FontWeight="Bold" />
-                                <TextBlock Text="防止系统自动升级到 Windows 11 或更高版本，适用于希望继续停留在 Win10 22H2 的用户。"
+                                <TextBlock Text="锁定当前 Windows 版本" Style="{StaticResource TextSubtitle}" FontWeight="Bold" />
+                                <TextBlock Text="通过 Windows Update 组策略锁定当前版本，防止自动升级到大版本（例如 Win7 → Win7 SP1，Win10 → Win11）。兼容 Win7 SP1 至 Win11。"
                                            Style="{StaticResource TextCaption}"
                                            FontSize="12"
                                            Opacity="0.6"

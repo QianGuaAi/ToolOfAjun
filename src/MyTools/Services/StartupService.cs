@@ -128,9 +128,13 @@ namespace MyTools.Services
                     }
                 }
             }
-            catch (Exception ex)
+            catch (UnauthorizedAccessException)
             {
-                System.Windows.MessageBox.Show($"操作失败: {ex.Message}\n请尝试以管理员身份运行程序。", "错误", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+                System.Windows.MessageBox.Show(
+                    "当前程序未以管理员身份运行，无法修改系统级（所有用户）启动项。\n请关闭程序后，右键以「管理员身份运行」阿君的工具，再执行此操作。",
+                    "权限不足",
+                    System.Windows.MessageBoxButton.OK,
+                    System.Windows.MessageBoxImage.Warning);
             }
         }
 
@@ -148,9 +152,13 @@ namespace MyTools.Services
                     }
                 }
             }
-            catch (Exception ex)
+            catch (UnauthorizedAccessException)
             {
-                System.Windows.MessageBox.Show($"删除失败: {ex.Message}\n请尝试以管理员身份运行程序。", "错误", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+                System.Windows.MessageBox.Show(
+                    "当前程序未以管理员身份运行，无法删除系统级（所有用户）启动项。\n请关闭程序后，右键以「管理员身份运行」阿君的工具，再执行此操作。",
+                    "权限不足",
+                    System.Windows.MessageBoxButton.OK,
+                    System.Windows.MessageBoxImage.Warning);
             }
         }
 
