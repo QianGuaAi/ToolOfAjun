@@ -516,7 +516,23 @@ namespace MyTools.Services
             {
                 try { process?.Dispose(); } catch { }
                 _plainTokenForSanitize = string.Empty;
+                DeleteIniFile();
                 SetState(FrpState.Stopped, "未运行");
+            }
+        }
+
+        private static void DeleteIniFile()
+        {
+            try
+            {
+                var iniPath = FrpService.GetTempIniPath();
+                if (File.Exists(iniPath))
+                {
+                    File.Delete(iniPath);
+                }
+            }
+            catch
+            {
             }
         }
 

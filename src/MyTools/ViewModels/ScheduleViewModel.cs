@@ -1144,7 +1144,26 @@ namespace MyTools.ViewModels
 
         private static IReadOnlyCollection<(int emp, int day)> BuildPreservedCells(ScheduleVersion schedule)
         {
-            return new List<(int emp, int day)>();
+            if (schedule?.Employees == null)
+            {
+                return Array.Empty<(int, int)>();
+            }
+
+            var preserved = new List<(int emp, int day)>();
+            for (var empIdx = 0; empIdx < schedule.Employees.Count; empIdx++)
+            {
+                var emp = schedule.Employees[empIdx];
+                if (emp?.Cells == null) continue;
+                for (var dayIdx = 0; dayIdx < emp.Cells.Count; dayIdx++)
+                {
+                    if (emp.Cells[dayIdx]?.IsManual == true)
+                    {
+                        preserved.Add((empIdx, dayIdx));
+                    }
+                }
+            }
+
+            return preserved;
         }
 
         private static IEnumerable<string> BuildManualHardConstraintIssues(ScheduleVersion schedule)

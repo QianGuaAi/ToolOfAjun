@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.Win32;
+using MyTools.Services;
 
 namespace MyTools.Services
 {
@@ -136,6 +137,15 @@ namespace MyTools.Services
                     System.Windows.MessageBoxButton.OK,
                     System.Windows.MessageBoxImage.Warning);
             }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "ToggleStartupItem failed for {Name}", item.Name);
+                System.Windows.MessageBox.Show(
+                    "切换启动项状态时发生错误：" + ex.Message,
+                    "操作失败",
+                    System.Windows.MessageBoxButton.OK,
+                    System.Windows.MessageBoxImage.Error);
+            }
         }
 
         public static void DeleteStartupItem(StartupItem item)
@@ -159,6 +169,15 @@ namespace MyTools.Services
                     "权限不足",
                     System.Windows.MessageBoxButton.OK,
                     System.Windows.MessageBoxImage.Warning);
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "DeleteStartupItem failed for {Name}", item.Name);
+                System.Windows.MessageBox.Show(
+                    "删除启动项时发生错误：" + ex.Message,
+                    "操作失败",
+                    System.Windows.MessageBoxButton.OK,
+                    System.Windows.MessageBoxImage.Error);
             }
         }
 

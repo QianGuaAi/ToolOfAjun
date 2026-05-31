@@ -1,6 +1,26 @@
 # 开发记录
 
-## [2026-05-29] 系统模块导航扁平化重构
+## [2026-05-31] 全功能测试与问题修复
+- 使用多 agent 并行进行全功能测试，覆盖 4 个代码分析报告 + 5 个实际测试报告。
+- **FRP 服务器修复**：发现服务器 UFW 防火墙未放行 7000 端口，通过 SSH 修复（`ufw allow 7000/tcp && ufw reload`），不影响现有 web 服务（80/443）。修复后 7000 端口 TCP 连通性验证通过（`Test-NetConnection` = True）。
+- **代码问题修复**（5 项）：
+  1. `NetworkService.cs`：`catch { }` 吞异常改为 `AppLogService.Warning()` 记录。
+  2. `StartupService.cs`：`ToggleStartupItem` 和 `DeleteStartupItem` 添加通用 `catch (Exception ex)` + `AppLogService.Error()` + `MessageBox` 提示。
+  3. `FrpService.cs`：Stop 时新增 `DeleteIniFile()` 清理 `%TEMP%\MyTools\frpc.ini`（含明文 Token）。
+  4. `ScheduleViewModel.cs`：`BuildPreservedCells` 从永远返回空列表改为正确返回手动标记为 `IsManual=true` 的单元格坐标。
+  5. 确认卸载后刷新逻辑已存在（`UninstallProgramAsync` 中已实现 `stillInstalledAfter` 复查 + 列表移除）。
+- **代码分析确认无需修复**：
+  - `ExportInstalledProgramListCommand` 已绑定（导出为 .txt 文件），非空功能。
+  - `UninstallView.xaml.cs` 确认无卸载后自动刷新（卸载通过系统卸载向导异步完成），但卸载进程退出后有复查逻辑。
+  - frpc.exe 已正确嵌入（`MyTools.NativeBinaries.frpc.exe.gz`，5.22 MB）。
+- **测试报告输出位置**：`docs/规划/测试报告_*.md`。
+- 验证：Release 编译 0 警告 0 错误，程序正常启动（OnStartup ~450ms, InitComponent ~185ms, Show ~264ms）。
+
+## [2026-05-30] 发布构建
+- 重新编译 Release 版本和安装程序（版本号更新为 2026.5.30.0）。
+- 修复了遗留进程导致的启动问题（单实例 Mutex 导致新实例闪退）。
+
+## [2026-05-30] 系统模块导航扁平化重构（续）
 - 将"当前网络""启动管理""程序卸载""系统信息""性能测试"五个功能从"系统"菜单的复合型 Tab 页抽为独立菜单项和独立 ContentControl。
 - "系统设置"（含备份恢复/桌面背景/Windows 调整）和"系统优化"（含系统锁定/安全防护等 8 个子 Tab）也从"系统"子 Tab 改为独立菜单项，通过 `CurrentModule` 直接触发各自独立视图。
 - 新增 `Views/NetworkView.xaml(.cs)`、`Views/StartupView.xaml(.cs)`、`Views/UninstallView.xaml(.cs)`、`Views/SystemInfoView.xaml(.cs)`、`Views/BenchmarkView.xaml(.cs)` 五个独立 UserControl，内容从 `MainModulesView.xaml` 原巨型 `DeferredTemplate` 中提取。

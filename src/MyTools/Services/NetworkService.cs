@@ -53,7 +53,10 @@ namespace MyTools.Services
                     });
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppLogService.Warning("Network enumeration failed: {Msg}", ex.Message);
+            }
             return list;
         }
 
