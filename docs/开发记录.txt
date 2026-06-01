@@ -1,5 +1,16 @@
 # 开发记录
 
+## [2026-06-01] 多媒体页面间距紧凑化
+- `MultimediaPage.xaml` 将页面外边距从 16 缩小为 8，顶部模块头间距从 12 缩小为 8，文件夹/预览/媒体列表卡片统一使用 8px 内边距。
+- 左侧上下分隔和左右分隔从 6px 缩小为 4px，文件夹树、列表、标题与底部路径的局部留白同步压缩，减少控件与卡片边框之间的空白。
+- 继续按反馈压缩为更紧凑布局：页面外边距 4px、卡片内边距 4px、左右/上下分隔 2px，标题与内容间距压缩到 2px。
+- 本次只调整多媒体页面 XAML 布局，不修改 ViewModel 构造、启动流程、磁盘 IO 或后台服务。
+
+## [2026-06-01] 系统维护卡片合并
+- `SystemOptimizationView.xaml` 将“系统锁定 / 安全防护 / 自动更新”三个页签合并为一个“系统维护”页签。
+- “系统维护”页签内使用单张卡片分三段展示系统锁定、Defender 防护和 Windows Update 控制，保留原有命令、状态徽章与刷新按钮。
+- 同步更新 `docs/功能说明.md` 与 `docs/程序逻辑.md`，记录新的界面组织方式；本次只调整 XAML 布局，不改变启动流程、后台服务或系统命令实现。
+
 ## [2026-05-31] 全功能测试与问题修复
 - 使用多 agent 并行进行全功能测试，覆盖 4 个代码分析报告 + 5 个实际测试报告。
 - **FRP 服务器修复**：发现服务器 UFW 防火墙未放行 7000 端口，通过 SSH 修复（`ufw allow 7000/tcp && ufw reload`），不影响现有 web 服务（80/443）。修复后 7000 端口 TCP 连通性验证通过（`Test-NetConnection` = True）。
@@ -1540,3 +1551,12 @@
 - 修复 `MainModulesView.xaml` 中系统优化面板仍绑定旧 `IsSystemOptimizationVisible` 的问题；主菜单现在切换到 `CurrentModule=Optimization` 时会直接显示 `SystemOptimizationView`。
 - 修复 `SystemInfoView.xaml` 直接使用 `BoolToVis` 与 `InverseBoolToVis` 但未在自身资源中声明的问题，避免点击“系统信息”时触发 `StaticResource` 查找失败并导致 UI 线程异常。
 - 验证：`dotnet build src\MyTools\MyTools.csproj -c Release --no-incremental` 通过，0 warning / 0 error；自动启动 Release 程序后依次点击“系统 -> 系统优化”和“系统 -> 系统信息”，进程均保持运行，新增日志中无 `XamlParseException` 或其他错误。
+## [2026-06-01] 修复新版微信清理扫描为空
+- 修复 `WeChatCleanupService` 将新版 `xwechat_files\{wxid}\msg` 目录整体视为禁扫区的问题；保留 `MMKV`、`config`、`db_storage` 与 `Msg*.db` 数据库保护，避免触碰消息数据库。
+- 新版微信清理改为扫描 `msg\attach`、`msg\video`、`msg\file`、`cache`、`temp`、`resource` 与表情/收藏临时目录，并按目录段与扩展名识别图像、视频、语音、文件、缓存类别。
+- 验证：`dotnet build src\MyTools\MyTools.csproj -c Release --no-incremental` 通过，0 warning / 0 error；服务级扫描使用 `2026-05-02` 至 `2026-06-01` 范围，在本机微信目录中找到 1721 项候选数据。
+
+## [2026-06-01] 合并微信工具入口
+- 将系统优化页中的“微信清理 / 微信备份 / 微信恢复”三个页签合并为单个“微信工具”页签，并在同一张 MaterialDesign 卡片内分为清理、备份、恢复三段。
+- 保留原有日期范围、账号选择、类别勾选、候选列表、最近备份和恢复模式等控件绑定；不修改 `WeChatCleanupService`、`WeChatBackupService` 或相关 ViewModel 命令逻辑。
+- 同步更新 `docs/功能说明.md` 与 `docs/程序逻辑.md` 中的微信工具界面组织说明。

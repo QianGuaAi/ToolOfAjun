@@ -13,6 +13,18 @@ namespace MyTools.Services
     {
         private static readonly Regex ForbiddenDbFileRegex =
             new Regex(@"^(Msg.*\.db|MicroMsg\.db)$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly HashSet<string> ImageExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".heic"
+        };
+        private static readonly HashSet<string> VideoExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ".mp4", ".mov", ".avi", ".mkv", ".webm", ".wmv", ".m4v"
+        };
+        private static readonly HashSet<string> AudioExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ".amr", ".silk", ".aac", ".mp3", ".wav", ".m4a", ".ogg"
+        };
 
         public async Task<WeChatCleanupScanResult> ScanAsync(
             IEnumerable<WeChatRoot> roots,
@@ -45,6 +57,21 @@ namespace MyTools.Services
                     continue;
                 }
 
+                if (root.Variant == WeChatVariant.XWechat)
+                {
+                    ScanXWechatRoot(root, categories, timeStart, timeEnd, result, ct);
+                    if (categories.Contains(WeChatDataCategory.Text))
+                    {
+                        var note = "[待确认] 新版 xwechat_files 文字类数据尚未识别。";
+                        if (!result.PendingNotes.Contains(note))
+                        {
+                            result.PendingNotes.Add(note);
+                        }
+                    }
+
+                    continue;
+                }
+
                 foreach (var category in categories)
                 {
                     ct.ThrowIfCancellationRequested();
@@ -71,14 +98,6 @@ namespace MyTools.Services
                             if (IsForbiddenWeChatPath(info.FullName))
                             {
                                 continue;
-                            }
-
-                            if (root.Variant == WeChatVariant.XWechat && category == WeChatDataCategory.Image)
-                            {
-                                if (info.FullName.IndexOf(@"\Img\", StringComparison.OrdinalIgnoreCase) < 0)
-                                {
-                                    continue;
-                                }
                             }
 
                             if (info.LastWriteTime < timeStart || info.LastWriteTime > timeEnd)
@@ -252,7 +271,7 @@ namespace MyTools.Services
             {
                 if (segment.Equals("MMKV", StringComparison.OrdinalIgnoreCase)
                     || segment.Equals("config", StringComparison.OrdinalIgnoreCase)
-                    || segment.Equals("Msg", StringComparison.OrdinalIgnoreCase))
+                    || segment.Equals("db_storage", StringComparison.OrdinalIgnoreCase))
                 {
                     return true;
                 }
@@ -356,6 +375,146 @@ namespace MyTools.Services
                     return Enumerable.Empty<string>();
                 default:
                     return Enumerable.Empty<string>();
+            }
+        }
+
+        private static void ScanXWechatRoot(
+            WeChatRoot root,
+            HashSet<WeChatDataCategory> categories,
+            DateTime timeStart,
+            DateTime timeEnd,
+            WeChatCleanupScanResult result,
+            CancellationToken ct)
+        {
+            foreach (var path in ResolveXWechatScanPaths(root))
+            {
+                ct.ThrowIfCancellationRequested();
+                if (!Directory.Exists(path))
+                {
+                    continue;
+                }
+
+                foreach (var file in SafePathHelper.EnumerateFilesSafe(path))
+                {
+                    ct.ThrowIfCancellationRequested();
+                    FileInfo info;
+                    try
+                    {
+                        info = new FileInfo(file);
+                    }
+                    catch
+                    {
+                        continue;
+                    }
+
+                    if (IsForbiddenWeChatPath(info.FullName))
+                    {
+                        continue;
+                    }
+
+                    if (info.LastWriteTime < timeStart || info.LastWriteTime > timeEnd)
+                    {
+                        continue;
+                    }
+
+                    var category = ResolveXWechatCategory(root, info.FullName);
+                    if (!category.HasValue || !categories.Contains(category.Value))
+                    {
+                        continue;
+                    }
+
+                    result.Candidates.Add(new WeChatCleanupCandidate
+                    {
+                        Path = info.FullName,
+                        Category = category.Value,
+                        LastWriteTime = info.LastWriteTime,
+                        Bytes = info.Length,
+                        WxIdOrUserName = root.WxIdOrUserName,
+                        Variant = root.Variant,
+                        IsSelected = true
+                    });
+                }
+            }
+        }
+
+        private static IEnumerable<string> ResolveXWechatScanPaths(WeChatRoot root)
+        {
+            return new[]
+            {
+                Path.Combine(root.RootPath, "msg", "attach"),
+                Path.Combine(root.RootPath, "msg", "video"),
+                Path.Combine(root.RootPath, "msg", "file"),
+                Path.Combine(root.RootPath, "cache"),
+                Path.Combine(root.RootPath, "temp"),
+                Path.Combine(root.RootPath, "resource"),
+                Path.Combine(root.RootPath, "business", "emoticon", "Thumb"),
+                Path.Combine(root.RootPath, "business", "favorite", "temp")
+            };
+        }
+
+        private static WeChatDataCategory? ResolveXWechatCategory(WeChatRoot root, string fullPath)
+        {
+            var extension = Path.GetExtension(fullPath);
+
+            if (IsInside(fullPath, Path.Combine(root.RootPath, "cache"))
+                || IsInside(fullPath, Path.Combine(root.RootPath, "temp"))
+                || IsInside(fullPath, Path.Combine(root.RootPath, "resource"))
+                || IsInside(fullPath, Path.Combine(root.RootPath, "business", "emoticon", "Thumb"))
+                || IsInside(fullPath, Path.Combine(root.RootPath, "business", "favorite", "temp")))
+            {
+                return WeChatDataCategory.Cache;
+            }
+
+            if (ContainsPathSegment(fullPath, "Img") || ImageExtensions.Contains(extension))
+            {
+                return WeChatDataCategory.Image;
+            }
+
+            if (ContainsPathSegment(fullPath, "Video")
+                || IsInside(fullPath, Path.Combine(root.RootPath, "msg", "video"))
+                || VideoExtensions.Contains(extension))
+            {
+                return WeChatDataCategory.Video;
+            }
+
+            if (ContainsPathSegment(fullPath, "Audio")
+                || ContainsPathSegment(fullPath, "Voice")
+                || AudioExtensions.Contains(extension))
+            {
+                return WeChatDataCategory.Voice;
+            }
+
+            if (IsInside(fullPath, Path.Combine(root.RootPath, "msg", "attach"))
+                || IsInside(fullPath, Path.Combine(root.RootPath, "msg", "file")))
+            {
+                return WeChatDataCategory.File;
+            }
+
+            return null;
+        }
+
+        private static bool ContainsPathSegment(string fullPath, string segmentName)
+        {
+            var segments = (fullPath ?? string.Empty).Split(new[] { '\\', '/' }, StringSplitOptions.RemoveEmptyEntries);
+            return segments.Any(x => x.Equals(segmentName, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static bool IsInside(string fullPath, string directory)
+        {
+            if (string.IsNullOrWhiteSpace(fullPath) || string.IsNullOrWhiteSpace(directory))
+            {
+                return false;
+            }
+
+            try
+            {
+                var normalizedFile = Path.GetFullPath(fullPath).TrimEnd('\\');
+                var normalizedDirectory = Path.GetFullPath(directory).TrimEnd('\\') + "\\";
+                return normalizedFile.StartsWith(normalizedDirectory, StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                return false;
             }
         }
 

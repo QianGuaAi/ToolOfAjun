@@ -12955,7 +12955,7 @@ namespace MyTools.ViewModels
         private static string BuildAppVersionText()
         {
             var version = typeof(MainViewModel).Assembly.GetName().Version;
-            if (version == null)
+            if (version == null || (version.Major == 0 && version.Minor == 0))
             {
                 return "v1.0.0";
             }

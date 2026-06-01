@@ -9,7 +9,7 @@ namespace MyTools.Services
 {
     public sealed class WeChatDataLocator
     {
-        private static readonly Regex WxIdPattern = new Regex(@"^(wxid_[A-Za-z0-9]+|\d+_.+)$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex WxIdPattern = new Regex(@"^(wxid_[A-Za-z0-9_]+|\d+)$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
         public IReadOnlyList<WeChatRoot> LocateRoots()
         {

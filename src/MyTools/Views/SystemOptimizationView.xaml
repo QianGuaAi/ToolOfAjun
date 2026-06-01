@@ -51,219 +51,201 @@
                     Style="{StaticResource PremiumMaterialTabControl}"
                     HorizontalContentAlignment="Stretch"
                     VerticalContentAlignment="Stretch">
-            <!-- TabItem: 系统锁定 (Power policy + Win10 lock) -->
-            <TabItem Header="系统锁定">
+            <!-- TabItem: 系统维护 (Power policy + Defender + Windows Update) -->
+            <TabItem Header="系统维护">
                 <StackPanel>
-                    <materialDesign:Card Padding="14,10" Margin="0,0,0,8">
+                    <materialDesign:Card Padding="16,12" Margin="0,0,0,8">
                         <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel>
-                                <TextBlock Text="锁定当前 Windows 版本" Style="{StaticResource TextSubtitle}" FontWeight="Bold" />
-                                <TextBlock Text="通过 Windows Update 组策略锁定当前版本，防止自动升级到大版本（例如 Win7 → Win7 SP1，Win10 → Win11）。兼容 Win7 SP1 至 Win11。"
-                                           Style="{StaticResource TextCaption}"
-                                           FontSize="12"
-                                           Opacity="0.6"
-                                           TextWrapping="Wrap"
-                                           Margin="0,3,18,0" />
-                            </StackPanel>
-                            <Button Grid.Column="1"
-                                    Width="86"
-                                    Height="32"
-                                    Content="执行锁定"
-                                    Command="{Binding LockWin10Command}"
-                                    Style="{StaticResource PrimaryActionButton}" />
-                        </Grid>
-                    </materialDesign:Card>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
 
-                    <materialDesign:Card Padding="14,10" Margin="0,0,0,8">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel>
-                                <TextBlock Text="禁止自动关屏、关硬盘和休眠"
-                                           Style="{StaticResource TextSubtitle}"
-                                           FontWeight="Bold" />
-                                <TextBlock Text="把当前电源计划的交流电和电池模式都设置为：屏幕从不关闭、硬盘从不关闭、系统不睡眠/休眠，并关闭 hibernate。适合长时间下载、录屏、跑任务或远程连接。"
-                                           Style="{StaticResource TextCaption}"
-                                           FontSize="12"
-                                           Opacity="0.65"
-                                           TextWrapping="Wrap"
-                                           Margin="0,3,18,0" />
-                                <TextBlock Text="{Binding PowerPolicyStatusMessage}"
-                                           Style="{StaticResource TextCaption}"
-                                           TextWrapping="Wrap"
-                                           Margin="0,6,18,0" />
-                            </StackPanel>
-                            <StackPanel Grid.Column="1"
-                                        Orientation="Horizontal"
-                                        VerticalAlignment="Center">
-                                <Button Width="108"
-                                        Height="32"
-                                        Content="应用常亮"
-                                        Command="{Binding ApplyAlwaysOnPowerPolicyCommand}"
-                                        Style="{StaticResource PrimaryActionButton}" />
-                                <ProgressBar Width="22"
-                                             Height="22"
-                                             Margin="10,0,0,0"
-                                             IsIndeterminate="True"
-                                             Visibility="{Binding IsPowerPolicyBusy, Converter={StaticResource BoolToVis}}"
-                                             Style="{StaticResource MaterialDesignCircularProgressBar}" />
-                            </StackPanel>
-                        </Grid>
-                    </materialDesign:Card>
-                </StackPanel>
-            </TabItem>
-
-            <!-- TabItem: 安全防护 (Defender) -->
-            <TabItem Header="安全防护">
-                <StackPanel>
-                    <materialDesign:Card Padding="14,10" Margin="0,0,0,8">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel>
-                                <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                                    <TextBlock Text="Windows Defender 实时防护"
+                            <Grid Grid.Row="0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Text="系统锁定"
                                                Style="{StaticResource TextSubtitle}"
-                                               FontWeight="Bold"
-                                               VerticalAlignment="Center" />
-                                    <Border Margin="8,0,0,0" VerticalAlignment="Center">
-                                        <Border.Style>
-                                            <Style TargetType="Border" BasedOn="{StaticResource BadgeSuccess}">
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding IsDefenderEnabled}" Value="False">
-                                                        <Setter Property="Background" Value="{DynamicResource BrushError}" />
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </Border.Style>
-                                        <TextBlock Foreground="White" FontWeight="Bold" FontSize="11">
-                                            <TextBlock.Style>
-                                                <Style TargetType="TextBlock">
-                                                    <Setter Property="Text" Value="防护中" />
+                                               FontWeight="Bold" />
+                                    <TextBlock Text="锁定当前 Windows 版本，防止自动升级到大版本；同时可把当前电源计划设置为屏幕、硬盘、睡眠和休眠永不自动关闭。"
+                                               Style="{StaticResource TextCaption}"
+                                               FontSize="12"
+                                               Opacity="0.65"
+                                               TextWrapping="Wrap"
+                                               Margin="0,3,18,0" />
+                                    <TextBlock Text="{Binding PowerPolicyStatusMessage}"
+                                               Style="{StaticResource TextCaption}"
+                                               TextWrapping="Wrap"
+                                               Margin="0,6,18,0" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1"
+                                            Orientation="Horizontal"
+                                            VerticalAlignment="Center">
+                                    <Button Width="86"
+                                            Height="32"
+                                            Margin="0,0,8,0"
+                                            Content="执行锁定"
+                                            Command="{Binding LockWin10Command}"
+                                            Style="{StaticResource PrimaryActionButton}" />
+                                    <Button Width="108"
+                                            Height="32"
+                                            Content="应用常亮"
+                                            Command="{Binding ApplyAlwaysOnPowerPolicyCommand}"
+                                            Style="{StaticResource PrimaryActionButton}" />
+                                    <ProgressBar Width="22"
+                                                 Height="22"
+                                                 Margin="10,0,0,0"
+                                                 IsIndeterminate="True"
+                                                 Visibility="{Binding IsPowerPolicyBusy, Converter={StaticResource BoolToVis}}"
+                                                 Style="{StaticResource MaterialDesignCircularProgressBar}" />
+                                </StackPanel>
+                            </Grid>
+
+                            <Border Grid.Row="1" Height="1" Background="#E2E8F0" Margin="0,12,0,12" />
+
+                            <Grid Grid.Row="2">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                        <TextBlock Text="安全防护"
+                                                   Style="{StaticResource TextSubtitle}"
+                                                   FontWeight="Bold"
+                                                   VerticalAlignment="Center" />
+                                        <Border Margin="8,0,0,0" VerticalAlignment="Center">
+                                            <Border.Style>
+                                                <Style TargetType="Border" BasedOn="{StaticResource BadgeSuccess}">
                                                     <Style.Triggers>
                                                         <DataTrigger Binding="{Binding IsDefenderEnabled}" Value="False">
-                                                            <Setter Property="Text" Value="已关闭" />
+                                                            <Setter Property="Background" Value="{DynamicResource BrushError}" />
                                                         </DataTrigger>
                                                     </Style.Triggers>
                                                 </Style>
-                                            </TextBlock.Style>
-                                        </TextBlock>
-                                    </Border>
+                                            </Border.Style>
+                                            <TextBlock Foreground="White" FontWeight="Bold" FontSize="11">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Text" Value="防护中" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsDefenderEnabled}" Value="False">
+                                                                <Setter Property="Text" Value="已关闭" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </Border>
+                                    </StackPanel>
+                                    <TextBlock Text="关闭或恢复 Windows 安全中心实时防护。Win11 需先在安全中心手动关闭「篡改保护」，否则命令将被拒绝。"
+                                               Style="{StaticResource TextCaption}"
+                                               FontSize="12"
+                                               Opacity="0.65"
+                                               TextWrapping="Wrap"
+                                               Margin="0,0,18,0" />
                                 </StackPanel>
-                                <TextBlock Text="关闭或恢复 Windows 安全中心的实时防护。Win11 需先在安全中心手动关闭「篡改保护」，否则命令将被拒绝。"
-                                           Style="{StaticResource TextCaption}"
-                                           FontSize="12"
-                                           Opacity="0.6"
-                                           TextWrapping="Wrap"
-                                           Margin="0,0,18,0" />
-                            </StackPanel>
-                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                                <Button Width="86" Height="32" Margin="0,0,6,0" Command="{Binding ToggleDefenderCommand}">
-                                    <Button.Style>
-                                        <Style TargetType="Button" BasedOn="{StaticResource GhostActionButton}">
-                                            <Setter Property="Content" Value="关闭防护" />
-                                            <Setter Property="Foreground" Value="#C62828" />
-                                            <Setter Property="BorderBrush" Value="#C62828" />
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding IsDefenderEnabled}" Value="False">
-                                                    <Setter Property="Content" Value="恢复防护" />
-                                                    <Setter Property="Foreground" Value="#2E7D32" />
-                                                    <Setter Property="BorderBrush" Value="#2E7D32" />
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </Button.Style>
-                                </Button>
-                                <Button Style="{StaticResource MaterialDesignIconButton}"
-                                        Width="32"
-                                        Height="32"
-                                        Command="{Binding RefreshSystemStatusCommand}"
-                                        ToolTip="刷新状态">
-                                    <materialDesign:PackIcon Kind="Refresh" Width="20" Height="20" />
-                                </Button>
-                            </StackPanel>
-                        </Grid>
-                    </materialDesign:Card>
-                </StackPanel>
-            </TabItem>
-
-            <!-- TabItem: 自动更新 -->
-            <TabItem Header="自动更新">
-                <StackPanel>
-                    <materialDesign:Card Padding="14,10" Margin="0,0,0,8">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel>
-                                <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                                    <TextBlock Text="Windows 自动更新"
-                                               Style="{StaticResource TextSubtitle}"
-                                               FontWeight="Bold"
-                                               VerticalAlignment="Center" />
-                                    <Border Margin="8,0,0,0" VerticalAlignment="Center">
-                                        <Border.Style>
-                                            <Style TargetType="Border" BasedOn="{StaticResource BadgeInfo}">
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Button Width="86" Height="32" Margin="0,0,8,0" Command="{Binding ToggleDefenderCommand}">
+                                        <Button.Style>
+                                            <Style TargetType="Button" BasedOn="{StaticResource GhostActionButton}">
+                                                <Setter Property="Content" Value="关闭防护" />
+                                                <Setter Property="Foreground" Value="#C62828" />
+                                                <Setter Property="BorderBrush" Value="#C62828" />
                                                 <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding IsAutoUpdateEnabled}" Value="False">
-                                                        <Setter Property="Background" Value="{DynamicResource BrushWarning}" />
+                                                    <DataTrigger Binding="{Binding IsDefenderEnabled}" Value="False">
+                                                        <Setter Property="Content" Value="恢复防护" />
+                                                        <Setter Property="Foreground" Value="#2E7D32" />
+                                                        <Setter Property="BorderBrush" Value="#2E7D32" />
                                                     </DataTrigger>
                                                 </Style.Triggers>
                                             </Style>
-                                        </Border.Style>
-                                        <TextBlock Foreground="White" FontWeight="Bold" FontSize="11">
-                                            <TextBlock.Style>
-                                                <Style TargetType="TextBlock">
-                                                    <Setter Property="Text" Value="自动更新中" />
+                                        </Button.Style>
+                                    </Button>
+                                    <Button Style="{StaticResource MaterialDesignIconButton}"
+                                            Width="32"
+                                            Height="32"
+                                            Command="{Binding RefreshSystemStatusCommand}"
+                                            ToolTip="刷新状态">
+                                        <materialDesign:PackIcon Kind="Refresh" Width="20" Height="20" />
+                                    </Button>
+                                </StackPanel>
+                            </Grid>
+
+                            <Border Grid.Row="3" Height="1" Background="#E2E8F0" Margin="0,12,0,12" />
+
+                            <Grid Grid.Row="4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                        <TextBlock Text="自动更新"
+                                                   Style="{StaticResource TextSubtitle}"
+                                                   FontWeight="Bold"
+                                                   VerticalAlignment="Center" />
+                                        <Border Margin="8,0,0,0" VerticalAlignment="Center">
+                                            <Border.Style>
+                                                <Style TargetType="Border" BasedOn="{StaticResource BadgeInfo}">
                                                     <Style.Triggers>
                                                         <DataTrigger Binding="{Binding IsAutoUpdateEnabled}" Value="False">
-                                                            <Setter Property="Text" Value="已停止" />
+                                                            <Setter Property="Background" Value="{DynamicResource BrushWarning}" />
                                                         </DataTrigger>
                                                     </Style.Triggers>
                                                 </Style>
-                                            </TextBlock.Style>
-                                        </TextBlock>
-                                    </Border>
+                                            </Border.Style>
+                                            <TextBlock Foreground="White" FontWeight="Bold" FontSize="11">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Text" Value="自动更新中" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsAutoUpdateEnabled}" Value="False">
+                                                                <Setter Property="Text" Value="已停止" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </Border>
+                                    </StackPanel>
+                                    <TextBlock Text="停止 Windows 后台自动更新，或手动触发立即检查并安装所有可用更新。"
+                                               Style="{StaticResource TextCaption}"
+                                               FontSize="12"
+                                               Opacity="0.65"
+                                               TextWrapping="Wrap"
+                                               Margin="0,0,18,0" />
                                 </StackPanel>
-                                <TextBlock Text="停止 Windows 后台自动更新，或手动触发立即检查并安装所有可用更新（以前台最高优先级下载安装，速度最快）。"
-                                           Style="{StaticResource TextCaption}"
-                                           FontSize="12"
-                                           Opacity="0.6"
-                                           TextWrapping="Wrap"
-                                           Margin="0,0,18,0" />
-                            </StackPanel>
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,0,0">
-                                <Button Width="86" Height="32" Margin="0,0,0,6" Command="{Binding ToggleAutoUpdateCommand}">
-                                    <Button.Style>
-                                        <Style TargetType="Button" BasedOn="{StaticResource GhostActionButton}">
-                                            <Setter Property="Content" Value="停止更新" />
-                                            <Setter Property="Foreground" Value="#C62828" />
-                                            <Setter Property="BorderBrush" Value="#C62828" />
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding IsAutoUpdateEnabled}" Value="False">
-                                                    <Setter Property="Content" Value="恢复更新" />
-                                                    <Setter Property="Foreground" Value="#1565C0" />
-                                                    <Setter Property="BorderBrush" Value="#1565C0" />
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </Button.Style>
-                                </Button>
-                                <Button Width="86"
-                                        Height="32"
-                                        Content="立即更新"
-                                        Command="{Binding TriggerUpdateNowCommand}"
-                                        Style="{StaticResource PrimaryActionButton}" />
-                            </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Button Width="86" Height="32" Margin="0,0,8,0" Command="{Binding ToggleAutoUpdateCommand}">
+                                        <Button.Style>
+                                            <Style TargetType="Button" BasedOn="{StaticResource GhostActionButton}">
+                                                <Setter Property="Content" Value="停止更新" />
+                                                <Setter Property="Foreground" Value="#C62828" />
+                                                <Setter Property="BorderBrush" Value="#C62828" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsAutoUpdateEnabled}" Value="False">
+                                                        <Setter Property="Content" Value="恢复更新" />
+                                                        <Setter Property="Foreground" Value="#1565C0" />
+                                                        <Setter Property="BorderBrush" Value="#1565C0" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
+                                    <Button Width="86"
+                                            Height="32"
+                                            Content="立即更新"
+                                            Command="{Binding TriggerUpdateNowCommand}"
+                                            Style="{StaticResource PrimaryActionButton}" />
+                                </StackPanel>
+                            </Grid>
                         </Grid>
                     </materialDesign:Card>
                 </StackPanel>
@@ -417,11 +399,22 @@
                 </StackPanel>
             </TabItem>
 
-            <!-- TabItem: 微信清理 (extracted) -->
-            <TabItem Header="微信清理">
-                <StackPanel>
+            <!-- TabItem: 微信工具 (cleanup + backup + restore) -->
+            <TabItem Header="微信工具">
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
                     <materialDesign:Card Padding="14,10" Margin="0,0,0,8">
                         <StackPanel>
+                            <TextBlock Text="微信工具"
+                                       Style="{StaticResource TextSubtitle}"
+                                       FontWeight="Bold" />
+                            <TextBlock Text="清理、备份和恢复集中在同一张卡片中；清理前建议先关闭微信。"
+                                       Style="{StaticResource TextCaption}"
+                                       FontSize="12"
+                                       Opacity="0.65"
+                                       Margin="0,3,0,10"
+                                       TextWrapping="Wrap" />
+
                             <TextBlock Text="微信清理"
                                        Style="{StaticResource TextSubtitle}"
                                        FontWeight="Bold" />
@@ -496,16 +489,9 @@
                                     <DataGridTextColumn Header="路径" Width="*" Binding="{Binding Path}" />
                                 </DataGrid.Columns>
                             </DataGrid>
-                        </StackPanel>
-                    </materialDesign:Card>
-                </StackPanel>
-            </TabItem>
 
-            <!-- TabItem: 微信备份 (extracted) -->
-            <TabItem Header="微信备份">
-                <StackPanel>
-                    <materialDesign:Card Padding="14,10" Margin="0,0,0,8">
-                        <StackPanel>
+                            <Border Height="1" Background="#E2E8F0" Margin="0,16,0,14" />
+
                             <TextBlock Text="微信备份"
                                        Style="{StaticResource TextSubtitle}"
                                        FontWeight="Bold" />
@@ -566,16 +552,9 @@
                                        Style="{StaticResource TextCaption}"
                                        Margin="0,4,0,0"
                                        TextWrapping="Wrap" />
-                        </StackPanel>
-                    </materialDesign:Card>
-                </StackPanel>
-            </TabItem>
 
-            <!-- TabItem: 微信恢复 (extracted) -->
-            <TabItem Header="微信恢复">
-                <StackPanel>
-                    <materialDesign:Card Padding="14,10">
-                        <StackPanel>
+                            <Border Height="1" Background="#E2E8F0" Margin="0,16,0,14" />
+
                             <TextBlock Text="微信恢复"
                                        Style="{StaticResource TextSubtitle}"
                                        FontWeight="Bold" />
@@ -688,7 +667,7 @@
                             </Border>
                         </StackPanel>
                     </materialDesign:Card>
-                </StackPanel>
+                </ScrollViewer>
             </TabItem>
         </TabControl>
     </Grid>
