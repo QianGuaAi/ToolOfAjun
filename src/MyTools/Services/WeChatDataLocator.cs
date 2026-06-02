@@ -9,7 +9,31 @@ namespace MyTools.Services
 {
     public sealed class WeChatDataLocator
     {
-        private static readonly Regex WxIdPattern = new Regex(@"^(wxid_[A-Za-z0-9_]+|\d+)$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex AccountDirectoryPattern =
+            new Regex(@"^(wxid_[A-Za-z0-9_]+|\d+(?:_[A-Za-z0-9_]+)?)$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        private static readonly string[] LegacyEvidenceRelativePaths =
+        {
+            @"FileStorage\Image",
+            @"FileStorage\Video",
+            @"FileStorage\Voice2",
+            @"FileStorage\File",
+            @"FileStorage\Cache",
+            @"FileStorage\CustomEmotion",
+            @"FileStorage\MsgTemp"
+        };
+
+        private static readonly string[] XWechatEvidenceRelativePaths =
+        {
+            @"msg\attach",
+            @"msg\video",
+            @"msg\file",
+            "cache",
+            "temp",
+            "resource",
+            @"business\emoticon\Thumb",
+            @"business\favorite\temp"
+        };
 
         public IReadOnlyList<WeChatRoot> LocateRoots()
         {
@@ -70,7 +94,7 @@ namespace MyTools.Services
             }
 
             return result.Values
-                .OrderBy(x => x.Variant)
+                .OrderBy(x => x.Variant == WeChatVariant.XWechat ? 0 : 1)
                 .ThenBy(x => x.WxIdOrUserName, StringComparer.OrdinalIgnoreCase)
                 .ToList();
         }
@@ -100,6 +124,8 @@ namespace MyTools.Services
                 return;
             }
 
+            TryAddRootCandidate(target, normalizedBasePath, variant);
+
             string[] children;
             try
             {
@@ -112,35 +138,72 @@ namespace MyTools.Services
 
             foreach (var child in children)
             {
-                var name = Path.GetFileName(child.TrimEnd('\\'));
-                if (string.IsNullOrWhiteSpace(name))
-                {
-                    continue;
-                }
-
-                if (!WxIdPattern.IsMatch(name))
-                {
-                    continue;
-                }
-
-                var normalizedChild = Normalize(child);
-                if (string.IsNullOrWhiteSpace(normalizedChild))
-                {
-                    continue;
-                }
-
-                if (target.ContainsKey(normalizedChild))
-                {
-                    continue;
-                }
-
-                target[normalizedChild] = new WeChatRoot
-                {
-                    WxIdOrUserName = name,
-                    RootPath = normalizedChild,
-                    Variant = variant
-                };
+                TryAddRootCandidate(target, child, variant);
             }
+        }
+
+        private static void TryAddRootCandidate(
+            IDictionary<string, WeChatRoot> target,
+            string candidatePath,
+            WeChatVariant variant)
+        {
+            var name = Path.GetFileName((candidatePath ?? string.Empty).TrimEnd('\\'));
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                return;
+            }
+
+            if (!AccountDirectoryPattern.IsMatch(name))
+            {
+                return;
+            }
+
+            var normalizedChild = Normalize(candidatePath);
+            if (string.IsNullOrWhiteSpace(normalizedChild))
+            {
+                return;
+            }
+
+            if (target.ContainsKey(normalizedChild))
+            {
+                return;
+            }
+
+            if (!LooksLikeWeChatDataRoot(normalizedChild, variant))
+            {
+                return;
+            }
+
+            target[normalizedChild] = new WeChatRoot
+            {
+                WxIdOrUserName = name,
+                RootPath = normalizedChild,
+                Variant = variant
+            };
+        }
+
+        private static bool LooksLikeWeChatDataRoot(string rootPath, WeChatVariant variant)
+        {
+            var evidencePaths = variant == WeChatVariant.XWechat
+                ? XWechatEvidenceRelativePaths
+                : LegacyEvidenceRelativePaths;
+
+            foreach (var relativePath in evidencePaths)
+            {
+                try
+                {
+                    if (Directory.Exists(Path.Combine(rootPath, relativePath)))
+                    {
+                        return true;
+                    }
+                }
+                catch
+                {
+                    // ignore unreadable evidence paths
+                }
+            }
+
+            return false;
         }
 
         private static IReadOnlyDictionary<string, string> ReadAllRegistryFileSavePaths()
@@ -225,6 +288,7 @@ namespace MyTools.Services
         public string RootPath { get; set; }
         public WeChatVariant Variant { get; set; }
         public string VariantDisplay => Variant == WeChatVariant.XWechat ? "XWechat" : "LegacyWeChat";
+        public string DisplayName => $"{WxIdOrUserName} ({VariantDisplay})";
     }
 
     public enum WeChatVariant

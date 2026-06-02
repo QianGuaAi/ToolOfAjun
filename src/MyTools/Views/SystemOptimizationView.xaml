@@ -259,15 +259,20 @@
                             <TextBlock Text="自动优化与报告"
                                        Style="{StaticResource TextSubtitle}"
                                        FontWeight="Bold" />
-                            <TextBlock Text="按白名单步骤自动执行系统优化，完成后自动生成可追溯报告。"
+                            <TextBlock Text="先扫描可优化项目，确认后再执行实际优化并生成可追溯报告。"
                                        Style="{StaticResource TextCaption}"
                                        FontSize="12"
                                        Opacity="0.65"
                                        Margin="0,3,0,8"
                                        TextWrapping="Wrap" />
                             <StackPanel Orientation="Horizontal">
-                                <Button Content="开始自动优化"
+                                <Button Content="扫描"
                                         Height="32"
+                                        Style="{StaticResource PrimaryActionButton}"
+                                        Command="{Binding ScanAutoOptimizeCommand}" />
+                                <Button Content="优化"
+                                        Height="32"
+                                        Margin="8,0,0,0"
                                         Style="{StaticResource PrimaryActionButton}"
                                         Command="{Binding StartAutoOptimizeCommand}" />
                                 <ProgressBar Width="22" Height="22"
@@ -281,13 +286,42 @@
                                        Margin="0,6,0,6"
                                        TextWrapping="Wrap" />
 
+                            <TextBlock Text="本次扫描结果"
+                                       Style="{StaticResource TextCaption}"
+                                       FontWeight="SemiBold"
+                                       Margin="0,2,0,5" />
+                            <DataGrid ItemsSource="{Binding AutoOptimizePlanItems}"
+                                      Style="{StaticResource ModernDataGrid}"
+                                      AutoGenerateColumns="False"
+                                      CanUserAddRows="False"
+                                      SelectionMode="Single"
+                                      MinHeight="120"
+                                      MaxHeight="180"
+                                      VerticalScrollBarVisibility="Auto"
+                                      GridLinesVisibility="Horizontal"
+                                      HeadersVisibility="Column"
+                                      Margin="0,0,0,8">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="状态" Width="82" Binding="{Binding StatusDisplay}" />
+                                    <DataGridTextColumn Header="项目" Width="190" Binding="{Binding Name}" />
+                                    <DataGridTextColumn Header="类型" Width="90" Binding="{Binding Category}" />
+                                    <DataGridTextColumn Header="预计释放" Width="110" Binding="{Binding EstimatedBytesDisplay}" />
+                                    <DataGridTextColumn Header="提权" Width="68" Binding="{Binding RequiresAdminDisplay}" />
+                                    <DataGridTextColumn Header="说明" Width="*" Binding="{Binding Detail}" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+
+                            <TextBlock Text="历史报告"
+                                       Style="{StaticResource TextCaption}"
+                                       FontWeight="SemiBold"
+                                       Margin="0,2,0,5" />
                             <DataGrid ItemsSource="{Binding OptimizationReports}"
                                       Style="{StaticResource ModernDataGrid}"
                                       AutoGenerateColumns="False"
                                       CanUserAddRows="False"
                                       SelectionMode="Single"
                                       MinHeight="120"
-                                      MaxHeight="220"
+                                      MaxHeight="180"
                                       VerticalScrollBarVisibility="Auto"
                                       GridLinesVisibility="Horizontal"
                                       HeadersVisibility="Column"
@@ -438,7 +472,7 @@
                                 <ComboBox Grid.Column="3" Margin="12,0,0,0"
                                           ItemsSource="{Binding WeChatRoots}"
                                           SelectedItem="{Binding SelectedWeChatRoot}"
-                                          DisplayMemberPath="WxIdOrUserName" />
+                                          DisplayMemberPath="DisplayName" />
                             </Grid>
 
                             <WrapPanel Margin="0,0,0,6">
@@ -515,7 +549,7 @@
                                 <ComboBox Grid.Column="3" Margin="12,0,0,0"
                                           ItemsSource="{Binding WeChatRoots}"
                                           SelectedItem="{Binding SelectedWeChatRoot}"
-                                          DisplayMemberPath="WxIdOrUserName" />
+                                          DisplayMemberPath="DisplayName" />
                             </Grid>
 
                             <WrapPanel Margin="0,0,0,6">

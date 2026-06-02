@@ -1560,3 +1560,21 @@
 - 将系统优化页中的“微信清理 / 微信备份 / 微信恢复”三个页签合并为单个“微信工具”页签，并在同一张 MaterialDesign 卡片内分为清理、备份、恢复三段。
 - 保留原有日期范围、账号选择、类别勾选、候选列表、最近备份和恢复模式等控件绑定；不修改 `WeChatCleanupService`、`WeChatBackupService` 或相关 ViewModel 命令逻辑。
 - 同步更新 `docs/功能说明.md` 与 `docs/程序逻辑.md` 中的微信工具界面组织说明。
+
+## [2026-06-02] 重新编译并打包安装程序
+- 重新执行 `dotnet build src\MyTools\MyTools.csproj -c Release --no-incremental`，主程序输出到 `src\MyTools\bin\Release\net48\MyTools.exe`，大小 13,091,328 bytes，SHA256 = `029474096F815D296809E6FFE2319A6240B08B182BC986E53627901D2563D914`。
+- 重新执行 `scripts\Build-Installer.ps1`，主程序、卸载器、payload zip 和安装器构建均为 0 warning / 0 error。
+- 输出安装包：`artifacts\installer\MyToolsSetup.exe`，大小 43,198,464 bytes，SHA256 = `1B3C750A116746B73BD34B434C714C51E40A9D5E707F53F07172D95B428FA1A2`。
+
+## [2026-06-02] 修复微信工具默认选错账号
+- 修复 `WeChatDataLocator` 仅凭 `Tencent Files` 下数字目录名识别微信账号的问题；现在账号目录必须同时满足账号名规则和微信专有数据目录证据，避免把 QQ/Tencent 数字目录误判为微信数据根。
+- 微信账号列表优先展示新版 `xwechat_files` 根目录，并在清理/备份账号下拉中显示 `账号名 (XWechat/LegacyWeChat)`，便于区分目录来源。
+- 同步更新 `docs/功能说明.md` 与 `docs/程序逻辑.md` 中的微信定位、扫描范围和界面说明。
+- 验证：`dotnet clean src\MyTools\MyTools.csproj -c Release` 后执行 `dotnet build src\MyTools\MyTools.csproj -c Release --no-incremental` 通过，0 warning / 0 error；编译后调用定位器仅返回本机 `xwechat_files` 微信根目录，使用 `2026-05-03` 至 `2026-06-02` 范围扫描得到 1710 项候选数据，合计 470,793,599 bytes。
+- 重新执行 `scripts\Build-Installer.ps1`，主程序、卸载器和安装器构建均为 0 warning / 0 error；`src\MyTools\bin\Release\net48\MyTools.exe` 大小 13,107,712 bytes，SHA256 = `4CD248D3D3D8EAC61FBA5693697EFA74DD4A0E084B29460A727196572E28F0EE`；安装包 `artifacts\installer\MyToolsSetup.exe` 大小 43,203,072 bytes，SHA256 = `4D0F972093C281D5647D227792F668C752EE66E035596BB2B794EC530817B431`。
+
+## [2026-06-02] 自动优化改为扫描后执行
+- 系统优化的“自动优化”页改为“扫描 / 优化”两步：扫描阶段只读生成 `AutoOptimizePlanItems`，列表展示状态、项目、类型、预计释放空间、提权需求和说明。
+- “优化”按钮仅在扫描发现 `CanOptimize=true` 项目后可用；执行时只运行本次扫描结果中的可优化步骤，完成后继续生成历史报告并清空本次扫描结果。
+- 同步更新 `docs/功能说明.md` 与 `docs/程序逻辑.md` 中的系统优化自动优化流程说明。
+- 验证：`dotnet build .\src\MyTools\MyTools.csproj -c Release` 通过，0 warning / 0 error。

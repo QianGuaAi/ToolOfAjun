@@ -89,6 +89,7 @@ namespace MyTools.ViewModels
         private string _queryStatusMessage = string.Empty;
         private bool _isInstalledProgramsBusy;
         private string _installedProgramsStatusMessage = "点击刷新加载可卸载程序列表。";
+        private ObservableCollection<OptimizationPlanItem> _autoOptimizePlanItems;
         private ObservableCollection<OptimizationReportItem> _optimizationReports;
         private ObservableCollection<JunkCandidate> _junkCandidates;
         private ObservableCollection<WeChatCleanupCandidate> _weChatCleanupCandidates;
@@ -96,7 +97,7 @@ namespace MyTools.ViewModels
         private ObservableCollection<RecentWeChatBackupItem> _recentWeChatBackups;
         private WeChatRoot _selectedWeChatRoot;
         private bool _isAutoOptimizeBusy;
-        private string _autoOptimizeStatusMessage = "点击“开始自动优化”执行白名单优化流程。";
+        private string _autoOptimizeStatusMessage = "点击“扫描”先分析可以优化的项目。";
         private bool _isPowerPolicyBusy;
         private string _powerPolicyStatusMessage = "点击应用后，当前电源计划将设置为不关闭屏幕、不关闭硬盘、不进入睡眠/休眠。";
         private bool _isJunkBusy;
@@ -254,6 +255,7 @@ namespace MyTools.ViewModels
         private readonly AsyncRelayCommand _toggleDefenderCommand;
         private readonly AsyncRelayCommand _toggleAutoUpdateCommand;
         private readonly AsyncRelayCommand _triggerUpdateNowCommand;
+        private readonly AsyncRelayCommand _scanAutoOptimizeCommand;
         private readonly AsyncRelayCommand _startAutoOptimizeCommand;
         private readonly AsyncRelayCommand _startJunkScanCommand;
         private readonly AsyncRelayCommand _runJunkCleanupCommand;
@@ -328,6 +330,7 @@ namespace MyTools.ViewModels
             FilteredVideoViewerPlaylistView.Filter = FilterVideoViewerPlaylistItem;
             VideoViewerRecentPlaylists = new ObservableCollection<RecentPlaylistItem>();
             VideoViewerFavoritePlaylists = new ObservableCollection<FavoritePlaylistItem>();
+            AutoOptimizePlanItems = new ObservableCollection<OptimizationPlanItem>();
             OptimizationReports = new ObservableCollection<OptimizationReportItem>();
             JunkCandidates = new ObservableCollection<JunkCandidate>();
             WeChatCleanupCandidates = new ObservableCollection<WeChatCleanupCandidate>();
@@ -425,7 +428,8 @@ namespace MyTools.ViewModels
             RefreshSystemStatusCommand = new RelayCommand(RefreshSystemStatus);
             _applyAlwaysOnPowerPolicyCommand = new AsyncRelayCommand(ApplyAlwaysOnPowerPolicyAsync, () => !IsPowerPolicyBusy);
             ApplyAlwaysOnPowerPolicyCommand = _applyAlwaysOnPowerPolicyCommand;
-            _startAutoOptimizeCommand = new AsyncRelayCommand(StartAutoOptimizeAsync, () => !IsAutoOptimizeBusy);
+            _scanAutoOptimizeCommand = new AsyncRelayCommand(ScanAutoOptimizeAsync, () => !IsAutoOptimizeBusy);
+            _startAutoOptimizeCommand = new AsyncRelayCommand(StartAutoOptimizeAsync, CanStartAutoOptimize);
             _startJunkScanCommand = new AsyncRelayCommand(StartJunkScanAsync, () => !IsJunkBusy);
             _runJunkCleanupCommand = new AsyncRelayCommand(RunJunkCleanupAsync, CanRunJunkCleanup);
             _exportJunkCleanupPlanCommand = new RelayCommand(ExportJunkCleanupPlan, CanExportJunkCleanupPlan);
@@ -439,6 +443,7 @@ namespace MyTools.ViewModels
             _selectWeChatRestoreTargetRootCommand = new RelayCommand(SelectWeChatRestoreTargetRoot, () => !IsWeChatRestoreBusy);
             OpenRecentWeChatBackupCommand = new RelayParameterCommand(OpenRecentWeChatBackup, parameter => !IsWeChatRestoreBusy && parameter is RecentWeChatBackupItem);
             _showReportDetailsCommand = new RelayParameterCommand(ShowReportDetails);
+            ScanAutoOptimizeCommand = _scanAutoOptimizeCommand;
             StartAutoOptimizeCommand = _startAutoOptimizeCommand;
             StartJunkScanCommand = _startJunkScanCommand;
             RunJunkCleanupCommand = _runJunkCleanupCommand;
@@ -830,6 +835,18 @@ namespace MyTools.ViewModels
                 _homeCommandSearchText = value ?? string.Empty;
                 OnPropertyChanged();
                 FilteredHomeCommandView?.Refresh();
+            }
+        }
+
+        public ObservableCollection<OptimizationPlanItem> AutoOptimizePlanItems
+        {
+            get => _autoOptimizePlanItems;
+            set
+            {
+                _autoOptimizePlanItems = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(HasAutoOptimizePlanItems));
+                OnPropertyChanged(nameof(HasRunnableAutoOptimizePlan));
             }
         }
 
@@ -1659,6 +1676,10 @@ namespace MyTools.ViewModels
             get => _weChatRestoreTargetRoot;
             set { _weChatRestoreTargetRoot = value; OnPropertyChanged(); TriggerCommandRequery(); }
         }
+
+        public bool HasAutoOptimizePlanItems => AutoOptimizePlanItems.Any();
+
+        public bool HasRunnableAutoOptimizePlan => AutoOptimizePlanItems.Any(x => x.CanOptimize);
 
         public bool HasSelectedOptimizationReports => OptimizationReports.Any(x => x.IsSelected);
 
@@ -2803,6 +2824,7 @@ namespace MyTools.ViewModels
         public ICommand SelectFilteredInstalledProgramsCommand { get; }
         public ICommand ClearInstalledProgramSelectionCommand { get; }
         public ICommand ExportInstalledProgramListCommand { get; }
+        public ICommand ScanAutoOptimizeCommand { get; }
         public ICommand StartAutoOptimizeCommand { get; }
         public ICommand StartJunkScanCommand { get; }
         public ICommand RunJunkCleanupCommand { get; }
@@ -12011,6 +12033,48 @@ namespace MyTools.ViewModels
             }
         }
 
+        private async Task ScanAutoOptimizeAsync()
+        {
+            if (IsAutoOptimizeBusy)
+            {
+                return;
+            }
+
+            IsAutoOptimizeBusy = true;
+            try
+            {
+                var progress = new Progress<string>(message => AutoOptimizeStatusMessage = message);
+                var scanned = await Task.Run(() => SystemOptimizer.ScanAsync(progress, CancellationToken.None));
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    AutoOptimizePlanItems = new ObservableCollection<OptimizationPlanItem>(scanned);
+                    TriggerCommandRequery();
+                });
+
+                var runnableCount = scanned.Count(x => x.CanOptimize);
+                var totalBytes = scanned.Where(x => x.CanOptimize).Sum(x => x.EstimatedBytes);
+                AutoOptimizeStatusMessage = runnableCount == 0
+                    ? "扫描完成：暂未发现需要执行的自动优化项目。"
+                    : $"扫描完成：{runnableCount} 项可优化，预计可释放 {FileSizeFormatter.Format(totalBytes)}。";
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "Auto optimize scan failed.");
+                AutoOptimizePlanItems = new ObservableCollection<OptimizationPlanItem>();
+                AutoOptimizeStatusMessage = "扫描失败：" + ex.Message;
+                MessageBox.Show(ex.Message, "自动优化扫描失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                IsAutoOptimizeBusy = false;
+            }
+        }
+
+        private bool CanStartAutoOptimize()
+        {
+            return !IsAutoOptimizeBusy && HasRunnableAutoOptimizePlan;
+        }
+
         private async Task StartAutoOptimizeAsync()
         {
             if (IsAutoOptimizeBusy)
@@ -12018,28 +12082,66 @@ namespace MyTools.ViewModels
                 return;
             }
 
-            var restartExplorerResult = MessageBox.Show(
-                "清理缩略图缓存需要临时重启资源管理器（explorer.exe），是否允许该步骤执行？",
-                "自动优化确认",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Question);
+            var runnableKeys = AutoOptimizePlanItems
+                .Where(x => x.CanOptimize)
+                .Select(x => x.Key)
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .ToList();
+
+            if (runnableKeys.Count == 0)
+            {
+                AutoOptimizeStatusMessage = "请先点击“扫描”，确认存在可优化项目后再执行优化。";
+                TriggerCommandRequery();
+                return;
+            }
+
+            var requiresExplorerRestart = AutoOptimizePlanItems.Any(x =>
+                x.CanOptimize
+                && string.Equals(x.Key, "ThumbnailCache", StringComparison.OrdinalIgnoreCase));
+
+            var restartExplorerResult = MessageBoxResult.No;
+            if (requiresExplorerRestart)
+            {
+                restartExplorerResult = MessageBox.Show(
+                    "将执行扫描列表中的优化项。清理缩略图缓存需要临时重启资源管理器（explorer.exe），是否允许该步骤执行？选择“否”会跳过缩略图缓存清理。",
+                    "自动优化确认",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+            }
+            else
+            {
+                var confirm = MessageBox.Show(
+                    $"将执行扫描列表中的 {runnableKeys.Count} 项优化，是否继续？",
+                    "自动优化确认",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+                if (confirm != MessageBoxResult.Yes)
+                {
+                    AutoOptimizeStatusMessage = "已取消自动优化。";
+                    return;
+                }
+            }
 
             IsAutoOptimizeBusy = true;
             try
             {
                 SystemOptimizer.AllowExplorerRestartForThumbnailCleanup = restartExplorerResult == MessageBoxResult.Yes;
                 var progress = new Progress<string>(message => AutoOptimizeStatusMessage = message);
-                var report = await Task.Run(() => SystemOptimizer.RunAsync(progress, CancellationToken.None));
+                var report = await Task.Run(() => SystemOptimizer.RunAsync(progress, CancellationToken.None, runnableKeys));
                 await OptimizationReportsStore.SaveAsync(report);
 
                 await Application.Current.Dispatcher.InvokeAsync(() =>
                 {
                     report.PropertyChanged += OptimizationReport_OnPropertyChanged;
                     OptimizationReports.Insert(0, report);
+                    AutoOptimizePlanItems = new ObservableCollection<OptimizationPlanItem>();
                     OnPropertyChanged(nameof(HasSelectedOptimizationReports));
+                    OnPropertyChanged(nameof(HasAutoOptimizePlanItems));
+                    OnPropertyChanged(nameof(HasRunnableAutoOptimizePlan));
+                    TriggerCommandRequery();
                 });
 
-                AutoOptimizeStatusMessage = $"自动优化完成：{report.Summary}，释放空间 {report.TotalBytesFreedDisplay}。";
+                AutoOptimizeStatusMessage = $"自动优化完成：{report.Summary}，释放空间 {report.TotalBytesFreedDisplay}。如需再次优化，请重新扫描。";
             }
             catch (Exception ex)
             {
@@ -12894,6 +12996,7 @@ namespace MyTools.ViewModels
             _executeQueryCommand?.RaiseCanExecuteChanged();
             _exportQueryResultCommand?.RaiseCanExecuteChanged();
             _exportQueryResultCsvCommand?.RaiseCanExecuteChanged();
+            _scanAutoOptimizeCommand?.RaiseCanExecuteChanged();
             _startAutoOptimizeCommand?.RaiseCanExecuteChanged();
             _startJunkScanCommand?.RaiseCanExecuteChanged();
             _runJunkCleanupCommand?.RaiseCanExecuteChanged();

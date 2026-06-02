@@ -14,10 +14,25 @@ namespace MyTools.Services
     public sealed class SystemOptimizationService
     {
         private const int MaxProcessWaitMs = 120000;
+        private const string StepKeyUserTemp = "UserTemp";
+        private const string StepKeyWindowsTemp = "WindowsTemp";
+        private const string StepKeyThumbnailCache = "ThumbnailCache";
+        private const string StepKeyDnsCache = "DnsCache";
+        private const string StepKeyFontCache = "FontCache";
+        private const string StepKeyWindowsUpdateCache = "WindowsUpdateCache";
+        private const string StepKeySystemDrive = "SystemDrive";
+        private const string StepKeyRecycleBin = "RecycleBin";
+        private const string StepKeyEventLogs = "EventLogs";
+        private const string StepKeyWorkingSet = "WorkingSet";
 
         public bool AllowExplorerRestartForThumbnailCleanup { get; set; }
 
         public async Task<OptimizationReportItem> RunAsync(IProgress<string> progress, CancellationToken ct)
+        {
+            return await RunAsync(progress, ct, null).ConfigureAwait(false);
+        }
+
+        public async Task<OptimizationReportItem> RunAsync(IProgress<string> progress, CancellationToken ct, IReadOnlyCollection<string> enabledStepKeys)
         {
             var report = new OptimizationReportItem
             {
@@ -27,31 +42,28 @@ namespace MyTools.Services
                 Steps = new List<OptimizationStep>()
             };
 
-            var stepDefinitions = new List<Func<CancellationToken, Task<OptimizationStep>>>
+            var stepDefinitions = BuildStepDefinitions();
+            if (enabledStepKeys != null)
             {
-                StepClearUserTempAsync,
-                StepClearWindowsTempAsync,
-                StepClearThumbnailCacheAsync,
-                StepFlushDnsAsync,
-                StepResetFontCacheAsync,
-                StepCleanWindowsUpdateCacheAsync,
-                StepOptimizeSystemDriveAsync,
-                StepEmptyRecycleBinAsync,
-                StepCleanEventLogsAsync,
-                StepTrimWorkingSetAsync
-            };
+                var enabled = new HashSet<string>(
+                    enabledStepKeys.Where(x => !string.IsNullOrWhiteSpace(x)),
+                    StringComparer.OrdinalIgnoreCase);
+                stepDefinitions = stepDefinitions
+                    .Where(x => enabled.Contains(x.Key))
+                    .ToList();
+            }
 
             for (var i = 0; i < stepDefinitions.Count; i++)
             {
                 ct.ThrowIfCancellationRequested();
-                var stepName = GetStepName(i + 1);
-                progress?.Report($"[{i + 1}/10] {stepName}...");
+                var stepName = stepDefinitions[i].Name;
+                progress?.Report($"[{i + 1}/{stepDefinitions.Count}] {stepName}...");
 
                 OptimizationStep result;
                 var startedAt = Stopwatch.StartNew();
                 try
                 {
-                    result = await stepDefinitions[i](ct).ConfigureAwait(false);
+                    result = await stepDefinitions[i].Execute(ct).ConfigureAwait(false);
                     if (result == null)
                     {
                         result = new OptimizationStep
@@ -97,22 +109,204 @@ namespace MyTools.Services
             return report;
         }
 
-        private static string GetStepName(int index)
+        public async Task<IReadOnlyList<OptimizationPlanItem>> ScanAsync(IProgress<string> progress, CancellationToken ct)
         {
-            switch (index)
+            var items = new List<OptimizationPlanItem>();
+
+            progress?.Report("[1/10] 扫描当前用户 Temp...");
+            var userTempPath = Path.GetTempPath();
+            var userTemp = CountDeletableFiles(userTempPath, DateTime.Now.AddHours(-24));
+            items.Add(CreatePlanItem(
+                StepKeyUserTemp,
+                "清空当前用户 Temp（24 小时前）",
+                "磁盘清理",
+                false,
+                userTemp.bytes,
+                userTemp.count > 0,
+                userTemp.count > 0
+                    ? $"发现 {userTemp.count} 个超过 24 小时的临时文件。"
+                    : "未发现超过 24 小时的用户临时文件。"));
+
+            progress?.Report("[2/10] 扫描 Windows Temp...");
+            var windowsTempPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Temp");
+            var windowsTemp = CountDeletableFiles(windowsTempPath, DateTime.Now.AddDays(-7));
+            items.Add(CreatePlanItem(
+                StepKeyWindowsTemp,
+                "清空 Windows Temp（7 天前）",
+                "磁盘清理",
+                true,
+                windowsTemp.bytes,
+                windowsTemp.count > 0,
+                windowsTemp.count > 0
+                    ? $"发现 {windowsTemp.count} 个超过 7 天的系统临时文件。"
+                    : "未发现超过 7 天的系统临时文件。"));
+
+            progress?.Report("[3/10] 扫描缩略图缓存...");
+            var explorerCacheRoot = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "Microsoft",
+                "Windows",
+                "Explorer");
+            var thumbnailFiles = CountFiles(explorerCacheRoot, "thumbcache_*.db");
+            items.Add(CreatePlanItem(
+                StepKeyThumbnailCache,
+                "清理缩略图缓存",
+                "缓存清理",
+                false,
+                thumbnailFiles.bytes,
+                thumbnailFiles.count > 0,
+                thumbnailFiles.count > 0
+                    ? $"发现 {thumbnailFiles.count} 个缩略图缓存文件，优化时需要临时重启资源管理器。"
+                    : "未发现可清理的缩略图缓存文件。"));
+
+            progress?.Report("[4/10] 检查 DNS 缓存刷新项...");
+            items.Add(CreatePlanItem(
+                StepKeyDnsCache,
+                "刷新 DNS 缓存",
+                "网络维护",
+                false,
+                0,
+                true,
+                "可刷新 DNS 解析缓存，不释放磁盘空间。"));
+
+            progress?.Report("[5/10] 扫描字体缓存...");
+            var fontCachePath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.Windows),
+                "ServiceProfiles",
+                "LocalService",
+                "AppData",
+                "Local",
+                "FontCache");
+            var fontCacheFiles = CountFiles(fontCachePath, "*.dat");
+            items.Add(CreatePlanItem(
+                StepKeyFontCache,
+                "重置字体缓存",
+                "缓存清理",
+                true,
+                fontCacheFiles.bytes,
+                fontCacheFiles.count > 0,
+                fontCacheFiles.count > 0
+                    ? $"发现 {fontCacheFiles.count} 个字体缓存文件。"
+                    : "未发现可清理的字体缓存文件。"));
+
+            progress?.Report("[6/10] 扫描 Windows 更新缓存...");
+            var updateCacheRoot = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.Windows),
+                "SoftwareDistribution",
+                "Download");
+            var updateCacheBytes = CalculateDirectorySize(updateCacheRoot);
+            items.Add(CreatePlanItem(
+                StepKeyWindowsUpdateCache,
+                "清理 Windows 更新缓存",
+                "更新缓存",
+                true,
+                updateCacheBytes,
+                updateCacheBytes > 0,
+                updateCacheBytes > 0
+                    ? "发现 Windows Update 下载缓存。"
+                    : "未发现 Windows Update 下载缓存。"));
+
+            progress?.Report("[7/10] 检查系统盘优化项...");
+            var systemDrive = Environment.GetEnvironmentVariable("SystemDrive");
+            var driveLetter = string.IsNullOrWhiteSpace(systemDrive)
+                ? string.Empty
+                : systemDrive.Trim().TrimEnd('\\').Replace(":", string.Empty);
+            var mediaType = string.IsNullOrWhiteSpace(driveLetter)
+                ? "Unspecified"
+                : await QuerySystemDriveMediaTypeAsync(driveLetter, ct).ConfigureAwait(false);
+            var canOptimizeDrive = mediaType.Equals("SSD", StringComparison.OrdinalIgnoreCase)
+                || mediaType.Equals("HDD", StringComparison.OrdinalIgnoreCase);
+            items.Add(CreatePlanItem(
+                StepKeySystemDrive,
+                "系统盘 TRIM/碎片整理",
+                "磁盘维护",
+                true,
+                0,
+                canOptimizeDrive,
+                canOptimizeDrive
+                    ? (mediaType.Equals("SSD", StringComparison.OrdinalIgnoreCase)
+                        ? "系统盘识别为 SSD，可执行 TRIM。"
+                        : "系统盘识别为 HDD，可执行碎片整理。")
+                    : $"无法识别系统盘类型（{mediaType ?? "Unspecified"}）。"));
+
+            progress?.Report("[8/10] 检查回收站...");
+            var recycleBin = QueryRecycleBin();
+            items.Add(CreatePlanItem(
+                StepKeyRecycleBin,
+                "清空回收站",
+                "磁盘清理",
+                false,
+                recycleBin.bytes,
+                recycleBin.count > 0 || recycleBin.bytes > 0,
+                recycleBin.count > 0 || recycleBin.bytes > 0
+                    ? $"回收站约 {recycleBin.count} 项。"
+                    : "回收站为空。"));
+
+            progress?.Report("[9/10] 检查事件日志大小...");
+            var largeLogs = await QueryLargeEventLogsAsync(ct).ConfigureAwait(false);
+            items.Add(CreatePlanItem(
+                StepKeyEventLogs,
+                "清理事件日志（大于 500MB）",
+                "日志维护",
+                true,
+                largeLogs.bytes,
+                largeLogs.count > 0,
+                largeLogs.count > 0
+                    ? $"发现 {largeLogs.count} 个超过 500 MB 的事件日志。"
+                    : "Application/System/Security 事件日志未超过 500 MB。"));
+
+            progress?.Report("[10/10] 检查当前进程工作集...");
+            var workingSet = GetCurrentWorkingSetBytes();
+            items.Add(CreatePlanItem(
+                StepKeyWorkingSet,
+                "压缩当前进程工作集",
+                "内存维护",
+                false,
+                0,
+                workingSet > 150L * 1024L * 1024L,
+                workingSet > 150L * 1024L * 1024L
+                    ? $"当前进程工作集约 {FileSizeFormatter.Format(workingSet)}，可尝试压缩。"
+                    : $"当前进程工作集约 {FileSizeFormatter.Format(workingSet)}，无需压缩。"));
+
+            return items;
+        }
+
+        private List<OptimizationStepDefinition> BuildStepDefinitions()
+        {
+            return new List<OptimizationStepDefinition>
             {
-                case 1: return "清空当前用户 Temp（24 小时前）";
-                case 2: return "清空 Windows Temp（7 天前）";
-                case 3: return "清理缩略图缓存";
-                case 4: return "刷新 DNS 缓存";
-                case 5: return "重置字体缓存";
-                case 6: return "清理 Windows 更新缓存";
-                case 7: return "系统盘 TRIM/碎片整理";
-                case 8: return "清空回收站";
-                case 9: return "清理事件日志（大于 500MB）";
-                case 10: return "压缩当前进程工作集";
-                default: return "未知步骤";
-            }
+                new OptimizationStepDefinition(StepKeyUserTemp, "清空当前用户 Temp（24 小时前）", StepClearUserTempAsync),
+                new OptimizationStepDefinition(StepKeyWindowsTemp, "清空 Windows Temp（7 天前）", StepClearWindowsTempAsync),
+                new OptimizationStepDefinition(StepKeyThumbnailCache, "清理缩略图缓存", StepClearThumbnailCacheAsync),
+                new OptimizationStepDefinition(StepKeyDnsCache, "刷新 DNS 缓存", StepFlushDnsAsync),
+                new OptimizationStepDefinition(StepKeyFontCache, "重置字体缓存", StepResetFontCacheAsync),
+                new OptimizationStepDefinition(StepKeyWindowsUpdateCache, "清理 Windows 更新缓存", StepCleanWindowsUpdateCacheAsync),
+                new OptimizationStepDefinition(StepKeySystemDrive, "系统盘 TRIM/碎片整理", StepOptimizeSystemDriveAsync),
+                new OptimizationStepDefinition(StepKeyRecycleBin, "清空回收站", StepEmptyRecycleBinAsync),
+                new OptimizationStepDefinition(StepKeyEventLogs, "清理事件日志（大于 500MB）", StepCleanEventLogsAsync),
+                new OptimizationStepDefinition(StepKeyWorkingSet, "压缩当前进程工作集", StepTrimWorkingSetAsync)
+            };
+        }
+
+        private static OptimizationPlanItem CreatePlanItem(
+            string key,
+            string name,
+            string category,
+            bool requiresAdmin,
+            long estimatedBytes,
+            bool canOptimize,
+            string detail)
+        {
+            return new OptimizationPlanItem
+            {
+                Key = key,
+                Name = name,
+                Category = category,
+                RequiresAdmin = requiresAdmin,
+                EstimatedBytes = estimatedBytes,
+                CanOptimize = canOptimize,
+                Detail = detail ?? string.Empty
+            };
         }
 
         private async Task<OptimizationStep> StepClearUserTempAsync(CancellationToken ct)
@@ -608,6 +802,31 @@ Write-Output $media";
             return (count, bytes);
         }
 
+        private static (int count, long bytes) CountFiles(string root, string pattern = "*")
+        {
+            if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
+            {
+                return (0, 0);
+            }
+
+            var count = 0;
+            long bytes = 0;
+            foreach (var file in SafeDirectoryEnumerateFiles(root, pattern))
+            {
+                try
+                {
+                    var info = new FileInfo(file);
+                    count++;
+                    bytes += info.Length;
+                }
+                catch
+                {
+                }
+            }
+
+            return (count, bytes);
+        }
+
         private static async Task<(int count, long bytes)> DeleteFilesOlderThanAsync(string root, DateTime threshold, CancellationToken ct)
         {
             if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
@@ -767,6 +986,101 @@ Write-Output $media";
             return total;
         }
 
+        private static (int count, long bytes) QueryRecycleBin()
+        {
+            try
+            {
+                var info = new NativeMethods.SHQUERYRBINFO();
+                info.cbSize = Marshal.SizeOf(typeof(NativeMethods.SHQUERYRBINFO));
+                var result = NativeMethods.SHQueryRecycleBin(null, ref info);
+                if (result == 0)
+                {
+                    return ((int)Math.Min(info.i64NumItems, int.MaxValue), Math.Max(0, info.i64Size));
+                }
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "Query recycle bin failed.");
+            }
+
+            return (0, 0);
+        }
+
+        private static async Task<(int count, long bytes)> QueryLargeEventLogsAsync(CancellationToken ct)
+        {
+            const long threshold = 500L * 1024L * 1024L;
+            const string script = @"
+$logs = @('Application', 'System', 'Security')
+foreach($name in $logs) {
+    $info = Get-WinEvent -ListLog $name -ErrorAction SilentlyContinue
+    if ($null -eq $info) { continue }
+    if ($info.FileSize -gt 500MB) {
+        '{0}|{1}' -f $name, $info.FileSize
+    }
+}";
+
+            try
+            {
+                var output = await ElevatedScriptRunner.RunNonElevatedPowerShellAsync(script, ct).ConfigureAwait(false);
+                var count = 0;
+                long bytes = 0;
+                foreach (var line in (output ?? string.Empty).Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+                {
+                    var parts = line.Split('|');
+                    if (parts.Length != 2)
+                    {
+                        continue;
+                    }
+
+                    long size;
+                    if (!long.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out size)
+                        || size <= threshold)
+                    {
+                        continue;
+                    }
+
+                    count++;
+                    bytes += size;
+                }
+
+                return (count, bytes);
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(ex, "Query large event logs failed.");
+                return (0, 0);
+            }
+        }
+
+        private static long GetCurrentWorkingSetBytes()
+        {
+            try
+            {
+                using (var process = Process.GetCurrentProcess())
+                {
+                    return process.WorkingSet64;
+                }
+            }
+            catch
+            {
+                return 0;
+            }
+        }
+
+        private sealed class OptimizationStepDefinition
+        {
+            public OptimizationStepDefinition(string key, string name, Func<CancellationToken, Task<OptimizationStep>> execute)
+            {
+                Key = key;
+                Name = name;
+                Execute = execute;
+            }
+
+            public string Key { get; }
+            public string Name { get; }
+            public Func<CancellationToken, Task<OptimizationStep>> Execute { get; }
+        }
+
         private static class NativeMethods
         {
             public const uint SHERB_NOCONFIRMATION = 0x00000001;
@@ -777,10 +1091,36 @@ Write-Output $media";
             [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
             public static extern int SHEmptyRecycleBin(IntPtr hwnd, string pszRootPath, uint dwFlags);
 
+            [StructLayout(LayoutKind.Sequential, Pack = 4)]
+            public struct SHQUERYRBINFO
+            {
+                public int cbSize;
+                public long i64Size;
+                public long i64NumItems;
+            }
+
+            [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+            public static extern int SHQueryRecycleBin(string pszRootPath, ref SHQUERYRBINFO pSHQueryRBInfo);
+
             [DllImport("psapi.dll", SetLastError = true)]
             [return: MarshalAs(UnmanagedType.Bool)]
             public static extern bool EmptyWorkingSet(IntPtr hProcess);
         }
+    }
+
+    public sealed class OptimizationPlanItem
+    {
+        public string Key { get; set; }
+        public string Name { get; set; }
+        public string Category { get; set; }
+        public bool RequiresAdmin { get; set; }
+        public long EstimatedBytes { get; set; }
+        public bool CanOptimize { get; set; }
+        public string Detail { get; set; }
+
+        public string StatusDisplay => CanOptimize ? "可优化" : "无需处理";
+        public string RequiresAdminDisplay => RequiresAdmin ? "需要" : "否";
+        public string EstimatedBytesDisplay => FileSizeFormatter.Format(EstimatedBytes);
     }
 
     internal static class ElevatedScriptRunner
