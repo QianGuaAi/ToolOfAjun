@@ -1,5 +1,10 @@
 # 开发记录
 
+## [2026-06-03] 重新编译并打包安装程序
+|- 重新执行 `dotnet build src\MyTools\MyTools.csproj -c Release --no-incremental`，主程序输出到 `src\MyTools\bin\Release\net48\MyTools.exe`。
+|- 重新执行 `scripts\Build-Installer.ps1`，主程序、卸载器、payload zip 和安装器构建均为 0 warning / 0 error。
+|- 输出安装包：`artifacts\installer\MyToolsSetup.exe`，大小 41.2 MB，SHA256 = `6517969CC101DF37E51FFC2A952182AC71031D6484DB28B1E18083EBBB6B8256`。
+
 ## [2026-06-01] 多媒体页面间距紧凑化
 - `MultimediaPage.xaml` 将页面外边距从 16 缩小为 8，顶部模块头间距从 12 缩小为 8，文件夹/预览/媒体列表卡片统一使用 8px 内边距。
 - 左侧上下分隔和左右分隔从 6px 缩小为 4px，文件夹树、列表、标题与底部路径的局部留白同步压缩，减少控件与卡片边框之间的空白。
