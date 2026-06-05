@@ -234,6 +234,7 @@ namespace MyTools.ViewModels
         private readonly AsyncRelayParameterCommand _applyCodexProfileCommand;
         private readonly AsyncRelayParameterCommand _exportCodexProfileCommand;
         private readonly AsyncRelayParameterCommand _previewCodexProfileDiffCommand;
+        private readonly AsyncRelayParameterCommand _applyCodexConfigTemplateToAllCommand;
         private readonly AsyncRelayCommand _importCodexProfileCommand;
         private readonly AsyncRelayCommand _importCodexCpaTokenCommand;
         private readonly AsyncRelayParameterCommand _refreshCodexProfileCommand;
@@ -564,6 +565,10 @@ namespace MyTools.ViewModels
             ExportCodexProfileCommand = _exportCodexProfileCommand;
             _previewCodexProfileDiffCommand = new AsyncRelayParameterCommand(PreviewCodexProfileDiffAsync, parameter => parameter is CodexProfileItem);
             PreviewCodexProfileDiffCommand = _previewCodexProfileDiffCommand;
+            _applyCodexConfigTemplateToAllCommand = new AsyncRelayParameterCommand(
+                ApplyCodexConfigTemplateToAllAsync,
+                parameter => parameter is CodexProfileItem && CodexProfiles != null && CodexProfiles.Count > 1);
+            ApplyCodexConfigTemplateToAllCommand = _applyCodexConfigTemplateToAllCommand;
             _importCodexProfileCommand = new AsyncRelayCommand(ImportCodexProfileAsync);
             ImportCodexProfileCommand = _importCodexProfileCommand;
             _importCodexCpaTokenCommand = new AsyncRelayCommand(ImportCodexCpaTokenAsync);
@@ -1899,6 +1904,7 @@ namespace MyTools.ViewModels
         public ICommand SwitchCodexProfileCommand { get; }
         public ICommand ExportCodexProfileCommand { get; }
         public ICommand PreviewCodexProfileDiffCommand { get; }
+        public ICommand ApplyCodexConfigTemplateToAllCommand { get; }
         public ICommand ImportCodexProfileCommand { get; }
         public ICommand ImportCodexCpaTokenCommand { get; }
         public ICommand RefreshCodexProfileCommand { get; }
@@ -4186,6 +4192,165 @@ namespace MyTools.ViewModels
             {
                 AppLogService.Error(new InvalidOperationException(ex.Message), "Importing Codex encbox failed with {ErrorType}", ex.GetType().Name);
                 MessageBox.Show(ex.Message, "导入加密包失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private async Task ApplyCodexConfigTemplateToAllAsync(object parameter)
+        {
+            if (!(parameter is CodexProfileItem templateItem))
+            {
+                return;
+            }
+
+            var targets = CodexProfiles == null
+                ? new List<CodexProfileItem>()
+                : CodexProfiles
+                    .Where(profile => profile != null && !ReferenceEquals(profile, templateItem))
+                    .ToList();
+            if (targets.Count == 0)
+            {
+                MessageBox.Show("至少需要两个 Codex 档案，才能把一条记录应用到其他记录。", "应用到所有", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            byte[] templateConfigBytes;
+            try
+            {
+                templateConfigBytes = await ResolveCodexProfileFileBytesAsync(templateItem, CodexConfigProfileService.ConfigFileName).ConfigureAwait(true);
+                if (templateConfigBytes == null || templateConfigBytes.Length == 0)
+                {
+                    throw new InvalidOperationException("模板档案没有可用的 config.toml 内容，请先刷新或重新导入该档案。");
+                }
+
+                var templateBaseUrlCount = CodexProfileLibraryService.CountConfigBaseUrlAssignments(templateConfigBytes);
+                if (templateBaseUrlCount == 0)
+                {
+                    throw new InvalidOperationException("模板档案的 config.toml 未找到 base_url 行，无法安全同步。");
+                }
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(new InvalidOperationException(ex.Message), "Preparing Codex config template sync failed for {TemplateName} with {ErrorType}", SafeCodexLogName(templateItem.DisplayName), ex.GetType().Name);
+                MessageBox.Show(ex.Message, "应用到所有失败", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+
+            var confirm = MessageBox.Show(
+                $"将以「{templateItem.DisplayName}」的 config.toml 作为模板，同步到其他 {targets.Count} 个 Codex 档案。\n\n" +
+                "每个目标档案会保留自己的 base_url = \"...\" 行；auth.json、别名、备注和轮换设置不会修改。\n\n" +
+                "执行前会创建一份 DPAPI 加密的档案库备份。该操作只更新档案库，不会立即覆盖当前 ~/.codex。继续？",
+                "以此为模板应用到所有",
+                MessageBoxButton.OKCancel,
+                MessageBoxImage.Warning);
+            if (confirm != MessageBoxResult.OK)
+            {
+                CodexProfilesStatusMessage = "已取消配置同步。";
+                return;
+            }
+
+            try
+            {
+                templateItem.IsApplying = true;
+                templateItem.StatusMessage = "正在同步配置模板...";
+
+                var backupFile = BuildCodexProfilesFileFromCollection();
+                var backupPath = await CodexProfileLibraryService.BackupProfilesBeforeConfigTemplateSyncAsync(
+                    backupFile,
+                    templateItem.DisplayName,
+                    CancellationToken.None).ConfigureAwait(true);
+
+                var updated = 0;
+                var unchanged = 0;
+                var skipped = 0;
+                var failed = 0;
+                var details = new List<string>();
+
+                foreach (var target in targets)
+                {
+                    try
+                    {
+                        var targetConfigBytes = await ResolveCodexProfileFileBytesAsync(target, CodexConfigProfileService.ConfigFileName).ConfigureAwait(true);
+                        if (targetConfigBytes == null || targetConfigBytes.Length == 0)
+                        {
+                            skipped++;
+                            details.Add($"跳过「{target.DisplayName}」：没有可用的 config.toml。");
+                            continue;
+                        }
+
+                        var merge = CodexProfileLibraryService.MergeConfigTomlPreservingTargetBaseUrl(templateConfigBytes, targetConfigBytes);
+                        if (!merge.Success || merge.MergedConfigTomlBytes == null)
+                        {
+                            skipped++;
+                            details.Add($"跳过「{target.DisplayName}」：{merge.Message}");
+                            continue;
+                        }
+
+                        if (targetConfigBytes.SequenceEqual(merge.MergedConfigTomlBytes))
+                        {
+                            unchanged++;
+                            continue;
+                        }
+
+                        var protectedConfig = CodexConfigProfileService.ProtectBytesToBase64(merge.MergedConfigTomlBytes);
+                        target.ProtectedConfigTomlBase64 = protectedConfig;
+                        target.ConfigTomlContentProtected = protectedConfig;
+                        target.LastImportedAt = DateTime.UtcNow;
+                        target.StatusMessage = $"已同步配置：{DateTime.Now:HH:mm:ss}";
+                        updated++;
+                    }
+                    catch (Exception ex)
+                    {
+                        failed++;
+                        details.Add($"失败「{target.DisplayName}」：{ex.Message}");
+                        AppLogService.Error(new InvalidOperationException(ex.Message), "Applying Codex config template failed for target {TargetName} with {ErrorType}", SafeCodexLogName(target.DisplayName), ex.GetType().Name);
+                    }
+                }
+
+                templateItem.StatusMessage = $"已作为模板同步：{DateTime.Now:HH:mm:ss}";
+                if (updated > 0)
+                {
+                    await SaveCodexProfilesAsync().ConfigureAwait(true);
+                }
+
+                CodexProfilesStatusMessage = $"配置同步完成：更新 {updated}，无需修改 {unchanged}，跳过 {skipped}，失败 {failed}。";
+                AppLogService.Information(
+                    "Applied Codex config template from {TemplateName}: updated = {Updated}, unchanged = {Unchanged}, skipped = {Skipped}, failed = {Failed}, backup = {BackupFile}",
+                    SafeCodexLogName(templateItem.DisplayName),
+                    updated,
+                    unchanged,
+                    skipped,
+                    failed,
+                    Path.GetFileName(backupPath));
+
+                var summary = new StringBuilder();
+                summary.AppendLine(CodexProfilesStatusMessage);
+                summary.AppendLine("备份文件：" + Path.GetFileName(backupPath));
+                if (details.Count > 0)
+                {
+                    summary.AppendLine();
+                    summary.AppendLine("详情：");
+                    foreach (var detail in details.Take(12))
+                    {
+                        summary.AppendLine("- " + detail);
+                    }
+
+                    if (details.Count > 12)
+                    {
+                        summary.AppendLine($"- 还有 {details.Count - 12} 条详情未显示。");
+                    }
+                }
+
+                MessageBox.Show(summary.ToString(), "配置同步完成", MessageBoxButton.OK, failed > 0 ? MessageBoxImage.Warning : MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(new InvalidOperationException(ex.Message), "Applying Codex config template to all failed for {TemplateName} with {ErrorType}", SafeCodexLogName(templateItem.DisplayName), ex.GetType().Name);
+                CodexProfilesStatusMessage = "配置同步失败：" + ex.Message;
+                MessageBox.Show(ex.Message, "应用到所有失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                templateItem.IsApplying = false;
             }
         }
 
@@ -13018,6 +13183,7 @@ namespace MyTools.ViewModels
             _importCodexCpaTokenCommand?.RaiseCanExecuteChanged();
             _exportCodexProfileCommand?.RaiseCanExecuteChanged();
             _previewCodexProfileDiffCommand?.RaiseCanExecuteChanged();
+            _applyCodexConfigTemplateToAllCommand?.RaiseCanExecuteChanged();
             _copyBenchmarkResultsCommand?.RaiseCanExecuteChanged();
             _exportBenchmarkResultsCommand?.RaiseCanExecuteChanged();
             (RetryConvertQueueItemCommand as AsyncRelayParameterCommand)?.RaiseCanExecuteChanged();

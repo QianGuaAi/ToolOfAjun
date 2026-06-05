@@ -1797,6 +1797,14 @@
                                                         Height="32"
                                                         Padding="8,0"
                                                         Margin="0,0,6,0"
+                                                        Content="应用到所有"
+                                                        ToolTip="以此档案的 config.toml 为模板，同步到其他档案并保留各自 base_url"
+                                                        Command="{Binding DataContext.ApplyCodexConfigTemplateToAllCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                        CommandParameter="{Binding}" />
+                                                <Button Style="{StaticResource GhostActionButton}"
+                                                        Height="32"
+                                                        Padding="8,0"
+                                                        Margin="0,0,6,0"
                                                         Content="config"
                                                         Command="{Binding DataContext.EditCodexConfigTomlCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                         CommandParameter="{Binding}" />

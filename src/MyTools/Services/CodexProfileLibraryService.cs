@@ -94,6 +94,42 @@ namespace MyTools.Services
             }
         }
 
+        public static async Task<string> BackupProfilesBeforeConfigTemplateSyncAsync(CodexProfilesFile file, string templateDisplayName, CancellationToken ct)
+        {
+            if (file == null)
+            {
+                throw new ArgumentNullException(nameof(file));
+            }
+
+            await FileLock.WaitAsync(ct).ConfigureAwait(false);
+            try
+            {
+                NormalizeProfilesFile(file);
+                Directory.CreateDirectory(BackupsFolderPath);
+
+                var package = new CodexProfilesLibraryBackupPackage
+                {
+                    BackupKind = "codex-profile-library-before-config-template-sync",
+                    TemplateDisplayName = templateDisplayName ?? string.Empty,
+                    CreatedAtUtc = DateTime.UtcNow,
+                    Profiles = file
+                };
+
+                var safeName = SanitizeFileName(string.IsNullOrWhiteSpace(templateDisplayName) ? "codex" : templateDisplayName);
+                var backupPath = Path.Combine(
+                    BackupsFolderPath,
+                    "profiles_config_sync_" + safeName + "_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".profiles.dpapi");
+                var json = JsonConvert.SerializeObject(package, Formatting.Indented);
+                var protectedText = CodexConfigProfileService.ProtectBytesToBase64(Encoding.UTF8.GetBytes(json));
+                await WriteAllTextAsync(backupPath, protectedText, ct).ConfigureAwait(false);
+                return backupPath;
+            }
+            finally
+            {
+                FileLock.Release();
+            }
+        }
+
         public static async Task<string> BackupCurrentCodexFolderAsync(string activeDisplayName, CancellationToken ct)
         {
             var configPath = Path.Combine(CodexFolderPath, CodexConfigProfileService.ConfigFileName);
@@ -128,6 +164,12 @@ namespace MyTools.Services
             }
 
             var backupPath = Directory.GetFiles(BackupsFolderPath, "*.bak.dpapi")
+                .Where(path =>
+                {
+                    var fileName = Path.GetFileName(path) ?? string.Empty;
+                    return !fileName.EndsWith(".profiles.bak.dpapi", StringComparison.OrdinalIgnoreCase)
+                        && !fileName.EndsWith(".profiles.dpapi", StringComparison.OrdinalIgnoreCase);
+                })
                 .OrderByDescending(File.GetLastWriteTimeUtc)
                 .FirstOrDefault();
             if (string.IsNullOrWhiteSpace(backupPath))
@@ -432,6 +474,56 @@ namespace MyTools.Services
             };
         }
 
+        public static int CountConfigBaseUrlAssignments(byte[] configTomlBytes)
+        {
+            var text = configTomlBytes == null ? string.Empty : Encoding.UTF8.GetString(configTomlBytes);
+            return FindBaseUrlAssignmentLineIndices(SplitTextPreservingLineEndings(text)).Count;
+        }
+
+        public static CodexConfigTemplateMergeResult MergeConfigTomlPreservingTargetBaseUrl(byte[] templateConfigTomlBytes, byte[] targetConfigTomlBytes)
+        {
+            var templateText = templateConfigTomlBytes == null ? string.Empty : Encoding.UTF8.GetString(templateConfigTomlBytes);
+            var targetText = targetConfigTomlBytes == null ? string.Empty : Encoding.UTF8.GetString(targetConfigTomlBytes);
+            var templateLines = SplitTextPreservingLineEndings(templateText);
+            var targetLines = SplitTextPreservingLineEndings(targetText);
+            var templateBaseUrlLines = FindBaseUrlAssignmentLineIndices(templateLines);
+            var targetBaseUrlLines = FindBaseUrlAssignmentLineIndices(targetLines);
+
+            var result = new CodexConfigTemplateMergeResult
+            {
+                TemplateBaseUrlCount = templateBaseUrlLines.Count,
+                TargetBaseUrlCount = targetBaseUrlLines.Count
+            };
+
+            if (templateBaseUrlLines.Count == 0)
+            {
+                result.Message = "模板 config.toml 未找到 base_url 行。";
+                return result;
+            }
+
+            if (targetBaseUrlLines.Count == 0)
+            {
+                result.Message = "目标 config.toml 未找到 base_url 行。";
+                return result;
+            }
+
+            if (templateBaseUrlLines.Count != targetBaseUrlLines.Count)
+            {
+                result.Message = $"base_url 行数量不一致：模板 {templateBaseUrlLines.Count} 行，目标 {targetBaseUrlLines.Count} 行。";
+                return result;
+            }
+
+            for (var i = 0; i < templateBaseUrlLines.Count; i++)
+            {
+                templateLines[templateBaseUrlLines[i]].Text = targetLines[targetBaseUrlLines[i]].Text;
+            }
+
+            result.Success = true;
+            result.Message = $"已保留 {targetBaseUrlLines.Count} 行 base_url。";
+            result.MergedConfigTomlBytes = new UTF8Encoding(false).GetBytes(JoinTextLines(templateLines));
+            return result;
+        }
+
         private static async Task SaveCoreAsync(CodexProfilesFile file, CancellationToken ct)
         {
             NormalizeProfilesFile(file);
@@ -633,6 +725,115 @@ namespace MyTools.Services
 
             NormalizeProfilesFile(file);
             return file;
+        }
+
+        private static List<CodexConfigTextLine> SplitTextPreservingLineEndings(string text)
+        {
+            var value = text ?? string.Empty;
+            var lines = new List<CodexConfigTextLine>();
+            var lineStart = 0;
+            var index = 0;
+            while (index < value.Length)
+            {
+                var ch = value[index];
+                if (ch != '\r' && ch != '\n')
+                {
+                    index++;
+                    continue;
+                }
+
+                string lineEnding;
+                if (ch == '\r' && index + 1 < value.Length && value[index + 1] == '\n')
+                {
+                    lineEnding = "\r\n";
+                    lines.Add(new CodexConfigTextLine(value.Substring(lineStart, index - lineStart), lineEnding));
+                    index += 2;
+                }
+                else
+                {
+                    lineEnding = ch == '\r' ? "\r" : "\n";
+                    lines.Add(new CodexConfigTextLine(value.Substring(lineStart, index - lineStart), lineEnding));
+                    index++;
+                }
+
+                lineStart = index;
+            }
+
+            if (lineStart < value.Length || value.Length == 0)
+            {
+                lines.Add(new CodexConfigTextLine(value.Substring(lineStart), string.Empty));
+            }
+
+            return lines;
+        }
+
+        private static List<int> FindBaseUrlAssignmentLineIndices(IList<CodexConfigTextLine> lines)
+        {
+            var result = new List<int>();
+            if (lines == null)
+            {
+                return result;
+            }
+
+            for (var i = 0; i < lines.Count; i++)
+            {
+                if (IsBaseUrlAssignmentLine(lines[i]?.Text))
+                {
+                    result.Add(i);
+                }
+            }
+
+            return result;
+        }
+
+        private static bool IsBaseUrlAssignmentLine(string line)
+        {
+            if (string.IsNullOrWhiteSpace(line))
+            {
+                return false;
+            }
+
+            var index = 0;
+            if (line.Length > 0 && line[0] == '\ufeff')
+            {
+                index++;
+            }
+
+            while (index < line.Length && char.IsWhiteSpace(line[index]))
+            {
+                index++;
+            }
+
+            if (index >= line.Length || line[index] == '#')
+            {
+                return false;
+            }
+
+            const string key = "base_url";
+            if (index + key.Length > line.Length || !string.Equals(line.Substring(index, key.Length), key, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            index += key.Length;
+            while (index < line.Length && char.IsWhiteSpace(line[index]))
+            {
+                index++;
+            }
+
+            return index < line.Length && line[index] == '=';
+        }
+
+        private static string JoinTextLines(IEnumerable<CodexConfigTextLine> lines)
+        {
+            var builder = new StringBuilder();
+            foreach (var line in lines ?? Enumerable.Empty<CodexConfigTextLine>())
+            {
+                builder.Append(line?.Text ?? string.Empty);
+                builder.Append(line?.LineEnding ?? string.Empty);
+            }
+
+            return builder.ToString();
         }
 
         private static CodexProfilesFile DeserializeProfilesFile(byte[] jsonBytes)
@@ -994,5 +1195,34 @@ namespace MyTools.Services
         public DateTime CreatedAtUtc { get; set; }
         public string ConfigTomlBase64 { get; set; }
         public string AuthJsonBase64 { get; set; }
+    }
+
+    public class CodexProfilesLibraryBackupPackage
+    {
+        public string BackupKind { get; set; }
+        public string TemplateDisplayName { get; set; }
+        public DateTime CreatedAtUtc { get; set; }
+        public CodexProfilesFile Profiles { get; set; }
+    }
+
+    public class CodexConfigTemplateMergeResult
+    {
+        public bool Success { get; set; }
+        public byte[] MergedConfigTomlBytes { get; set; }
+        public int TemplateBaseUrlCount { get; set; }
+        public int TargetBaseUrlCount { get; set; }
+        public string Message { get; set; }
+    }
+
+    internal sealed class CodexConfigTextLine
+    {
+        public CodexConfigTextLine(string text, string lineEnding)
+        {
+            Text = text ?? string.Empty;
+            LineEnding = lineEnding ?? string.Empty;
+        }
+
+        public string Text { get; set; }
+        public string LineEnding { get; }
     }
 }

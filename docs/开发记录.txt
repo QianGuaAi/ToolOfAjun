@@ -1,5 +1,16 @@
 # 开发记录
 
+## [2026-06-05] 重新编译并打包安装程序
+- 使用仓库本地 `.dotnet` SDK 8.0.421 执行 `scripts\Build-Installer.ps1 -Configuration Release`。
+- 主程序、卸载器、安装器三个项目构建均为 0 warning / 0 error。
+- 输出安装包：`artifacts\installer\MyToolsSetup.exe`，大小 41.2 MB，SHA256 = `4FAD9C5D3E476983EA789697B521CB57A6EF8EFA99D67BE42CE45AC832D31B95`。
+
+## [2026-06-05] Codex 配置模板应用到所有
+- Codex 档案行新增“应用到所有”按钮，可把当前档案的 `config.toml` 作为模板同步到其他档案。
+- 同步时保留每个目标档案原有 `base_url = ...` 行，只覆盖除此之外的 `config.toml` 内容；不修改 `auth.json`、别名、备注或轮换设置，也不直接写入当前 `~/.codex`。
+- 同步前自动创建 DPAPI 加密档案库备份 `profiles_config_sync_<模板名>_<时间戳>.profiles.dpapi`，执行后弹窗汇总更新、无需修改、跳过和失败数量。
+- 本次只修改 Codex 档案库异步操作链路和 Codex 面板 XAML，不修改 `App.OnStartup`、`MainWindow` 构造函数或启动期后台加载流程。
+
 ## [2026-06-03] 重新编译并打包安装程序
 |- 重新执行 `dotnet build src\MyTools\MyTools.csproj -c Release --no-incremental`，主程序输出到 `src\MyTools\bin\Release\net48\MyTools.exe`。
 |- 重新执行 `scripts\Build-Installer.ps1`，主程序、卸载器、payload zip 和安装器构建均为 0 warning / 0 error。
