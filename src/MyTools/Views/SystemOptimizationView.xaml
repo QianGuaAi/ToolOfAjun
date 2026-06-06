@@ -67,13 +67,13 @@
                             <Grid Grid.Row="0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="240" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel>
                                     <TextBlock Text="系统锁定"
                                                Style="{StaticResource TextSubtitle}"
                                                FontWeight="Bold" />
-                                    <TextBlock Text="锁定当前 Windows 版本，防止自动升级到大版本；同时可把当前电源计划设置为屏幕、硬盘、睡眠和休眠永不自动关闭。"
+                                    <TextBlock Text="锁定当前 Windows 10/11 功能版本，防止自动跨大版本升级；同时可把当前电源计划设置为屏幕、硬盘、睡眠和休眠永不自动关闭。"
                                                Style="{StaticResource TextCaption}"
                                                FontSize="12"
                                                Opacity="0.65"
@@ -86,14 +86,15 @@
                                 </StackPanel>
                                 <StackPanel Grid.Column="1"
                                             Orientation="Horizontal"
-                                            VerticalAlignment="Center">
-                                    <Button Width="86"
+                                            VerticalAlignment="Center"
+                                            HorizontalAlignment="Left">
+                                    <Button Width="96"
                                             Height="32"
                                             Margin="0,0,8,0"
                                             Content="执行锁定"
                                             Command="{Binding LockWin10Command}"
                                             Style="{StaticResource PrimaryActionButton}" />
-                                    <Button Width="108"
+                                    <Button Width="96"
                                             Height="32"
                                             Content="应用常亮"
                                             Command="{Binding ApplyAlwaysOnPowerPolicyCommand}"
@@ -112,7 +113,7 @@
                             <Grid Grid.Row="2">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="240" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel>
                                     <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
@@ -144,15 +145,15 @@
                                             </TextBlock>
                                         </Border>
                                     </StackPanel>
-                                    <TextBlock Text="关闭或恢复 Windows 安全中心实时防护。Win11 需先在安全中心手动关闭「篡改保护」，否则命令将被拒绝。"
+                                    <TextBlock Text="关闭或恢复 Windows 10/11 安全中心实时防护。若启用了「篡改保护」，系统会拒绝关闭命令，请先在安全中心手动关闭后再执行。"
                                                Style="{StaticResource TextCaption}"
                                                FontSize="12"
                                                Opacity="0.65"
                                                TextWrapping="Wrap"
                                                Margin="0,0,18,0" />
                                 </StackPanel>
-                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                                    <Button Width="86" Height="32" Margin="0,0,8,0" Command="{Binding ToggleDefenderCommand}">
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Left">
+                                    <Button Width="96" Height="32" Margin="0,0,8,0" Command="{Binding ToggleDefenderCommand}">
                                         <Button.Style>
                                             <Style TargetType="Button" BasedOn="{StaticResource GhostActionButton}">
                                                 <Setter Property="Content" Value="关闭防护" />
@@ -168,12 +169,15 @@
                                             </Style>
                                         </Button.Style>
                                     </Button>
-                                    <Button Style="{StaticResource MaterialDesignIconButton}"
-                                            Width="32"
+                                    <Button Width="96"
                                             Height="32"
+                                            Style="{StaticResource GhostActionButton}"
                                             Command="{Binding RefreshSystemStatusCommand}"
                                             ToolTip="刷新状态">
-                                        <materialDesign:PackIcon Kind="Refresh" Width="20" Height="20" />
+                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                            <materialDesign:PackIcon Kind="Refresh" Width="16" Height="16" Margin="0,0,4,0" VerticalAlignment="Center" />
+                                            <TextBlock Text="刷新状态" VerticalAlignment="Center" />
+                                        </StackPanel>
                                     </Button>
                                 </StackPanel>
                             </Grid>
@@ -183,7 +187,7 @@
                             <Grid Grid.Row="4">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="240" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel>
                                     <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
@@ -215,15 +219,15 @@
                                             </TextBlock>
                                         </Border>
                                     </StackPanel>
-                                    <TextBlock Text="停止 Windows 后台自动更新，或手动触发立即检查并安装所有可用更新。"
+                                    <TextBlock Text="停止或恢复 Windows 10/11 后台自动更新，或手动触发立即检查并安装可用更新。"
                                                Style="{StaticResource TextCaption}"
                                                FontSize="12"
                                                Opacity="0.65"
                                                TextWrapping="Wrap"
                                                Margin="0,0,18,0" />
                                 </StackPanel>
-                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                                    <Button Width="86" Height="32" Margin="0,0,8,0" Command="{Binding ToggleAutoUpdateCommand}">
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Left">
+                                    <Button Width="96" Height="32" Margin="0,0,8,0" Command="{Binding ToggleAutoUpdateCommand}">
                                         <Button.Style>
                                             <Style TargetType="Button" BasedOn="{StaticResource GhostActionButton}">
                                                 <Setter Property="Content" Value="停止更新" />
@@ -239,7 +243,7 @@
                                             </Style>
                                         </Button.Style>
                                     </Button>
-                                    <Button Width="86"
+                                    <Button Width="96"
                                             Height="32"
                                             Content="立即更新"
                                             Command="{Binding TriggerUpdateNowCommand}"

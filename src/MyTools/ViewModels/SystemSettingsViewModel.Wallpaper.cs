@@ -22,7 +22,7 @@ namespace MyTools.ViewModels
             set { _selectedWallpaper = value; OnPropertyChanged(); CommandManager.InvalidateRequerySuggested(); }
         }
 
-        private string _wallpaperStatusMessage = "图库目录：Wallpapers/（与 MyTools.exe 同级）";
+        private string _wallpaperStatusMessage = "图库目录：正在检测...";
         public string WallpaperStatusMessage
         {
             get => _wallpaperStatusMessage;
@@ -82,8 +82,8 @@ namespace MyTools.ViewModels
                     Wallpapers.Add(new WallpaperItem(path));
                 }
                 WallpaperStatusMessage = Wallpapers.Count == 0
-                    ? "图库为空。点「导入图片」或「保存当前桌面到图库」来添加。"
-                    : $"图库共 {Wallpapers.Count} 张图片。";
+                    ? "图库为空。点「导入图片」或「保存当前桌面到图库」来添加。目录：" + WallpaperService.LibraryDirectory
+                    : $"图库共 {Wallpapers.Count} 张图片。目录：{WallpaperService.LibraryDirectory}";
             }
             catch (Exception ex)
             {
@@ -127,7 +127,7 @@ namespace MyTools.ViewModels
                 WallpaperStatusMessage = "正在读取当前桌面壁纸...";
                 var saved = await WallpaperService.SaveCurrentWallpaperToLibraryAsync().ConfigureAwait(true);
                 LoadWallpaperLibrary();
-                WallpaperStatusMessage = "已保存当前桌面壁纸：" + Path.GetFileName(saved);
+                WallpaperStatusMessage = "已保存当前桌面壁纸：" + Path.GetFileName(saved) + "。目录：" + WallpaperService.LibraryDirectory;
             }
             catch (Exception ex)
             {

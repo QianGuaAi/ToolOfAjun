@@ -28,8 +28,10 @@ namespace MyTools.Services
 
         public static readonly string[] SupportedExtensions = new[] { ".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tiff", ".tif" };
 
-        public static string LibraryDirectory =>
-            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Wallpapers");
+        private static readonly object LibraryDirectoryLock = new object();
+        private static string _libraryDirectory;
+
+        public static string LibraryDirectory => GetLibraryDirectory();
 
         public static void EnsureLibrary()
         {
@@ -199,6 +201,60 @@ namespace MyTools.Services
         }
 
         // ===================== 私有辅助 =====================
+
+        private static string GetLibraryDirectory()
+        {
+            if (!string.IsNullOrEmpty(_libraryDirectory))
+                return _libraryDirectory;
+
+            lock (LibraryDirectoryLock)
+            {
+                if (!string.IsNullOrEmpty(_libraryDirectory))
+                    return _libraryDirectory;
+
+                var portableDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Wallpapers");
+                if (CanWriteDirectory(portableDirectory))
+                    return _libraryDirectory = portableDirectory;
+
+                var userDirectory = Path.Combine(GetUserDataRoot(), "MyTools", "Wallpapers");
+                if (CanWriteDirectory(userDirectory))
+                    return _libraryDirectory = userDirectory;
+
+                throw new InvalidOperationException(
+                    "无法创建可写图库目录。请检查程序目录或当前用户 AppData 目录权限。");
+            }
+        }
+
+        private static string GetUserDataRoot()
+        {
+            var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            if (!string.IsNullOrWhiteSpace(local))
+                return local;
+
+            var roaming = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            if (!string.IsNullOrWhiteSpace(roaming))
+                return roaming;
+
+            return AppDomain.CurrentDomain.BaseDirectory;
+        }
+
+        private static bool CanWriteDirectory(string directory)
+        {
+            try
+            {
+                Directory.CreateDirectory(directory);
+                var probePath = Path.Combine(directory, ".write_test_" + Guid.NewGuid().ToString("N") + ".tmp");
+                using (new FileStream(probePath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 1, FileOptions.DeleteOnClose))
+                {
+                }
+
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
 
         private static string ResolveDestination(string dir, string fileName)
         {

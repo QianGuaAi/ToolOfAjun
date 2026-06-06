@@ -35,6 +35,11 @@ namespace MyTools.Services
                 throw new InvalidOperationException("请选择备份输出目录。");
             }
 
+            if (options.Categories == null || options.Categories.Count == 0)
+            {
+                throw new InvalidOperationException("请至少选择一种备份类别。");
+            }
+
             Directory.CreateDirectory(options.OutputDirectory);
 
             var scanResult = await _cleanupService.ScanAsync(
@@ -330,19 +335,36 @@ namespace MyTools.Services
             }
 
             var rel = (item.Rel ?? string.Empty).Replace('\\', '/');
-            if (ContainsPathSegment(rel, "Image") || ContainsPathSegment(rel, "attach"))
+            var extension = Path.GetExtension(rel);
+
+            if (ContainsPathSegment(rel, "Cache")
+                || ContainsPathSegment(rel, "temp")
+                || ContainsPathSegment(rel, "resource")
+                || ContainsPathSegment(rel, "Thumb"))
+            {
+                category = WeChatDataCategory.Cache;
+                return true;
+            }
+
+            if (ContainsPathSegment(rel, "Image")
+                || ContainsPathSegment(rel, "Img")
+                || IsImageExtension(extension))
             {
                 category = WeChatDataCategory.Image;
                 return true;
             }
 
-            if (ContainsPathSegment(rel, "Video") || ContainsPathSegment(rel, "video"))
+            if (ContainsPathSegment(rel, "Video") || IsVideoExtension(extension))
             {
                 category = WeChatDataCategory.Video;
                 return true;
             }
 
-            if (ContainsPathSegment(rel, "Voice2") || ContainsPathSegment(rel, "audio"))
+            if (ContainsPathSegment(rel, "Voice2")
+                || ContainsPathSegment(rel, "audio")
+                || ContainsPathSegment(rel, "Audio")
+                || ContainsPathSegment(rel, "Voice")
+                || IsAudioExtension(extension))
             {
                 category = WeChatDataCategory.Voice;
                 return true;
@@ -354,12 +376,6 @@ namespace MyTools.Services
                 return true;
             }
 
-            if (ContainsPathSegment(rel, "Cache") || ContainsPathSegment(rel, "temp"))
-            {
-                category = WeChatDataCategory.Cache;
-                return true;
-            }
-
             if (ContainsPathSegment(rel, "CustomEmotion") || ContainsPathSegment(rel, "MsgTemp"))
             {
                 category = WeChatDataCategory.Text;
@@ -367,6 +383,57 @@ namespace MyTools.Services
             }
 
             return false;
+        }
+
+        private static bool IsImageExtension(string extension)
+        {
+            switch ((extension ?? string.Empty).ToLowerInvariant())
+            {
+                case ".jpg":
+                case ".jpeg":
+                case ".png":
+                case ".gif":
+                case ".webp":
+                case ".bmp":
+                case ".heic":
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        private static bool IsVideoExtension(string extension)
+        {
+            switch ((extension ?? string.Empty).ToLowerInvariant())
+            {
+                case ".mp4":
+                case ".mov":
+                case ".avi":
+                case ".mkv":
+                case ".webm":
+                case ".wmv":
+                case ".m4v":
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        private static bool IsAudioExtension(string extension)
+        {
+            switch ((extension ?? string.Empty).ToLowerInvariant())
+            {
+                case ".amr":
+                case ".silk":
+                case ".aac":
+                case ".mp3":
+                case ".wav":
+                case ".m4a":
+                case ".ogg":
+                    return true;
+                default:
+                    return false;
+            }
         }
 
         private static bool ContainsPathSegment(string relativePath, string segment)
@@ -446,7 +513,7 @@ namespace MyTools.Services
             var parts = rel.Split(new[] { '/', '\\' }, StringSplitOptions.RemoveEmptyEntries);
             if (parts.Any(x => x.Equals("MMKV", StringComparison.OrdinalIgnoreCase)
                                || x.Equals("config", StringComparison.OrdinalIgnoreCase)
-                               || x.Equals("Msg", StringComparison.OrdinalIgnoreCase)))
+                               || x.Equals("db_storage", StringComparison.OrdinalIgnoreCase)))
             {
                 return true;
             }

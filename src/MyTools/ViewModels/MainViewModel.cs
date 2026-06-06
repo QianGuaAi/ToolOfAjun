@@ -413,7 +413,7 @@ namespace MyTools.ViewModels
                     Refresh();
                 }
             });
-            LockWin10Command = new RelayCommand(LockCurrentWindowsVersion);
+            LockWin10Command = new AsyncRelayCommand(LockCurrentWindowsVersionAsync);
             ExitCommand = new RelayCommand(ExitApplication);
             RestoreCommand = new RelayCommand(RestoreWindow);
             OpenLogFolderCommand = new RelayCommand(OpenLogFolder);
@@ -1557,37 +1557,37 @@ namespace MyTools.ViewModels
         public bool WeChatBackupIncludeText
         {
             get => _weChatBackupIncludeText;
-            set { _weChatBackupIncludeText = value; OnPropertyChanged(); }
+            set { _weChatBackupIncludeText = value; OnPropertyChanged(); TriggerCommandRequery(); }
         }
 
         public bool WeChatBackupIncludeImage
         {
             get => _weChatBackupIncludeImage;
-            set { _weChatBackupIncludeImage = value; OnPropertyChanged(); }
+            set { _weChatBackupIncludeImage = value; OnPropertyChanged(); TriggerCommandRequery(); }
         }
 
         public bool WeChatBackupIncludeVideo
         {
             get => _weChatBackupIncludeVideo;
-            set { _weChatBackupIncludeVideo = value; OnPropertyChanged(); }
+            set { _weChatBackupIncludeVideo = value; OnPropertyChanged(); TriggerCommandRequery(); }
         }
 
         public bool WeChatBackupIncludeVoice
         {
             get => _weChatBackupIncludeVoice;
-            set { _weChatBackupIncludeVoice = value; OnPropertyChanged(); }
+            set { _weChatBackupIncludeVoice = value; OnPropertyChanged(); TriggerCommandRequery(); }
         }
 
         public bool WeChatBackupIncludeFile
         {
             get => _weChatBackupIncludeFile;
-            set { _weChatBackupIncludeFile = value; OnPropertyChanged(); }
+            set { _weChatBackupIncludeFile = value; OnPropertyChanged(); TriggerCommandRequery(); }
         }
 
         public bool WeChatBackupIncludeCache
         {
             get => _weChatBackupIncludeCache;
-            set { _weChatBackupIncludeCache = value; OnPropertyChanged(); }
+            set { _weChatBackupIncludeCache = value; OnPropertyChanged(); TriggerCommandRequery(); }
         }
 
         public bool WeChatRestoreIncludeText
@@ -11863,7 +11863,16 @@ namespace MyTools.ViewModels
                 await WindowsSecurityService.SetDefenderRealtimeAsync(target);
                 await Task.Delay(1500);
                 RefreshSystemStatus();
-                SystemStatusMessage = target ? "实时防护已恢复。" : "实时防护已关闭。";
+                if (IsDefenderEnabled == target)
+                {
+                    SystemStatusMessage = target ? "实时防护已恢复。" : "实时防护已关闭。";
+                }
+                else
+                {
+                    SystemStatusMessage = target
+                        ? "已提交恢复命令，但未读回防护开启状态，请打开 Windows 安全中心确认。"
+                        : "已提交关闭命令，但实时防护仍处于开启状态，可能被篡改保护或安全策略拦截。";
+                }
             }
             catch (OperationCanceledException)
             {
@@ -11885,7 +11894,16 @@ namespace MyTools.ViewModels
                 await WindowsSecurityService.SetAutoUpdateAsync(target);
                 await Task.Delay(1500);
                 RefreshSystemStatus();
-                SystemStatusMessage = target ? "自动更新已恢复。" : "自动更新已停止。";
+                if (IsAutoUpdateEnabled == target)
+                {
+                    SystemStatusMessage = target ? "自动更新已恢复。" : "自动更新已停止。";
+                }
+                else
+                {
+                    SystemStatusMessage = target
+                        ? "已提交恢复命令，但自动更新策略仍显示为停止，请检查组策略或系统服务状态。"
+                        : "已提交停止命令，但自动更新策略仍显示为开启，请检查组策略或系统服务状态。";
+                }
             }
             catch (OperationCanceledException)
             {
@@ -11955,38 +11973,33 @@ namespace MyTools.ViewModels
             }
         }
 
-        private void LockCurrentWindowsVersion()
+        private async Task LockCurrentWindowsVersionAsync()
         {
             try
             {
-                var os = OsVersionService.MajorVersion;
-                if (os == 0)
-                {
-                    MessageBox.Show("无法检测当前 Windows 版本。", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
-                    return;
-                }
-
-                string scriptPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "LockCurrentWindows.ps1");
-
-                if (!System.IO.File.Exists(scriptPath))
-                {
-                    MessageBox.Show("锁定脚本不存在: " + scriptPath, "错误", MessageBoxButton.OK, MessageBoxImage.Error);
-                    return;
-                }
-
-                var startInfo = new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = "powershell.exe",
-                    Arguments = $"-NoProfile -ExecutionPolicy Bypass -File \"{scriptPath}\"",
-                    UseShellExecute = true,
-                    Verb = "runas"
-                };
-
-                System.Diagnostics.Process.Start(startInfo);
-                MessageBox.Show("命令已提交，请在弹出的 UAC 窗口中确认。", "操作提示", MessageBoxButton.OK, MessageBoxImage.Information);
+                var target = WindowsVersionLockService.GetCurrentTarget();
+                SystemStatusMessage = $"正在锁定 {target.DisplayName}，请在 UAC 弹窗中确认...";
+                await WindowsVersionLockService.ApplyCurrentVersionLockAsync(CancellationToken.None).ConfigureAwait(true);
+                SystemStatusMessage = $"已锁定到当前系统版本：{target.DisplayName}。";
+                MessageBox.Show(
+                    $"已锁定到当前系统版本：{target.DisplayName}。\n\nWindows 后续只会接收该产品版本允许的质量更新，不会自动跨大版本升级。",
+                    "系统锁定完成",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
+            catch (PlatformNotSupportedException ex)
+            {
+                SystemStatusMessage = ex.Message;
+                MessageBox.Show(ex.Message, "系统不支持", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (OperationCanceledException)
+            {
+                SystemStatusMessage = "操作已取消（UAC 未授权）。";
             }
             catch (Exception ex)
             {
+                AppLogService.Error(ex, "Locking current Windows version failed.");
+                SystemStatusMessage = "系统锁定失败：" + ex.Message;
                 MessageBox.Show("执行失败: " + ex.Message, "错误", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
@@ -12647,7 +12660,8 @@ namespace MyTools.ViewModels
         {
             return !IsWeChatBackupBusy
                 && SelectedWeChatRoot != null
-                && !string.IsNullOrWhiteSpace(WeChatBackupOutputFolder);
+                && !string.IsNullOrWhiteSpace(WeChatBackupOutputFolder)
+                && BuildWeChatBackupCategories().Count > 0;
         }
 
         private async Task StartWeChatBackupAsync()
@@ -12667,6 +12681,13 @@ namespace MyTools.ViewModels
                 }
             }
 
+            var categories = BuildWeChatBackupCategories();
+            if (categories.Count == 0)
+            {
+                WeChatBackupStatusMessage = "请至少选择一种备份类别。";
+                return;
+            }
+
             IsWeChatBackupBusy = true;
             try
             {
@@ -12675,13 +12696,7 @@ namespace MyTools.ViewModels
                     Root = SelectedWeChatRoot,
                     StartDate = (WeChatBackupStartDate ?? DateTime.Today.AddDays(-30)).Date,
                     EndDate = (WeChatBackupEndDate ?? DateTime.Today).Date,
-                    Categories = WeChatCleanupService.BuildCategories(
-                        WeChatBackupIncludeText,
-                        WeChatBackupIncludeImage,
-                        WeChatBackupIncludeVideo,
-                        WeChatBackupIncludeVoice,
-                        WeChatBackupIncludeFile,
-                        WeChatBackupIncludeCache),
+                    Categories = categories,
                     OutputDirectory = WeChatBackupOutputFolder
                 };
 
@@ -12804,6 +12819,17 @@ namespace MyTools.ViewModels
                 WeChatRestoreIncludeVoice,
                 WeChatRestoreIncludeFile,
                 WeChatRestoreIncludeCache);
+        }
+
+        private HashSet<WeChatDataCategory> BuildWeChatBackupCategories()
+        {
+            return WeChatCleanupService.BuildCategories(
+                WeChatBackupIncludeText,
+                WeChatBackupIncludeImage,
+                WeChatBackupIncludeVideo,
+                WeChatBackupIncludeVoice,
+                WeChatBackupIncludeFile,
+                WeChatBackupIncludeCache);
         }
 
         private void SelectWeChatBackupOutputFolder()

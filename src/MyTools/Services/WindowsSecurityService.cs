@@ -20,6 +20,12 @@ namespace MyTools.Services
 
         public static bool GetDefenderRealtimeStatus()
         {
+            var mpPreferenceStatus = TryGetDefenderRealtimeStatusFromPowerShell();
+            if (mpPreferenceStatus.HasValue)
+            {
+                return mpPreferenceStatus.Value;
+            }
+
             try
             {
                 using (var key = Registry.LocalMachine.OpenSubKey(DefenderPolicyKey))
@@ -42,18 +48,12 @@ namespace MyTools.Services
         public static async Task SetDefenderRealtimeAsync(bool enable)
         {
             string script = enable
-                ? "Set-MpPreference -DisableRealtimeMonitoring $false" +
-                  " -DisableBehaviorMonitoring $false" +
-                  " -DisableBlockAtFirstSeen $false" +
-                  " -DisableIOAVProtection $false" +
-                  " -DisableScriptScanning $false" +
-                  " -ErrorAction SilentlyContinue"
-                : "Set-MpPreference -DisableRealtimeMonitoring $true" +
-                  " -DisableBehaviorMonitoring $true" +
-                  " -DisableBlockAtFirstSeen $true" +
-                  " -DisableIOAVProtection $true" +
-                  " -DisableScriptScanning $true" +
-                  " -ErrorAction SilentlyContinue";
+                ? @"if (Get-Command Set-MpPreference -ErrorAction SilentlyContinue) {
+    Set-MpPreference -DisableRealtimeMonitoring $false -DisableBehaviorMonitoring $false -DisableBlockAtFirstSeen $false -DisableIOAVProtection $false -DisableScriptScanning $false -ErrorAction SilentlyContinue
+}"
+                : @"if (Get-Command Set-MpPreference -ErrorAction SilentlyContinue) {
+    Set-MpPreference -DisableRealtimeMonitoring $true -DisableBehaviorMonitoring $true -DisableBlockAtFirstSeen $true -DisableIOAVProtection $true -DisableScriptScanning $true -ErrorAction SilentlyContinue
+}";
 
             await RunElevatedScriptAsync(script, waitForExit: true);
         }
@@ -81,14 +81,21 @@ if (Test-Path $p) {
     Remove-ItemProperty -Path $p -Name 'NoAutoUpdate' -ErrorAction SilentlyContinue
     Remove-ItemProperty -Path $p -Name 'AUOptions' -ErrorAction SilentlyContinue
 }
-Start-Service -Name wuauserv -ErrorAction SilentlyContinue
-Start-Service -Name UsoSvc   -ErrorAction SilentlyContinue"
+foreach ($svc in 'wuauserv','UsoSvc','BITS','DoSvc') {
+    if (Get-Service -Name $svc -ErrorAction SilentlyContinue) {
+        Set-Service -Name $svc -StartupType Manual -ErrorAction SilentlyContinue
+        Start-Service -Name $svc -ErrorAction SilentlyContinue
+    }
+}"
                 : @"$p='HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU'
 if (!(Test-Path $p)) { New-Item -Path $p -Force | Out-Null }
 Set-ItemProperty -Path $p -Name 'NoAutoUpdate' -Value 1 -Type DWord
 Set-ItemProperty -Path $p -Name 'AUOptions'    -Value 1 -Type DWord
-Stop-Service -Name UsoSvc   -Force -ErrorAction SilentlyContinue
-Stop-Service -Name wuauserv -Force -ErrorAction SilentlyContinue";
+foreach ($svc in 'UsoSvc','wuauserv','BITS','DoSvc') {
+    if (Get-Service -Name $svc -ErrorAction SilentlyContinue) {
+        Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
+    }
+}";
 
             await RunElevatedScriptAsync(script, waitForExit: true);
         }
@@ -103,13 +110,19 @@ if (Test-Path $p) {
 }
 
 # Start required services
-Start-Service -Name wuauserv -ErrorAction SilentlyContinue
-Start-Service -Name UsoSvc   -ErrorAction SilentlyContinue
+foreach ($svc in 'wuauserv','UsoSvc','BITS','DoSvc') {
+    if (Get-Service -Name $svc -ErrorAction SilentlyContinue) {
+        Set-Service -Name $svc -StartupType Manual -ErrorAction SilentlyContinue
+        Start-Service -Name $svc -ErrorAction SilentlyContinue
+    }
+}
 Start-Sleep   -Seconds 2
 
-# Trigger interactive foreground scan (highest priority, fastest)
+# Trigger Windows 10/11 foreground scan first, then keep older command fallback.
 $uso = ""$env:SystemRoot\System32\UsoClient.exe""
 if (Test-Path $uso) {
+    & $uso RefreshSettings
+    Start-Sleep -Seconds 2
     & $uso StartInteractiveScan
     Start-Sleep -Seconds 5
     & $uso StartDownload
@@ -117,10 +130,76 @@ if (Test-Path $uso) {
     & $uso StartInstall
 }
 
+if (Get-Command wuauclt.exe -ErrorAction SilentlyContinue) {
+    wuauclt.exe /detectnow
+    wuauclt.exe /updatenow
+}
+
 # Open Windows Update settings so user can monitor progress
 Start-Process 'ms-settings:windowsupdate' -ErrorAction SilentlyContinue";
 
-            await RunElevatedScriptAsync(script, waitForExit: false);
+            await RunElevatedScriptAsync(script, waitForExit: true);
+        }
+
+        private static bool? TryGetDefenderRealtimeStatusFromPowerShell()
+        {
+            const string script = "$p=Get-MpPreference -ErrorAction Stop; if ([bool]$p.DisableRealtimeMonitoring) { 'disabled' } else { 'enabled' }";
+            try
+            {
+                var output = RunPowerShellForOutput(script, 5000);
+                if (output.IndexOf("enabled", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return true;
+                }
+
+                if (output.IndexOf("disabled", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return false;
+                }
+            }
+            catch
+            {
+                // Registry fallback below.
+            }
+
+            return null;
+        }
+
+        private static string RunPowerShellForOutput(string script, int timeoutMs)
+        {
+            using (var process = new Process())
+            {
+                process.StartInfo = new ProcessStartInfo
+                {
+                    FileName = "powershell.exe",
+                    Arguments = "-NoProfile -ExecutionPolicy Bypass -Command \"& { " + EscapeForPowerShellCommand(script) + " }\"",
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true
+                };
+
+                if (!process.Start())
+                {
+                    return string.Empty;
+                }
+
+                var outputTask = process.StandardOutput.ReadToEndAsync();
+                if (!process.WaitForExit(timeoutMs))
+                {
+                    try { process.Kill(); } catch { }
+                    return string.Empty;
+                }
+
+                return outputTask.GetAwaiter().GetResult() ?? string.Empty;
+            }
+        }
+
+        private static string EscapeForPowerShellCommand(string script)
+        {
+            return (script ?? string.Empty)
+                .Replace("`", "``")
+                .Replace("\"", "`\"");
         }
 
         private static async Task RunElevatedScriptAsync(string script, bool waitForExit)

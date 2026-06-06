@@ -1,5 +1,51 @@
 # 开发记录
 
+## [2026-06-06] 修复程序卸载搜索框占位文字
+- 程序卸载页顶部搜索框改为本地显式占位文字结构，固定白底、深色输入文字和灰色提示文字，避免 MaterialDesign Hint 在渐变标题区聚焦时显示不正常。
+- 搜索绑定仍使用 `InstalledProgramSearchText`，筛选逻辑不变。
+- 验证：`.dotnet\dotnet.exe build src\MyTools\MyTools.csproj -c Release --no-incremental` 通过，0 warning / 0 error；已重新生成 `artifacts\installer\MyToolsSetup.exe`，大小 41.2 MB，SHA256 = `015C931810468C69BFECAF01E7F453ADA7D6ADE972D32BF96B2B83C0A20AF045`。
+
+## [2026-06-06] 修复启动项禁用后被软件恢复
+- `StartupService` 禁用 Run 启动项时同步写入 Windows `StartupApproved\Run` 禁用标记，再将原 Run 值备份到 `Software\AJunTools\DisabledRun` 并移除 Run 值。
+- 刷新列表时读取 `StartupApproved\Run`，若第三方软件重新写回同名 Run 值，会显示为“注册表 Run（Windows 已禁用）”，按钮保持“启用”状态。
+- 启用启动项时从 MyTools 备份或现有 Run 值恢复命令，并同步写入 Windows 启用标记；永久删除时同时清理 Run、MyTools 备份和 `StartupApproved\Run`。
+- 同步更新 `docs/功能说明.md` 与 `docs/程序逻辑.md`；本次不修改 `App.OnStartup`、`MainWindow` 构造函数或启动期后台加载流程。
+- 验证：`.dotnet\dotnet.exe build src\MyTools\MyTools.csproj -c Release --no-incremental` 通过，0 warning / 0 error。
+
+## [2026-06-06] 顶部菜单日程入口改名
+- 顶部菜单 `日程(_A)` 改为 `排班表`，命令绑定仍复用 `ShowScheduleCommand`，不改变排班模块逻辑。
+- 验证：`.dotnet\dotnet.exe build src\MyTools\MyTools.csproj -c Release --no-incremental` 通过，0 warning / 0 error；已重新生成 `artifacts\installer\MyToolsSetup.exe`，大小 41.2 MB，SHA256 = `9BC27104EEF8735E3F1E9E21AD893C7C1D6709ADAFAFCBE80C2F4BD1BA2DDBCA`。
+
+## [2026-06-06] 取消多媒体面板悬浮缩放
+- `MultimediaPage.xaml` 将文件夹、预览、媒体文件三块使用的 `CompactMediaCard` 改为多媒体页本地静态卡片样式，不再继承带 `IsMouseOver` 缩放触发器的 `PremiumCard`。
+- 保留原有圆角、阴影、背景和紧凑间距，仅取消鼠标移入时整个面板轻微浮动/缩放的响应。
+- 验证：`.dotnet\dotnet.exe build src\MyTools\MyTools.csproj -c Release --no-incremental` 通过，0 warning / 0 error。
+
+## [2026-06-06] 修复壁纸图库在 Program Files 下保存失败
+- `WallpaperService` 的图库目录改为优先使用 `MyTools.exe` 同级 `Wallpapers/`，并通过实际写入探针判断目录是否可写。
+- 当程序安装在 `C:\Program Files\...` 等普通用户不可写位置时，图库自动切换到 `%LOCALAPPDATA%\MyTools\Wallpapers\`，修复点击“保存当前桌面到图库”时报“访问被拒绝”的问题。
+- 系统设置页的壁纸状态文字同步显示实际图库目录，避免仍提示固定同级目录。
+- 验证：`.dotnet\dotnet.exe build src\MyTools\MyTools.csproj -c Release --no-incremental` 通过，0 warning / 0 error；已重新生成 `artifacts\installer\MyToolsSetup.exe`，大小 41.2 MB，SHA256 = `5C6BD58AC2397710343D5F85359066DE49CF3883821E8503E3E9BF59BC27272F`。
+
+## [2026-06-06] 重新编译并打包安装程序
+- 使用仓库本地 `.dotnet` SDK 执行 `scripts\Build-Installer.ps1 -Configuration Release`，主程序、卸载器、安装器三个项目构建均为 0 warning / 0 error。
+- 输出安装包：`artifacts\installer\MyToolsSetup.exe`，大小 41.2 MB，SHA256 = `48F3D24D2421BD1D363417998BEC36D42CCEFD334D5E468BEDDF2130449DD078`。
+- 同步生成 payload：`artifacts\installer\MyToolsPayload.zip`，大小 41.0 MB。
+
+## [2026-06-06] 系统维护 Win10/Win11 兼容与按钮对齐
+- 新增 `WindowsVersionLockService`，系统锁定不再依赖旧的 `LockWin10_22H2.ps1` 脚本，而是读取当前 Windows 10/11 的 `DisplayVersion` / `ReleaseId`，写入 `ProductVersion`、`TargetReleaseVersion` 和 `TargetReleaseVersionInfo` 策略。
+- `WindowsSecurityService` 的 Defender 状态优先通过 `Get-MpPreference` 读取，关闭/恢复实时防护后按实际读回状态提示；若 Win10/Win11 篡改保护或安全策略拦截，不再显示假成功。
+- 自动更新停止/恢复脚本兼容 Win10/Win11 常见服务，处理 `wuauserv`、`UsoSvc`、`BITS` 和 `DoSvc`；立即更新增加 `UsoClient RefreshSettings` 与 `wuauclt` 兜底。
+- 系统维护卡片右侧操作区改为固定宽度列，三行按钮组在列内左对齐，修正按钮横向位置不统一的问题。
+- 系统维护卡片内所有操作按钮统一为 `96 x 32`，刷新按钮由小图标按钮改为同尺寸“刷新状态”按钮，避免同一区域按钮大小不一致。
+- 验证：`.dotnet\dotnet.exe build src\MyTools\MyTools.csproj -c Release --no-incremental` 通过，0 warning / 0 error。
+
+## [2026-06-06] 修复微信备份恢复
+- 修复新版 `xwechat_files` 备份恢复时将 `msg` 目录整体误判为受保护路径的问题；恢复现在只继续拦截 `MMKV`、`config`、`db_storage`、`Msg*.db`、`MicroMsg.db`、`Login.dat` 和 `SafeStorage*` 等数据库、配置与登录态文件。
+- 旧备份缺少 manifest `category` 字段时，恢复类别推断改为先按缓存目录、媒体扩展名和目录段识别，避免把 `msg\attach` 下的图片、文件混为同一类。
+- 备份类别全未勾选时，界面按钮会重新计算可执行状态，服务层也会拒绝空类别备份，避免用户未选择类别却生成默认类别备份。
+- 验证：`.dotnet\dotnet.exe build src\MyTools\MyTools.csproj -c Release --no-incremental` 通过，0 warning / 0 error；临时 `xwechat_files\wxid_test` 服务级备份恢复闭环成功恢复 `msg\attach`、`msg\video`、`msg\file` 3 个文件，失败 0 个。
+
 ## [2026-06-05] 重新编译并打包安装程序
 - 使用仓库本地 `.dotnet` SDK 8.0.421 执行 `scripts\Build-Installer.ps1 -Configuration Release`。
 - 主程序、卸载器、安装器三个项目构建均为 0 warning / 0 error。

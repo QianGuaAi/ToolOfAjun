@@ -99,7 +99,7 @@
                     <MenuItem Header="Codex 配置(_C)" Command="{Binding ShowCodexProfilesCommand}" Style="{StaticResource TopMenuItem}" />
                     <MenuItem Header="文件验证(_V)" Command="{Binding ShowFileVerifyCommand}" Style="{StaticResource TopMenuItem}" />
                 </MenuItem>
-                <MenuItem Header="日程(_A)" Command="{Binding ShowScheduleCommand}" Style="{StaticResource TopMenuItem}" />
+                <MenuItem Header="排班表" Command="{Binding ShowScheduleCommand}" Style="{StaticResource TopMenuItem}" />
                 <MenuItem Header="帮助(_H)" Style="{StaticResource TopMenuItem}">
                     <MenuItem Header="关于(_A)" Click="MenuAbout_Click" Style="{StaticResource TopMenuItem}" />
                     <Separator />

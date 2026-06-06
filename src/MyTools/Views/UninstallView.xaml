@@ -3,6 +3,17 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
              xmlns:viewModels="clr-namespace:MyTools.ViewModels">
+    <UserControl.Resources>
+        <viewModels:NullOrEmptyToVisibilityConverter x:Key="NullOrEmptyToVisibility" />
+        <Style x:Key="UninstallSearchTextBox" TargetType="TextBox" BasedOn="{StaticResource StandardTextBox}">
+            <Setter Property="Height" Value="34" />
+            <Setter Property="Padding" Value="12,0,12,0" />
+            <Setter Property="Background" Value="White" />
+            <Setter Property="Foreground" Value="#111827" />
+            <Setter Property="CaretBrush" Value="#111827" />
+        </Style>
+    </UserControl.Resources>
+
     <Grid Margin="16,12,16,16">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -45,11 +56,20 @@
                 <StackPanel DockPanel.Dock="Right"
                             Orientation="Horizontal"
                             Margin="0,0,12,0">
-                    <TextBox Width="190"
-                             Margin="0,0,8,0"
-                             Text="{Binding InstalledProgramSearchText, UpdateSourceTrigger=PropertyChanged}"
-                             Style="{StaticResource StandardTextBox}"
-                             materialDesign:HintAssist.Hint="搜索程序/发布者/路径" />
+                    <Grid Width="190"
+                          Height="34"
+                          Margin="0,0,8,0">
+                        <TextBox Text="{Binding InstalledProgramSearchText, UpdateSourceTrigger=PropertyChanged}"
+                                 Style="{StaticResource UninstallSearchTextBox}"
+                                 ToolTip="搜索程序 / 发布者 / 路径" />
+                        <TextBlock Text="搜索程序 / 发布者 / 路径"
+                                   Margin="13,0,8,0"
+                                   VerticalAlignment="Center"
+                                   Foreground="#64748B"
+                                   FontSize="{StaticResource FontSizeBody}"
+                                   IsHitTestVisible="False"
+                                   Visibility="{Binding InstalledProgramSearchText, Converter={StaticResource NullOrEmptyToVisibility}}" />
+                    </Grid>
                     <ComboBox Width="126"
                               Height="32"
                               Margin="0,0,8,0"

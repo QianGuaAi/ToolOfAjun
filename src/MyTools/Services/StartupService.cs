@@ -57,24 +57,26 @@ namespace MyTools.Services
     public static class StartupService
     {
         private const string RunKeyPath = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
+        private const string StartupApprovedRunKeyPath = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run";
         private const string BackupKeyPath = @"SOFTWARE\AJunTools\DisabledRun";
+        private const byte StartupApprovedEnabledState = 0x02;
+        private const byte StartupApprovedDisabledState = 0x03;
 
         public static List<StartupItem> GetStartupItems()
         {
             var items = new List<StartupItem>();
+            var seenItems = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            // Read Enabled items
-            AddItemsFromKey(Registry.CurrentUser, RunKeyPath, items, true, true);
-            AddItemsFromKey(Registry.LocalMachine, RunKeyPath, items, true, false);
+            AddItemsFromKey(Registry.CurrentUser, RunKeyPath, items, true, true, seenItems);
+            AddItemsFromKey(Registry.LocalMachine, RunKeyPath, items, true, false, seenItems);
 
-            // Read Disabled items
-            AddItemsFromKey(Registry.CurrentUser, BackupKeyPath, items, false, true);
-            AddItemsFromKey(Registry.LocalMachine, BackupKeyPath, items, false, false);
+            AddItemsFromKey(Registry.CurrentUser, BackupKeyPath, items, false, true, seenItems);
+            AddItemsFromKey(Registry.LocalMachine, BackupKeyPath, items, false, false, seenItems);
 
             return items;
         }
 
-        private static void AddItemsFromKey(RegistryKey root, string path, List<StartupItem> list, bool isEnabled, bool isUserLevel)
+        private static void AddItemsFromKey(RegistryKey root, string path, List<StartupItem> list, bool isEnabled, bool isUserLevel, HashSet<string> seenItems)
         {
             using (var key = root.OpenSubKey(path))
             {
@@ -82,16 +84,25 @@ namespace MyTools.Services
                 {
                     foreach (var name in key.GetValueNames())
                     {
+                        if (!seenItems.Add(BuildItemIdentity(isUserLevel, name)))
+                        {
+                            continue;
+                        }
+
                         var command = key.GetValue(name)?.ToString();
                         var executablePath = TryExtractExecutablePath(command);
                         var executableExists = !string.IsNullOrWhiteSpace(executablePath) && File.Exists(executablePath);
                         var signatureInfo = ReadSignatureInfo(executablePath);
+                        var isStartupApprovedDisabled = isEnabled && IsStartupApprovedDisabled(root, name);
+                        var effectiveIsEnabled = isEnabled && !isStartupApprovedDisabled;
                         list.Add(new StartupItem
                         {
                             Name = name,
                             Command = command,
                             Location = isUserLevel ? "当前用户" : "所有用户",
-                            SourceCategory = isEnabled ? "注册表 Run" : "MyTools 禁用备份",
+                            SourceCategory = isEnabled
+                                ? isStartupApprovedDisabled ? "注册表 Run（Windows 已禁用）" : "注册表 Run"
+                                : "MyTools 禁用备份",
                             Publisher = ReadPublisher(executablePath),
                             ExecutablePath = executablePath,
                             ExecutableExists = executableExists,
@@ -99,7 +110,7 @@ namespace MyTools.Services
                             SignatureSubject = signatureInfo.Subject,
                             IsSignatureChainTrusted = signatureInfo.IsChainTrusted,
                             SignatureTrustStatus = signatureInfo.TrustStatus,
-                            IsEnabled = isEnabled,
+                            IsEnabled = effectiveIsEnabled,
                             IsUserLevel = isUserLevel
                         });
                     }
@@ -111,22 +122,18 @@ namespace MyTools.Services
         {
             try
             {
-                var root = item.IsUserLevel ? Registry.CurrentUser : Registry.LocalMachine;
-                string sourcePath = item.IsEnabled ? RunKeyPath : BackupKeyPath;
-                string targetPath = item.IsEnabled ? BackupKeyPath : RunKeyPath;
-
-                using (var sourceKey = root.OpenSubKey(sourcePath, true))
-                using (var targetKey = root.CreateSubKey(targetPath))
+                if (item == null)
                 {
-                    if (sourceKey != null && targetKey != null)
-                    {
-                        var value = sourceKey.GetValue(item.Name);
-                        if (value != null)
-                        {
-                            targetKey.SetValue(item.Name, value);
-                            sourceKey.DeleteValue(item.Name);
-                        }
-                    }
+                    return;
+                }
+
+                if (item.IsEnabled)
+                {
+                    DisableStartupItem(item);
+                }
+                else
+                {
+                    EnableStartupItem(item);
                 }
             }
             catch (UnauthorizedAccessException)
@@ -152,15 +159,15 @@ namespace MyTools.Services
         {
             try
             {
-                var root = item.IsUserLevel ? Registry.CurrentUser : Registry.LocalMachine;
-                string path = item.IsEnabled ? RunKeyPath : BackupKeyPath;
-                using (var key = root.OpenSubKey(path, true))
+                if (item == null)
                 {
-                    if (key != null)
-                    {
-                        key.DeleteValue(item.Name, false);
-                    }
+                    return;
                 }
+
+                var root = item.IsUserLevel ? Registry.CurrentUser : Registry.LocalMachine;
+                DeleteRegistryValue(root, RunKeyPath, item.Name);
+                DeleteRegistryValue(root, BackupKeyPath, item.Name);
+                DeleteRegistryValue(root, StartupApprovedRunKeyPath, item.Name);
             }
             catch (UnauthorizedAccessException)
             {
@@ -177,8 +184,137 @@ namespace MyTools.Services
                     "删除启动项时发生错误：" + ex.Message,
                     "操作失败",
                     System.Windows.MessageBoxButton.OK,
-                    System.Windows.MessageBoxImage.Error);
+                System.Windows.MessageBoxImage.Error);
             }
+        }
+
+        private static void DisableStartupItem(StartupItem item)
+        {
+            var root = item.IsUserLevel ? Registry.CurrentUser : Registry.LocalMachine;
+            var valueKind = RegistryValueKind.String;
+            object value = null;
+
+            using (var runKey = root.OpenSubKey(RunKeyPath, true))
+            {
+                value = ReadRegistryValue(runKey, item.Name, out valueKind);
+                if (value == null && !string.IsNullOrWhiteSpace(item.Command))
+                {
+                    value = item.Command;
+                }
+
+                if (value != null)
+                {
+                    using (var backupKey = root.CreateSubKey(BackupKeyPath))
+                    {
+                        backupKey?.SetValue(item.Name, value, valueKind);
+                    }
+                }
+
+                SetStartupApprovedState(root, item.Name, false);
+
+                if (value != null)
+                {
+                    runKey?.DeleteValue(item.Name, false);
+                }
+            }
+        }
+
+        private static void EnableStartupItem(StartupItem item)
+        {
+            var root = item.IsUserLevel ? Registry.CurrentUser : Registry.LocalMachine;
+            var valueKind = RegistryValueKind.String;
+            object value;
+
+            using (var backupKey = root.OpenSubKey(BackupKeyPath, true))
+            using (var runKey = root.CreateSubKey(RunKeyPath))
+            {
+                value = ReadRegistryValue(backupKey, item.Name, out valueKind);
+                if (value == null)
+                {
+                    value = ReadRegistryValue(runKey, item.Name, out valueKind);
+                }
+
+                if (value == null && !string.IsNullOrWhiteSpace(item.Command))
+                {
+                    value = item.Command;
+                }
+
+                if (value == null)
+                {
+                    return;
+                }
+
+                SetStartupApprovedState(root, item.Name, true);
+                runKey?.SetValue(item.Name, value, valueKind);
+                backupKey?.DeleteValue(item.Name, false);
+            }
+        }
+
+        private static object ReadRegistryValue(RegistryKey key, string name, out RegistryValueKind valueKind)
+        {
+            valueKind = RegistryValueKind.String;
+            if (key == null || string.IsNullOrWhiteSpace(name))
+            {
+                return null;
+            }
+
+            try
+            {
+                valueKind = key.GetValueKind(name);
+                return key.GetValue(name, null, RegistryValueOptions.DoNotExpandEnvironmentNames);
+            }
+            catch (IOException)
+            {
+                return null;
+            }
+            catch (ArgumentException)
+            {
+                return null;
+            }
+        }
+
+        private static void DeleteRegistryValue(RegistryKey root, string path, string name)
+        {
+            using (var key = root.OpenSubKey(path, true))
+            {
+                key?.DeleteValue(name, false);
+            }
+        }
+
+        private static bool IsStartupApprovedDisabled(RegistryKey root, string name)
+        {
+            using (var key = root.OpenSubKey(StartupApprovedRunKeyPath))
+            {
+                var value = key?.GetValue(name) as byte[];
+                return value != null && value.Length > 0 && value[0] == StartupApprovedDisabledState;
+            }
+        }
+
+        private static void SetStartupApprovedState(RegistryKey root, string name, bool enabled)
+        {
+            using (var key = root.CreateSubKey(StartupApprovedRunKeyPath))
+            {
+                key?.SetValue(name, CreateStartupApprovedValue(enabled), RegistryValueKind.Binary);
+            }
+        }
+
+        private static byte[] CreateStartupApprovedValue(bool enabled)
+        {
+            var value = new byte[12];
+            value[0] = enabled ? StartupApprovedEnabledState : StartupApprovedDisabledState;
+
+            if (!enabled)
+            {
+                var fileTime = BitConverter.GetBytes(DateTime.UtcNow.ToFileTimeUtc());
+                Buffer.BlockCopy(fileTime, 0, value, 4, fileTime.Length);
+            }
+
+            return value;
+        }
+
+        private static string BuildItemIdentity(bool isUserLevel, string name)
+        {
+            return (isUserLevel ? "HKCU\\" : "HKLM\\") + (name ?? string.Empty);
         }
 
         private static string TryExtractExecutablePath(string command)
