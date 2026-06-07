@@ -246,6 +246,9 @@ namespace MyTools.ViewModels
         private readonly AsyncRelayCommand _rotateToNextCodexProfileCommand;
         private readonly AsyncRelayCommand _restartCodexDesktopCommand;
         private readonly AsyncRelayParameterCommand _toggleCodexProfileRotationCommand;
+        private readonly AsyncRelayCommand _testCodexRelaysCommand;
+        private readonly AsyncRelayCommand _selectAllCodexRotationCommand;
+        private readonly AsyncRelayCommand _invertCodexRotationCommand;
         private readonly AsyncRelayCommand _openRecordRegionCommand;
         private readonly AsyncRelayCommand _toggleAudioRecordingCommand;
         private readonly AsyncRelayCommand _refreshInstalledProgramsCommand;
@@ -288,6 +291,7 @@ namespace MyTools.ViewModels
         private bool _systemOptimizationLoadRequested;
         private bool _weChatStartupLoadRequested;
         private bool _frpConfigLoadRequested;
+        private bool _suppressCodexProfileAutoSave;
         private static readonly IReadOnlyList<SqlProviderOption> SqlProviderOptionItems = new List<SqlProviderOption>
         {
             new SqlProviderOption(SqlProviderKind.SqlServer, "SQL Server"),
@@ -594,6 +598,12 @@ namespace MyTools.ViewModels
             RestartCodexDesktopCommand = _restartCodexDesktopCommand;
             _toggleCodexProfileRotationCommand = new AsyncRelayParameterCommand(ToggleCodexProfileRotationAsync, parameter => parameter is CodexProfileItem);
             ToggleCodexProfileRotationCommand = _toggleCodexProfileRotationCommand;
+            _testCodexRelaysCommand = new AsyncRelayCommand(TestCodexRelaysAsync, () => CodexProfiles != null && CodexProfiles.Count > 0);
+            TestCodexRelaysCommand = _testCodexRelaysCommand;
+            _selectAllCodexRotationCommand = new AsyncRelayCommand(SelectAllCodexRotationAsync, () => CodexProfiles != null && CodexProfiles.Count > 0);
+            SelectAllCodexRotationCommand = _selectAllCodexRotationCommand;
+            _invertCodexRotationCommand = new AsyncRelayCommand(InvertCodexRotationAsync, () => CodexProfiles != null && CodexProfiles.Count > 0);
+            InvertCodexRotationCommand = _invertCodexRotationCommand;
 
             CurrentModule = "Home";
             ScheduleStartupBackgroundLoads();
@@ -1919,6 +1929,9 @@ namespace MyTools.ViewModels
         public ICommand RotateToNextCodexProfileCommand { get; }
         public ICommand RestartCodexDesktopCommand { get; }
         public ICommand ToggleCodexProfileRotationCommand { get; }
+        public ICommand TestCodexRelaysCommand { get; }
+        public ICommand SelectAllCodexRotationCommand { get; }
+        public ICommand InvertCodexRotationCommand { get; }
 
         public string CodexNextSwitchPreview
         {
@@ -3555,6 +3568,8 @@ namespace MyTools.ViewModels
 
             item.ConfigTomlContentProtected = item.ProtectedConfigTomlBase64;
             item.AuthJsonContentProtected = item.ProtectedAuthJsonBase64;
+            item.RelayTestStatus = item.RelayTestStatus;
+            item.RelayTestMessage = item.RelayTestMessage;
             var authBytes = CodexConfigProfileService.UnprotectBytesFromBase64(item.ProtectedAuthJsonBase64);
             item.AccountEmail = string.IsNullOrWhiteSpace(item.AccountEmail)
                 ? CodexProfileLibraryService.ParseAccountEmail(authBytes)
@@ -3593,6 +3608,11 @@ namespace MyTools.ViewModels
 
         private void CodexProfileItem_OnPropertyChanged(object sender, PropertyChangedEventArgs e)
         {
+            if (_suppressCodexProfileAutoSave)
+            {
+                return;
+            }
+
             if (e.PropertyName == nameof(CodexProfileItem.Remark)
                 || e.PropertyName == nameof(CodexProfileItem.Tags)
                 || e.PropertyName == nameof(CodexProfileItem.Note))
@@ -3606,6 +3626,7 @@ namespace MyTools.ViewModels
                 UpdateCodexRotationState();
                 SafeFireAndForget(SaveCodexProfilesAsync());
             }
+
         }
 
         private async Task SaveCodexProfilesAsync()
@@ -3645,12 +3666,80 @@ namespace MyTools.ViewModels
                             AuthJsonContentProtected = item.ProtectedAuthJsonBase64 ?? item.AuthJsonContentProtected,
                             Status = item.Status ?? CodexProfileLibraryService.StatusUnknown,
                             EnableRotation = item.EnableRotation,
-                            RotationPriority = item.RotationPriority
+                            RotationPriority = item.RotationPriority,
+                            RelayTestStatus = item.RelayTestStatus ?? CodexProfileItem.RelayStatusUnknown,
+                            RelayTestedAt = item.RelayTestedAt,
+                            RelayTestMessage = item.RelayTestMessage ?? string.Empty
                         };
                     })
                     .ToList()
             };
             return file;
+        }
+
+        private async Task TestCodexRelaysAsync()
+        {
+            var targets = CodexProfiles?
+                .Where(item => item != null)
+                .ToList() ?? new List<CodexProfileItem>();
+            if (targets.Count == 0)
+            {
+                CodexProfilesStatusMessage = "没有可测试的 Codex 档案。";
+                return;
+            }
+
+            var passed = 0;
+            var failed = 0;
+            CodexProfilesStatusMessage = $"正在测试 {targets.Count} 个 Codex 中转...";
+            _testCodexRelaysCommand?.RaiseCanExecuteChanged();
+
+            foreach (var item in targets)
+            {
+                try
+                {
+                    item.IsRelayTesting = true;
+                    item.RelayTestStatus = CodexProfileItem.RelayStatusTesting;
+                    item.RelayTestMessage = "正在测试中转...";
+
+                    var configBytes = await ResolveCodexProfileFileBytesAsync(item, CodexConfigProfileService.ConfigFileName).ConfigureAwait(true);
+                    var authBytes = await ResolveCodexProfileFileBytesAsync(item, CodexConfigProfileService.AuthFileName).ConfigureAwait(true);
+                    if (configBytes == null || configBytes.Length == 0 || authBytes == null || authBytes.Length == 0)
+                    {
+                        throw new InvalidOperationException("缺少 config.toml 或 auth.json。");
+                    }
+
+                    var result = await CodexRelayTestService.TestAsync(configBytes, authBytes, CancellationToken.None).ConfigureAwait(true);
+                    item.RelayTestStatus = result.Success ? CodexProfileItem.RelayStatusOk : CodexProfileItem.RelayStatusFailed;
+                    item.RelayTestedAt = DateTime.Now;
+                    item.RelayTestMessage = LimitRelayTestMessage(result.Message);
+                    if (result.Success)
+                    {
+                        passed++;
+                    }
+                    else
+                    {
+                        failed++;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    failed++;
+                    item.RelayTestStatus = CodexProfileItem.RelayStatusFailed;
+                    item.RelayTestedAt = DateTime.Now;
+                    item.RelayTestMessage = LimitRelayTestMessage(ex.Message);
+                    AppLogService.Warning("Testing Codex relay failed for {DisplayName}: {Msg}", SafeCodexLogName(item.DisplayName), ex.Message);
+                }
+                finally
+                {
+                    item.IsRelayTesting = false;
+                }
+
+                CodexProfilesStatusMessage = $"中转测试中：通过 {passed}，不通过 {failed}，剩余 {targets.Count - passed - failed}。";
+            }
+
+            await SaveCodexProfilesAsync().ConfigureAwait(true);
+            CodexProfilesStatusMessage = $"中转测试完成：通过 {passed}，不通过 {failed}。";
+            _testCodexRelaysCommand?.RaiseCanExecuteChanged();
         }
 
         private async Task ApplyCodexProfileAsync(object parameter)
@@ -4465,6 +4554,64 @@ namespace MyTools.ViewModels
             UpdateCodexRotationState();
         }
 
+        private async Task SelectAllCodexRotationAsync()
+        {
+            await SetCodexRotationSelectionAsync(true, "已全选轮换档案。");
+        }
+
+        private async Task InvertCodexRotationAsync()
+        {
+            if (CodexProfiles == null || CodexProfiles.Count == 0)
+            {
+                CodexProfilesStatusMessage = "没有可操作的 Codex 档案。";
+                return;
+            }
+
+            _suppressCodexProfileAutoSave = true;
+            try
+            {
+                foreach (var item in CodexProfiles.Where(item => item != null))
+                {
+                    item.EnableRotation = !item.EnableRotation;
+                }
+            }
+            finally
+            {
+                _suppressCodexProfileAutoSave = false;
+            }
+
+            await SaveCodexProfilesAsync();
+            UpdateCodexRotationState();
+            var selectedCount = CodexProfiles.Count(item => item != null && item.EnableRotation);
+            CodexProfilesStatusMessage = $"已反选轮换档案：当前 {selectedCount}/{CodexProfiles.Count} 个加入轮换。";
+        }
+
+        private async Task SetCodexRotationSelectionAsync(bool selected, string message)
+        {
+            if (CodexProfiles == null || CodexProfiles.Count == 0)
+            {
+                CodexProfilesStatusMessage = "没有可操作的 Codex 档案。";
+                return;
+            }
+
+            _suppressCodexProfileAutoSave = true;
+            try
+            {
+                foreach (var item in CodexProfiles.Where(item => item != null))
+                {
+                    item.EnableRotation = selected;
+                }
+            }
+            finally
+            {
+                _suppressCodexProfileAutoSave = false;
+            }
+
+            await SaveCodexProfilesAsync();
+            UpdateCodexRotationState();
+            CodexProfilesStatusMessage = message;
+        }
+
         private void UpdateCodexNextSwitchPreview()
         {
             var current = CodexProfiles?.FirstOrDefault(p => p != null && p.IsActive);
@@ -4493,6 +4640,8 @@ namespace MyTools.ViewModels
             OnPropertyChanged(nameof(IsCodexRotationAvailable));
             UpdateCodexNextSwitchPreview();
             _rotateToNextCodexProfileCommand?.RaiseCanExecuteChanged();
+            _selectAllCodexRotationCommand?.RaiseCanExecuteChanged();
+            _invertCodexRotationCommand?.RaiseCanExecuteChanged();
         }
 
         private static string SafeCodexLogName(string value)
@@ -4506,6 +4655,13 @@ namespace MyTools.ViewModels
                 ? CodexProfileLibraryService.MaskEmail(value)
                 : value;
         }
+
+        private static string LimitRelayTestMessage(string value)
+        {
+            var text = string.IsNullOrWhiteSpace(value) ? "中转测试失败。" : value.Trim();
+            return text.Length <= 160 ? text : text.Substring(0, 160) + "...";
+        }
+
         private string EnsureUniqueCodexDisplayName(string requestedName, CodexProfileItem ignoreItem)
         {
             var baseName = string.IsNullOrWhiteSpace(requestedName) ? "Codex 账号" : requestedName.Trim();
@@ -7790,6 +7946,8 @@ namespace MyTools.ViewModels
 
         private void ShowScreenshotEditorWindow(System.Windows.Media.Imaging.BitmapSource screenshot, Action onClosed = null)
         {
+            DeferredUiResourceService.EnsureLoaded();
+
             if (_screenshotEditorWindow != null)
             {
                 _screenshotEditorWindow.Closed -= HandleScreenshotEditorWindowClosed;
@@ -13301,6 +13459,15 @@ namespace MyTools.ViewModels
         private string _authJsonContentProtected;
         private bool _enableRotation;
         private int _rotationPriority;
+        private string _relayTestStatus;
+        private DateTime? _relayTestedAt;
+        private string _relayTestMessage;
+        private bool _isRelayTesting;
+
+        public const string RelayStatusUnknown = "未知";
+        public const string RelayStatusTesting = "测试中";
+        public const string RelayStatusOk = "可用";
+        public const string RelayStatusFailed = "不可用";
 
         public string DisplayName
         {
@@ -13551,6 +13718,61 @@ namespace MyTools.ViewModels
             }
         }
 
+        public string RelayTestStatus
+        {
+            get => string.IsNullOrWhiteSpace(_relayTestStatus) ? RelayStatusUnknown : _relayTestStatus;
+            set
+            {
+                var next = string.IsNullOrWhiteSpace(value) ? RelayStatusUnknown : value;
+                if (string.Equals(_relayTestStatus, next, StringComparison.Ordinal)) return;
+                _relayTestStatus = next;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(IsRelayStatusOk));
+                OnPropertyChanged(nameof(IsRelayStatusFailed));
+                OnPropertyChanged(nameof(IsRelayStatusTesting));
+                OnPropertyChanged(nameof(IsRelayStatusUnknown));
+                OnPropertyChanged(nameof(RelayTestDisplayText));
+            }
+        }
+
+        public DateTime? RelayTestedAt
+        {
+            get => _relayTestedAt;
+            set
+            {
+                if (_relayTestedAt == value) return;
+                _relayTestedAt = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(RelayTestDisplayText));
+            }
+        }
+
+        public string RelayTestMessage
+        {
+            get => _relayTestMessage;
+            set
+            {
+                if (string.Equals(_relayTestMessage, value, StringComparison.Ordinal)) return;
+                _relayTestMessage = value ?? string.Empty;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(RelayTestDisplayText));
+            }
+        }
+
+        [JsonIgnore]
+        public bool IsRelayTesting
+        {
+            get => _isRelayTesting;
+            set
+            {
+                if (_isRelayTesting == value) return;
+                _isRelayTesting = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(IsRelayStatusTesting));
+                OnPropertyChanged(nameof(IsRelayStatusUnknown));
+            }
+        }
+
         [JsonIgnore]
         public string EffectiveDisplayName => string.IsNullOrWhiteSpace(DisplayName) ? Name : DisplayName;
 
@@ -13574,6 +13796,30 @@ namespace MyTools.ViewModels
 
         [JsonIgnore]
         public bool IsStatusUnknown => !IsStatusOk && !IsStatusWarn && !IsStatusExpired;
+
+        [JsonIgnore]
+        public bool IsRelayStatusOk => string.Equals(RelayTestStatus, RelayStatusOk, StringComparison.Ordinal);
+
+        [JsonIgnore]
+        public bool IsRelayStatusFailed => string.Equals(RelayTestStatus, RelayStatusFailed, StringComparison.Ordinal);
+
+        [JsonIgnore]
+        public bool IsRelayStatusTesting => IsRelayTesting || string.Equals(RelayTestStatus, RelayStatusTesting, StringComparison.Ordinal);
+
+        [JsonIgnore]
+        public bool IsRelayStatusUnknown => !IsRelayStatusOk && !IsRelayStatusFailed && !IsRelayStatusTesting;
+
+        [JsonIgnore]
+        public string RelayTestDisplayText
+        {
+            get
+            {
+                var testedAt = RelayTestedAt.HasValue
+                    ? " · " + RelayTestedAt.Value.ToString("MM-dd HH:mm")
+                    : string.Empty;
+                return "中转：" + RelayTestStatus + testedAt;
+            }
+        }
 
         [JsonIgnore]
         public bool HasEmbeddedContent =>

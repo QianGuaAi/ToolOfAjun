@@ -2,9 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -22,6 +25,13 @@ namespace MyTools.ViewModels
         AudioVideo
     }
 
+    public enum MediaFileViewMode
+    {
+        Details,
+        List,
+        LargeIcons
+    }
+
     public sealed class MultimediaViewModel : INotifyPropertyChanged, IDisposable
     {
         private readonly MainViewModel _owner;
@@ -29,7 +39,7 @@ namespace MyTools.ViewModels
         private CancellationTokenSource _loadCancellationTokenSource;
         private MediaFileItem _selectedMediaFile;
         private string _selectedFolderPath = string.Empty;
-        private string _statusMessage = "选择左侧文件夹浏览图片、音频、视频和 PDF。";
+        private string _statusMessage = "选择左侧文件夹浏览图片、音频、视频、PDF 和常用文档。";
         private MediaKind _previewKind = MediaKind.Other;
         private MediaKind _immersiveKind = MediaKind.Other;
         private bool _isImmersive;
@@ -42,7 +52,10 @@ namespace MyTools.ViewModels
         private BitmapImage _previewImageSource;
         private BitmapImage _immersiveImageSource;
         private string _previewImageInfo = string.Empty;
+        private string _previewDocumentText = string.Empty;
+        private string _previewDocumentInfo = string.Empty;
         private MultimediaPreferredFilter _preferredFilter = MultimediaPreferredFilter.All;
+        private MediaFileViewMode _fileViewMode = MediaFileViewMode.Details;
 
         public MultimediaViewModel(MainViewModel owner)
         {
@@ -83,6 +96,55 @@ namespace MyTools.ViewModels
             }
         }
 
+        public MediaFileViewMode FileViewMode
+        {
+            get => _fileViewMode;
+            set
+            {
+                if (_fileViewMode == value) return;
+                _fileViewMode = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(IsDetailsView));
+                OnPropertyChanged(nameof(IsListView));
+                OnPropertyChanged(nameof(IsLargeIconsView));
+                OnPropertyChanged(nameof(FileViewModeText));
+            }
+        }
+
+        public bool IsDetailsView
+        {
+            get => FileViewMode == MediaFileViewMode.Details;
+            set { if (value) FileViewMode = MediaFileViewMode.Details; }
+        }
+
+        public bool IsListView
+        {
+            get => FileViewMode == MediaFileViewMode.List;
+            set { if (value) FileViewMode = MediaFileViewMode.List; }
+        }
+
+        public bool IsLargeIconsView
+        {
+            get => FileViewMode == MediaFileViewMode.LargeIcons;
+            set { if (value) FileViewMode = MediaFileViewMode.LargeIcons; }
+        }
+
+        public string FileViewModeText
+        {
+            get
+            {
+                switch (FileViewMode)
+                {
+                    case MediaFileViewMode.List:
+                        return "列表";
+                    case MediaFileViewMode.LargeIcons:
+                        return "大图标";
+                    default:
+                        return "详细信息";
+                }
+            }
+        }
+
         public MediaFileItem SelectedMediaFile
         {
             get => _selectedMediaFile;
@@ -119,6 +181,9 @@ namespace MyTools.ViewModels
                 OnPropertyChanged(nameof(IsPreviewImage));
                 OnPropertyChanged(nameof(IsPreviewAudio));
                 OnPropertyChanged(nameof(IsPreviewVideo));
+                OnPropertyChanged(nameof(IsPreviewDocument));
+                OnPropertyChanged(nameof(IsPreviewTextDocument));
+                OnPropertyChanged(nameof(IsPreviewOfficeDocument));
                 OnPropertyChanged(nameof(IsPreviewEmpty));
             }
         }
@@ -157,7 +222,18 @@ namespace MyTools.ViewModels
         public bool IsPreviewImage => PreviewKind == MediaKind.Image;
         public bool IsPreviewAudio => PreviewKind == MediaKind.Audio;
         public bool IsPreviewVideo => PreviewKind == MediaKind.Video;
-        public bool IsPreviewEmpty => PreviewKind == MediaKind.Other || PreviewKind == MediaKind.Pdf;
+        public bool IsPreviewDocument => PreviewKind == MediaKind.Pdf
+            || PreviewKind == MediaKind.Text
+            || PreviewKind == MediaKind.Markdown
+            || PreviewKind == MediaKind.Word
+            || PreviewKind == MediaKind.Excel
+            || PreviewKind == MediaKind.PowerPoint;
+        public bool IsPreviewTextDocument => PreviewKind == MediaKind.Text || PreviewKind == MediaKind.Markdown;
+        public bool IsPreviewOfficeDocument => PreviewKind == MediaKind.Pdf
+            || PreviewKind == MediaKind.Word
+            || PreviewKind == MediaKind.Excel
+            || PreviewKind == MediaKind.PowerPoint;
+        public bool IsPreviewEmpty => PreviewKind == MediaKind.Other;
         public bool IsImmersiveImage => IsImmersive && ImmersiveKind == MediaKind.Image;
         public bool IsImmersiveAudio => IsImmersive && ImmersiveKind == MediaKind.Audio;
         public bool IsImmersiveVideo => IsImmersive && ImmersiveKind == MediaKind.Video;
@@ -216,6 +292,18 @@ namespace MyTools.ViewModels
             private set { _previewImageInfo = value ?? string.Empty; OnPropertyChanged(); }
         }
 
+        public string PreviewDocumentText
+        {
+            get => _previewDocumentText;
+            private set { _previewDocumentText = value ?? string.Empty; OnPropertyChanged(); }
+        }
+
+        public string PreviewDocumentInfo
+        {
+            get => _previewDocumentInfo;
+            private set { _previewDocumentInfo = value ?? string.Empty; OnPropertyChanged(); }
+        }
+
         public async Task InitializeOnEnterAsync()
         {
             if (_initialized) return;
@@ -247,7 +335,7 @@ namespace MyTools.ViewModels
             FolderTreeNodes.Clear();
             foreach (var root in roots)
                 FolderTreeNodes.Add(root);
-            StatusMessage = roots.Count == 0 ? "未发现可用磁盘。" : "选择左侧文件夹浏览图片、音频、视频和 PDF。";
+            StatusMessage = roots.Count == 0 ? "未发现可用磁盘。" : "选择左侧文件夹浏览图片、音频、视频、PDF 和常用文档。";
         }
 
         public async Task ExpandFolderAsync(MediaFolderNode node)
@@ -271,7 +359,7 @@ namespace MyTools.ViewModels
             SelectedMediaFile = null;
             StopPreview();
             MediaFiles.Clear();
-            StatusMessage = "正在加载媒体文件...";
+            StatusMessage = "正在加载文件内容...";
 
             try
             {
@@ -279,7 +367,7 @@ namespace MyTools.ViewModels
                 if (token.IsCancellationRequested) return;
                 foreach (var descriptor in ApplyPreferredFilter(files))
                     MediaFiles.Add(new MediaFileItem(descriptor));
-                StatusMessage = MediaFiles.Count == 0 ? "当前文件夹没有可显示的媒体文件。" : string.Format("已加载 {0} 个媒体文件。", MediaFiles.Count);
+                StatusMessage = MediaFiles.Count == 0 ? "当前文件夹没有可显示的文件。" : string.Format("已加载 {0} 个文件。", MediaFiles.Count);
             }
             catch (OperationCanceledException)
             {
@@ -451,6 +539,8 @@ namespace MyTools.ViewModels
             PreviewMediaSource = null;
             PreviewImageSource = null;
             PreviewImageInfo = string.Empty;
+            PreviewDocumentText = string.Empty;
+            PreviewDocumentInfo = string.Empty;
             PreviewKind = MediaKind.Other;
         }
 
@@ -531,7 +621,7 @@ namespace MyTools.ViewModels
             StopPreview();
             if (item == null || !File.Exists(item.Path))
             {
-                StatusMessage = "选择媒体文件进行预览。";
+                StatusMessage = "选择文件进行预览。";
                 return;
             }
 
@@ -548,7 +638,19 @@ namespace MyTools.ViewModels
             }
             else if (item.Kind == MediaKind.Pdf)
             {
+                PreviewDocumentInfo = FormatDocumentPreviewInfo(item);
                 StatusMessage = "已选择 PDF：" + item.Name;
+            }
+            else if (item.Kind == MediaKind.Text || item.Kind == MediaKind.Markdown)
+            {
+                PreviewDocumentInfo = FormatDocumentPreviewInfo(item);
+                _ = LoadTextPreviewAsync(item);
+                StatusMessage = "已选择文档：" + item.Name;
+            }
+            else if (item.Kind == MediaKind.Word || item.Kind == MediaKind.Excel || item.Kind == MediaKind.PowerPoint)
+            {
+                PreviewDocumentInfo = FormatDocumentPreviewInfo(item);
+                StatusMessage = "已选择文档：" + item.Name;
             }
         }
 
@@ -572,6 +674,73 @@ namespace MyTools.ViewModels
             {
                 StatusMessage = "无法预览该文件";
             }
+        }
+
+        private async Task LoadTextPreviewAsync(MediaFileItem item)
+        {
+            if (item == null || !File.Exists(item.Path))
+            {
+                return;
+            }
+
+            try
+            {
+                var preview = await Task.Run(() => ReadTextPreview(item.Path));
+                if (ReferenceEquals(SelectedMediaFile, item))
+                {
+                    PreviewDocumentText = preview;
+                }
+            }
+            catch (Exception ex)
+            {
+                PreviewDocumentText = "无法读取预览：" + ex.Message;
+            }
+        }
+
+        private static string ReadTextPreview(string filePath)
+        {
+            const int maxBytes = 32 * 1024;
+            var length = Math.Min(maxBytes, new FileInfo(filePath).Length);
+            var bytes = new byte[length];
+            using (var stream = File.OpenRead(filePath))
+            {
+                stream.Read(bytes, 0, bytes.Length);
+            }
+
+            string text;
+            if (bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF)
+            {
+                text = Encoding.UTF8.GetString(bytes, 3, bytes.Length - 3);
+            }
+            else if (bytes.Length >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE)
+            {
+                text = Encoding.Unicode.GetString(bytes, 2, bytes.Length - 2);
+            }
+            else if (bytes.Length >= 2 && bytes[0] == 0xFE && bytes[1] == 0xFF)
+            {
+                text = Encoding.BigEndianUnicode.GetString(bytes, 2, bytes.Length - 2);
+            }
+            else
+            {
+                text = Encoding.UTF8.GetString(bytes);
+            }
+
+            if (length < new FileInfo(filePath).Length)
+            {
+                text += Environment.NewLine + Environment.NewLine + "... 仅预览前 32 KB";
+            }
+
+            return text;
+        }
+
+        private static string FormatDocumentPreviewInfo(MediaFileItem item)
+        {
+            if (item == null)
+            {
+                return string.Empty;
+            }
+
+            return string.Format("{0} · {1} · {2}", item.KindText, item.SizeText, item.ModifiedText);
         }
 
         internal static BitmapImage LoadBitmap(string filePath, int? decodePixelWidth = null)
@@ -598,7 +767,9 @@ namespace MyTools.ViewModels
         private bool CanEnterImmersive()
         {
             var item = SelectedMediaFile;
-            return item != null && File.Exists(item.Path) && item.Kind != MediaKind.Pdf && item.Kind != MediaKind.Other;
+            return item != null
+                && File.Exists(item.Path)
+                && (item.Kind == MediaKind.Image || item.Kind == MediaKind.Audio || item.Kind == MediaKind.Video);
         }
 
         private void EnterImmersive()
@@ -795,6 +966,7 @@ namespace MyTools.ViewModels
     public sealed class MediaFileItem : INotifyPropertyChanged
     {
         private bool _isChecked;
+        private bool _thumbnailLoadRequested;
 
         public MediaFileItem(MediaFileDescriptor descriptor)
         {
@@ -810,9 +982,38 @@ namespace MyTools.ViewModels
         public MediaKind Kind { get; }
         public long SizeBytes { get; }
         public DateTime ModifiedAt { get; }
-        public string KindText => Kind == MediaKind.Image ? "图片" : Kind == MediaKind.Audio ? "音频" : Kind == MediaKind.Video ? "视频" : Kind == MediaKind.Pdf ? "PDF" : "其他";
+        public string KindText
+        {
+            get
+            {
+                switch (Kind)
+                {
+                    case MediaKind.Image:
+                        return "图片";
+                    case MediaKind.Audio:
+                        return "音频";
+                    case MediaKind.Video:
+                        return "视频";
+                    case MediaKind.Pdf:
+                        return "PDF";
+                    case MediaKind.Text:
+                        return "文本";
+                    case MediaKind.Markdown:
+                        return "Markdown";
+                    case MediaKind.Word:
+                        return "Word";
+                    case MediaKind.Excel:
+                        return "Excel";
+                    case MediaKind.PowerPoint:
+                        return "PowerPoint";
+                    default:
+                        return "其他";
+                }
+            }
+        }
         public string SizeText => MediaFileTypeHelper.FormatFileSize(SizeBytes);
         public string ModifiedText => ModifiedAt.ToString("yyyy-MM-dd HH:mm");
+        public string ExtensionText => System.IO.Path.GetExtension(Name)?.TrimStart('.').ToUpperInvariant() ?? string.Empty;
 
         public bool IsChecked
         {
@@ -825,31 +1026,141 @@ namespace MyTools.ViewModels
         {
             get
             {
-                if (_thumbnail == null && Kind == MediaKind.Image)
+                if (_thumbnail == null && !_thumbnailLoadRequested && (Kind == MediaKind.Image || Kind == MediaKind.Video))
                 {
+                    _thumbnailLoadRequested = true;
                     // Lazy small thumbnail for list performance in large folders (100+ images)
                     _ = Task.Run(() =>
                     {
                         try
                         {
-                            // Small decoded thumbnail for list perf (duplicated logic to avoid nested class visibility)
-                            var bmp = new BitmapImage();
-                            bmp.BeginInit();
-                            bmp.CacheOption = BitmapCacheOption.OnLoad;
-                            bmp.DecodePixelWidth = 160;
-                            bmp.UriSource = new Uri(Path);
-                            bmp.EndInit();
-                            bmp.Freeze();
+                            BitmapImage bmp;
+                            if (Kind == MediaKind.Image)
+                            {
+                                bmp = LoadBitmapForThumbnail(Path);
+                            }
+                            else
+                            {
+                                var thumbnailPath = EnsureVideoThumbnail(Path);
+                                bmp = string.IsNullOrWhiteSpace(thumbnailPath) ? null : LoadBitmapForThumbnail(thumbnailPath);
+                            }
+
+                            if (bmp == null)
+                            {
+                                return;
+                            }
+
                             System.Windows.Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
                             {
                                 _thumbnail = bmp;
                                 OnPropertyChanged(nameof(Thumbnail));
                             }));
                         }
-                        catch { }
+                        catch (Exception ex)
+                        {
+                            AppLogService.Warning("Media thumbnail load failed for {File}: {Msg}", Name, ex.Message);
+                        }
                     });
                 }
                 return _thumbnail;
+            }
+        }
+
+        private static BitmapImage LoadBitmapForThumbnail(string filePath)
+        {
+            var bmp = new BitmapImage();
+            bmp.BeginInit();
+            bmp.CacheOption = BitmapCacheOption.OnLoad;
+            bmp.DecodePixelWidth = 160;
+            bmp.UriSource = new Uri(filePath);
+            bmp.EndInit();
+            bmp.Freeze();
+            return bmp;
+        }
+
+        private static string EnsureVideoThumbnail(string videoPath)
+        {
+            if (string.IsNullOrWhiteSpace(videoPath) || !File.Exists(videoPath))
+            {
+                return null;
+            }
+
+            var ffmpegPath = MediaConvertService.FindFfmpeg();
+            if (string.IsNullOrWhiteSpace(ffmpegPath))
+            {
+                return null;
+            }
+
+            var cachePath = BuildVideoThumbnailCachePath(videoPath);
+            if (File.Exists(cachePath) && new FileInfo(cachePath).Length > 0)
+            {
+                return cachePath;
+            }
+
+            Directory.CreateDirectory(System.IO.Path.GetDirectoryName(cachePath));
+            if (TryCaptureVideoThumbnail(ffmpegPath, videoPath, cachePath, 1.0)
+                || TryCaptureVideoThumbnail(ffmpegPath, videoPath, cachePath, 0.0))
+            {
+                return cachePath;
+            }
+
+            return null;
+        }
+
+        private static bool TryCaptureVideoThumbnail(string ffmpegPath, string videoPath, string cachePath, double positionSeconds)
+        {
+            try
+            {
+                var args = string.Format(
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    "-ss {0:0.###} -i \"{1}\" -frames:v 1 -vf scale=240:-1 -q:v 4 -y \"{2}\"",
+                    positionSeconds,
+                    videoPath,
+                    cachePath);
+                var psi = new ProcessStartInfo
+                {
+                    FileName = ffmpegPath,
+                    Arguments = args,
+                    CreateNoWindow = true,
+                    UseShellExecute = false,
+                    RedirectStandardError = true,
+                    RedirectStandardOutput = true
+                };
+
+                using (var process = Process.Start(psi))
+                {
+                    if (process == null)
+                    {
+                        return false;
+                    }
+
+                    var stderrTask = Task.Run(() => process.StandardError.ReadToEnd());
+                    process.StandardOutput.ReadToEnd();
+                    if (!process.WaitForExit(10_000))
+                    {
+                        try { process.Kill(); } catch { }
+                        return false;
+                    }
+
+                    try { stderrTask.Wait(500); } catch { }
+                    return process.ExitCode == 0 && File.Exists(cachePath) && new FileInfo(cachePath).Length > 0;
+                }
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static string BuildVideoThumbnailCachePath(string videoPath)
+        {
+            var info = new FileInfo(videoPath);
+            var key = string.Join("|", info.FullName, info.Length.ToString(), info.LastWriteTimeUtc.Ticks.ToString());
+            using (var sha1 = SHA1.Create())
+            {
+                var bytes = sha1.ComputeHash(Encoding.UTF8.GetBytes(key));
+                var hash = BitConverter.ToString(bytes).Replace("-", string.Empty).ToLowerInvariant();
+                return System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "MediaThumbnails", hash + ".jpg");
             }
         }
 

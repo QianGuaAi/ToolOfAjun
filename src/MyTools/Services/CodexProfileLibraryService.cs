@@ -567,7 +567,10 @@ namespace MyTools.Services
                     ConfigTomlBase64 = Convert.ToBase64String(configTomlBytes),
                     AuthJsonBase64 = Convert.ToBase64String(authJsonBytes),
                     EnableRotation = item.EnableRotation,
-                    RotationPriority = item.RotationPriority
+                    RotationPriority = item.RotationPriority,
+                    RelayTestStatus = item.RelayTestStatus,
+                    RelayTestedAt = item.RelayTestedAt,
+                    RelayTestMessage = item.RelayTestMessage ?? string.Empty
                 });
             }
 
@@ -681,7 +684,10 @@ namespace MyTools.Services
                     AuthJsonContentProtected = protectedAuth,
                     Status = ComputeStatus(accessExp),
                     EnableRotation = imported.EnableRotation,
-                    RotationPriority = imported.RotationPriority
+                    RotationPriority = imported.RotationPriority,
+                    RelayTestStatus = imported.RelayTestStatus,
+                    RelayTestedAt = imported.RelayTestedAt,
+                    RelayTestMessage = imported.RelayTestMessage ?? string.Empty
                 };
                 file.items.Add(item);
             }
@@ -912,6 +918,8 @@ namespace MyTools.Services
             item.Status = ComputeStatus(item.AccessTokenExpiresAt);
             item.EnableRotation = item.EnableRotation;
             item.RotationPriority = item.RotationPriority;
+            item.RelayTestStatus = item.RelayTestStatus;
+            item.RelayTestMessage = item.RelayTestMessage ?? string.Empty;
         }
 
         private static async Task<CodexProfilesFile> TryLoadLegacyProfilesAsync(CancellationToken ct)
@@ -1174,6 +1182,9 @@ namespace MyTools.Services
         public string AuthJsonBase64 { get; set; }
         public bool EnableRotation { get; set; }
         public int RotationPriority { get; set; }
+        public string RelayTestStatus { get; set; }
+        public DateTime? RelayTestedAt { get; set; }
+        public string RelayTestMessage { get; set; }
     }
 
     public class CodexActiveFile

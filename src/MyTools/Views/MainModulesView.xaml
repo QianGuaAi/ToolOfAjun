@@ -1570,6 +1570,12 @@
                         </Border.Background>
                         <DockPanel LastChildFill="True">
                             <WrapPanel DockPanel.Dock="Right" VerticalAlignment="Center">
+                                <Button Style="{StaticResource SuccessActionButton}"
+                                        Height="32"
+                                        Padding="10,0"
+                                        Margin="0,0,6,0"
+                                        Content="测试中转"
+                                        Command="{Binding TestCodexRelaysCommand}" />
                                 <Button Style="{StaticResource PrimaryActionButton}"
                                         Height="32"
                                         Padding="10,0"
@@ -1605,6 +1611,8 @@
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
@@ -1620,12 +1628,24 @@
                                             Style="{StaticResource MaterialDesignOutlinedButton}"
                                             Padding="12,4"
                                             Margin="8,0,0,0" />
-                                    <TextBlock Grid.Column="2"
+                                    <Button Grid.Column="2"
+                                            Content="全选轮换"
+                                            Command="{Binding SelectAllCodexRotationCommand}"
+                                            Style="{StaticResource MaterialDesignOutlinedButton}"
+                                            Padding="12,4"
+                                            Margin="8,0,0,0" />
+                                    <Button Grid.Column="3"
+                                            Content="反选轮换"
+                                            Command="{Binding InvertCodexRotationCommand}"
+                                            Style="{StaticResource MaterialDesignOutlinedButton}"
+                                            Padding="12,4"
+                                            Margin="8,0,0,0" />
+                                    <TextBlock Grid.Column="4"
                                                Text="{Binding CodexNextSwitchPreview}"
                                                Margin="12,0,0,0"
                                                VerticalAlignment="Center"
                                                Foreground="{DynamicResource MaterialDesignBodyLight}" />
-                                    <CheckBox Grid.Column="3"
+                                    <CheckBox Grid.Column="5"
                                               Content="轮换后通知"
                                               IsChecked="{Binding CodexRotationSettings.NotifyOnSwitch}"
                                               VerticalAlignment="Center"
@@ -1735,6 +1755,34 @@
                                                     <TextBlock Text="{Binding DisplayName}" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
                                                     <Border Style="{StaticResource StatusPill}" Margin="8,0,0,0">
                                                         <TextBlock Text="{Binding Status}" />
+                                                    </Border>
+                                                    <Border Margin="8,0,0,0"
+                                                            CornerRadius="999"
+                                                            Padding="7,2"
+                                                            ToolTip="{Binding RelayTestMessage}">
+                                                        <Border.Style>
+                                                            <Style TargetType="Border">
+                                                                <Setter Property="Background" Value="{DynamicResource BrushCodexStatusUnknown}" />
+                                                                <Setter Property="TextElement.Foreground" Value="White" />
+                                                                <Setter Property="TextElement.FontSize" Value="11" />
+                                                                <Setter Property="TextElement.FontWeight" Value="SemiBold" />
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsRelayStatusOk}" Value="True">
+                                                                        <Setter Property="Background" Value="{DynamicResource BrushSuccess}" />
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding IsRelayStatusFailed}" Value="True">
+                                                                        <Setter Property="Background" Value="{DynamicResource BrushError}" />
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding IsRelayStatusTesting}" Value="True">
+                                                                        <Setter Property="Background" Value="{DynamicResource BrushWarning}" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Border.Style>
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <Ellipse Width="7" Height="7" Fill="White" Margin="0,0,5,0" VerticalAlignment="Center" />
+                                                            <TextBlock Text="{Binding RelayTestDisplayText}" />
+                                                        </StackPanel>
                                                     </Border>
                                                 </StackPanel>
                                                 <WrapPanel Grid.Row="1" Margin="0,5,0,0">

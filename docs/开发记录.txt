@@ -1,5 +1,41 @@
 # 开发记录
 
+## [2026-06-07] 修复多媒体入口只读文本绑定崩溃
+- 修复进入“多媒体”时 `TextBox.Text` 默认 TwoWay 绑定只读属性 `PreviewDocumentText`，导致 `InvalidOperationException` 并弹出运行错误的问题。
+- `PreviewDocumentText` 作为文档预览输出保持只读，XAML 绑定改为 `Mode=OneWay`。
+- 验证：`.dotnet\dotnet.exe build src\MyTools\MyTools.csproj -c Release --no-incremental` 通过，0 warning / 0 error；重新执行 `scripts\Build-Installer.ps1 -Configuration Release -Version 2026.6.7.0` 通过，安装包 `artifacts\installer\MyToolsSetup.exe` 大小 43,221,504 bytes，SHA256 = `81BF4E1BF24F686436407E9B3F4578E5672F112E331FB74DCF5D482D232F8FBF`。
+
+## [2026-06-07] 文件内容列表支持常用文档
+- `MediaFileTypeHelper` 扩展文件类型识别，右侧文件内容列表新增文本、Markdown、Word、Excel、PowerPoint 文件。
+- `MultimediaViewModel` 新增文档预览状态；文本和 Markdown 异步读取前 32 KB 内容显示在左侧预览区，Office 文件显示类型、大小、修改时间和外部打开入口。
+- `MultimediaPage.xaml` 将“媒体文件”区域调整为“文件内容”，预览区新增文档预览布局，并保留图片、音视频、PDF 原有逻辑。
+- 本次不引入 Office COM 或高版本运行时依赖，不修改 `App.OnStartup`、`MainWindow` 构造函数或 `MainViewModel` 构造函数。
+- 验证：`.dotnet\dotnet.exe build src\MyTools\MyTools.csproj -c Release` 通过，0 warning / 0 error。
+- 已重新生成 `artifacts\installer\MyToolsSetup.exe`，版本 `2026.6.7.0`，大小 41.21 MB，SHA256 = `BB6FA03F931A9D621737972EFB1BFA35A3F29DDD0956B678F93D865B107BD9DB`。
+
+## [2026-06-07] 修复大图标视频缩略图与换行
+- `MultimediaPage.xaml` 的大图标视图禁用横向滚动，`WrapPanel` 按可用宽度固定单元尺寸自动换行，避免媒体文件横向排出可视区域。
+- `MediaFileItem.Thumbnail` 支持视频文件懒加载缩略图：后台调用 ffmpeg 抽取首帧附近画面，缓存到程序同级 `MediaThumbnails/`，抽帧失败时继续显示扩展名占位。
+- 图片缩略图仍使用小尺寸解码；视频缩略图加载不阻塞列表显示。
+- 同步更新 `docs/功能说明.md` 与 `docs/程序逻辑.md`；本次不修改 `App.OnStartup`、`MainWindow` 构造函数或 `MainViewModel` 构造函数。
+- 验证：`.dotnet\dotnet.exe build src\MyTools\MyTools.csproj -c Release` 通过，0 warning / 0 error。
+- 已重新生成 `artifacts\installer\MyToolsSetup.exe`，版本 `2026.6.7.0`，大小 41.21 MB，SHA256 = `8B1B4902BC54357165AF07FB3A7E102416A13451B16C2D78D423AD7A236B73E1`。
+
+## [2026-06-07] 多媒体文件列表查看方式切换
+- `MultimediaViewModel` 新增 `FileViewMode`，支持“详细信息 / 列表 / 大图标”三种媒体文件查看方式，并提供对应布尔绑定和显示文字。
+- `MultimediaPage.xaml` 在媒体文件标题区新增“查看”菜单，切换时复用同一个 `MediaFiles` 数据源、`SelectedMediaFile` 选中项、勾选状态、双击沉浸预览和右键菜单。
+- 详细信息视图保留原列布局；列表视图改为紧凑行；大图标视图显示缩略图或文件扩展名图标。
+- 同步更新 `docs/功能说明.md` 与 `docs/程序逻辑.md`；本次不修改 `App.OnStartup`、`MainWindow` 构造函数或 `MainViewModel` 构造函数。
+- 验证：`.dotnet\dotnet.exe build src\MyTools\MyTools.csproj -c Release` 通过，0 warning / 0 error。
+- 已重新生成 `artifacts\installer\MyToolsSetup.exe`，版本 `2026.6.7.0`，大小 41.21 MB，SHA256 = `970CB15B8D0326E3FA61221490846337C92E18849AE249B4274AD9FA0D486706`。
+
+## [2026-06-07] 修复快捷键截图编辑器资源加载
+- `MainViewModel.ShowScreenshotEditorWindow()` 在创建 `ScreenshotEditorWindow` 前调用 `DeferredUiResourceService.EnsureLoaded()`，确保直接按全局截图快捷键时也会加载 MaterialDesign / MahApps 延迟资源。
+- 修复未先进入截图工具页面时，截图编辑器 XAML 中 `MaterialDesignIconButton` 等 `StaticResource` 解析失败并弹出“在 System.Windows.StaticResourceExtension 上提供值时引发了异常”的问题。
+- 同步更新 `docs/功能说明.md` 与 `docs/程序逻辑.md`；本次不修改 `App.OnStartup` 或 `MainWindow` 构造函数。
+- 验证：`.dotnet\dotnet.exe build src\MyTools\MyTools.csproj -c Release` 通过，0 warning / 0 error。
+- 已重新生成 `artifacts\installer\MyToolsSetup.exe`，版本 `2026.6.7.0`，大小 41.21 MB，SHA256 = `F75C9692018D48F8F54513269AFFAB22EE3AA59ABA6454969B3E664681CFB355`。
+
 ## [2026-06-06] 修复程序卸载搜索框占位文字
 - 程序卸载页顶部搜索框改为本地显式占位文字结构，固定白底、深色输入文字和灰色提示文字，避免 MaterialDesign Hint 在渐变标题区聚焦时显示不正常。
 - 搜索绑定仍使用 `InstalledProgramSearchText`，筛选逻辑不变。
@@ -1640,3 +1676,27 @@
 - “优化”按钮仅在扫描发现 `CanOptimize=true` 项目后可用；执行时只运行本次扫描结果中的可优化步骤，完成后继续生成历史报告并清空本次扫描结果。
 - 同步更新 `docs/功能说明.md` 与 `docs/程序逻辑.md` 中的系统优化自动优化流程说明。
 - 验证：`dotnet build .\src\MyTools\MyTools.csproj -c Release` 通过，0 warning / 0 error。
+## [2026-06-07] 修复多媒体预览进度与音量控制
+- 多媒体预览和沉浸播放的进度滑块新增拖动提交逻辑：拖动期间暂停定时器回写，松开鼠标或键盘调整后写入 `MediaElement.Position`，并从目标时间点继续播放。
+- 多媒体预览和沉浸播放新增独立音量滑块，范围为 0% 到 100%，拖动时直接设置对应 `MediaElement.Volume`。
+- 同步更新 `docs/功能说明.md` 与 `docs/程序逻辑.md` 的多媒体播放逻辑说明。
+- 验证：`dotnet build src\MyTools\MyTools.csproj -c Release --no-incremental` 通过，0 warning / 0 error；重新执行 `scripts\Build-Installer.ps1 -Configuration Release -Version 2026.6.7.0` 通过，安装包 `artifacts\installer\MyToolsSetup.exe` 大小 43,212,800 bytes，SHA256 = `2C8AF58544D6002A0A83A104A6879D4D11E139E86F3EE9E3C50CB18DA43D822A`。
+
+## [2026-06-07] Codex 中转测试灯号
+- Codex 配置面板顶部新增“测试中转”按钮，点击后逐条测试档案中的 `base_url` 是否可用，并在档案卡片上显示绿灯 / 红灯 / 灰灯 / 测试中状态。
+- 新增 `CodexRelayTestService`，按需解密档案内的 `config.toml` 与 `auth.json`，解析 `base_url`、`model`、`env_key`、`api_key` 和 token；有模型时优先测试 `/responses`，再回退 `/chat/completions`，缺少模型时测试 `/models`。
+- `CodexProfileItem` 与 `.codexbox` 便携载荷新增 `RelayTestStatus`、`RelayTestedAt`、`RelayTestMessage` 字段，只保存测试状态、时间和 160 字以内摘要，不记录 token、认证头或响应正文。
+- 同步更新 `docs/功能说明.md` 与 `docs/程序逻辑.md`，明确网络请求仅在用户点击“测试中转”时发生。
+- 验证：使用仓库内置 `.dotnet\dotnet.exe build src\MyTools\MyTools.csproj -c Release --no-incremental` 通过，0 warning / 0 error。
+
+## [2026-06-07] 修复 Codex 中转测试误判全红
+- 修复中转测试未识别 `auth.json` 顶层 `OPENAI_API_KEY` 字段的问题，避免可用档案因找不到 token 被判为不可用。
+- 测试路径从固定裸 `/responses`、`/chat/completions` 扩展为同时尝试 `/v1/responses`、`/v1/chat/completions`、`/v1/models`，兼容以根域名作为 `base_url` 的中转。
+- 解析 `wire_api` 与 `requires_openai_auth`；普通 API key 档案继续做 1 token 最小请求，Codex 登录态档案无普通 API key 时改为验证中转网关可达与配置完整性。
+- 验证：当前本机 `https://mdkj.lol` 使用 `OPENAI_API_KEY` 手工请求 `/models`、`/v1/models`、`/responses`、`/v1/responses`、`/chat/completions`、`/v1/chat/completions` 均返回 HTTP 200；`dotnet build src\MyTools\MyTools.csproj -c Release --no-incremental` 通过，0 warning / 0 error。
+
+## [2026-06-07] Codex 轮换池全选与反选
+- Codex 配置面板轮换控制条新增“全选轮换”和“反选轮换”按钮。
+- `MainViewModel` 新增 `SelectAllCodexRotationCommand` 与 `InvertCodexRotationCommand`；批量更新时暂停单项自动保存，完成后一次性写入档案库并刷新轮换预览。
+- 同步更新 `docs/功能说明.md` 与 `docs/程序逻辑.md` 的 Codex 轮换说明。
+- 验证：`dotnet build src\MyTools\MyTools.csproj -c Release --no-incremental` 通过，0 warning / 0 error。

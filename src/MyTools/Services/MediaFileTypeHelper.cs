@@ -14,7 +14,12 @@ namespace MyTools.Services
         Image,
         Audio,
         Video,
-        Pdf
+        Pdf,
+        Text,
+        Markdown,
+        Word,
+        Excel,
+        PowerPoint
     }
 
     public sealed class MediaFileDescriptor
@@ -31,6 +36,31 @@ namespace MyTools.Services
         private static readonly string[] ImageExtensions =
         {
             ".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tiff", ".tif", ".webp", ".heic"
+        };
+
+        private static readonly string[] TextExtensions =
+        {
+            ".txt", ".log", ".csv", ".json", ".xml", ".ini", ".cfg", ".conf", ".yaml", ".yml"
+        };
+
+        private static readonly string[] MarkdownExtensions =
+        {
+            ".md", ".markdown"
+        };
+
+        private static readonly string[] WordExtensions =
+        {
+            ".doc", ".docx", ".rtf"
+        };
+
+        private static readonly string[] ExcelExtensions =
+        {
+            ".xls", ".xlsx", ".xlsm", ".xlsb"
+        };
+
+        private static readonly string[] PowerPointExtensions =
+        {
+            ".ppt", ".pptx", ".pptm", ".pps", ".ppsx"
         };
 
         public static bool IsImage(string extension)
@@ -58,12 +88,42 @@ namespace MyTools.Services
             return string.Equals(NormalizeExtension(extension), ".pdf", StringComparison.OrdinalIgnoreCase);
         }
 
+        public static bool IsText(string extension)
+        {
+            return TextExtensions.Contains(NormalizeExtension(extension), StringComparer.OrdinalIgnoreCase);
+        }
+
+        public static bool IsMarkdown(string extension)
+        {
+            return MarkdownExtensions.Contains(NormalizeExtension(extension), StringComparer.OrdinalIgnoreCase);
+        }
+
+        public static bool IsWord(string extension)
+        {
+            return WordExtensions.Contains(NormalizeExtension(extension), StringComparer.OrdinalIgnoreCase);
+        }
+
+        public static bool IsExcel(string extension)
+        {
+            return ExcelExtensions.Contains(NormalizeExtension(extension), StringComparer.OrdinalIgnoreCase);
+        }
+
+        public static bool IsPowerPoint(string extension)
+        {
+            return PowerPointExtensions.Contains(NormalizeExtension(extension), StringComparer.OrdinalIgnoreCase);
+        }
+
         public static MediaKind Classify(string extension)
         {
             if (IsImage(extension)) return MediaKind.Image;
             if (IsAudio(extension)) return MediaKind.Audio;
             if (IsVideo(extension)) return MediaKind.Video;
             if (IsPdf(extension)) return MediaKind.Pdf;
+            if (IsMarkdown(extension)) return MediaKind.Markdown;
+            if (IsText(extension)) return MediaKind.Text;
+            if (IsWord(extension)) return MediaKind.Word;
+            if (IsExcel(extension)) return MediaKind.Excel;
+            if (IsPowerPoint(extension)) return MediaKind.PowerPoint;
             return MediaKind.Other;
         }
 

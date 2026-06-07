@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -11,6 +12,7 @@ namespace MyTools.Views
     public partial class MultimediaPage : UserControl
     {
         private readonly DispatcherTimer _positionTimer;
+        private readonly HashSet<Slider> _draggingPositionSliders = new HashSet<Slider>();
 
         public MultimediaPage()
         {
@@ -24,6 +26,7 @@ namespace MyTools.Views
         private void MultimediaPage_OnLoaded(object sender, RoutedEventArgs e)
         {
             Focus();
+            ApplyAllVolumeSliders();
             _positionTimer.Start();
         }
 
@@ -91,6 +94,15 @@ namespace MyTools.Views
                 vm.EnterImmersiveCommand.Execute(null);
         }
 
+        private void ViewModeButton_OnClick(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button button && button.ContextMenu != null)
+            {
+                button.ContextMenu.PlacementTarget = button;
+                button.ContextMenu.IsOpen = true;
+            }
+        }
+
         private void MultimediaPage_OnPreviewKeyDown(object sender, KeyEventArgs e)
         {
             var vm = ViewModel;
@@ -153,11 +165,22 @@ namespace MyTools.Views
             ToggleMute(ImmersiveAudioElement);
         }
 
+        private void MediaElement_OnMediaOpened(object sender, RoutedEventArgs e)
+        {
+            if (sender is MediaElement element)
+            {
+                ApplyVolumeForElement(element);
+                var slider = ResolveSliderForElement(element);
+                UpdateSlider(element, slider);
+            }
+        }
+
         private void PreviewMediaElement_OnMediaEnded(object sender, RoutedEventArgs e)
         {
             if (sender is MediaElement element)
             {
                 element.Stop();
+                ResetSlider(ResolveSliderForElement(element));
                 if (ViewModel != null) ViewModel.IsPreviewPlaying = false;
             }
         }
@@ -167,6 +190,7 @@ namespace MyTools.Views
             if (sender is MediaElement element)
             {
                 element.Stop();
+                ResetSlider(ResolveSliderForElement(element));
                 if (ViewModel != null) ViewModel.IsImmersivePlaying = false;
             }
         }
@@ -174,6 +198,7 @@ namespace MyTools.Views
         private void ToggleElement(MediaElement element, bool preview)
         {
             if (element == null || element.Source == null) return;
+            ApplyVolumeForElement(element);
             var vm = ViewModel;
             if (preview)
             {
@@ -210,22 +235,189 @@ namespace MyTools.Views
             if (element != null) element.IsMuted = !element.IsMuted;
         }
 
+        private void PositionSlider_OnPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is Slider slider)
+            {
+                _draggingPositionSliders.Add(slider);
+            }
+        }
+
+        private void PositionSlider_OnPreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is Slider slider)
+            {
+                CommitPositionSliderDeferred(slider);
+            }
+        }
+
+        private void PositionSlider_OnLostMouseCapture(object sender, MouseEventArgs e)
+        {
+            if (sender is Slider slider && _draggingPositionSliders.Contains(slider))
+            {
+                CommitPositionSliderDeferred(slider);
+            }
+        }
+
+        private void PositionSlider_OnKeyUp(object sender, KeyEventArgs e)
+        {
+            if (sender is Slider slider && IsPositionCommitKey(e.Key))
+            {
+                CommitPositionSlider(slider, true);
+                e.Handled = true;
+            }
+        }
+
+        private void CommitPositionSliderDeferred(Slider slider)
+        {
+            Dispatcher.BeginInvoke(new Action(() => CommitPositionSlider(slider, true)), DispatcherPriority.Background);
+        }
+
+        private static bool IsPositionCommitKey(Key key)
+        {
+            return key == Key.Left
+                || key == Key.Right
+                || key == Key.Up
+                || key == Key.Down
+                || key == Key.Home
+                || key == Key.End
+                || key == Key.PageUp
+                || key == Key.PageDown;
+        }
+
+        private void CommitPositionSlider(Slider slider, bool resumePlayback)
+        {
+            _draggingPositionSliders.Remove(slider);
+            var element = ResolveElementForPositionSlider(slider);
+            if (element == null || element.Source == null || !element.NaturalDuration.HasTimeSpan)
+            {
+                return;
+            }
+
+            var total = element.NaturalDuration.TimeSpan.TotalSeconds;
+            if (total <= 0)
+            {
+                return;
+            }
+
+            var targetSeconds = Math.Min(total, Math.Max(0, slider.Value));
+            element.Position = TimeSpan.FromSeconds(targetSeconds);
+            if (resumePlayback)
+            {
+                if (ReferenceEquals(element, PreviewMediaElement) || ReferenceEquals(element, PreviewAudioElement))
+                {
+                    StopOtherPreviewElement(element);
+                    element.Play();
+                    if (ViewModel != null) ViewModel.IsPreviewPlaying = true;
+                }
+                else
+                {
+                    StopOtherImmersiveElement(element);
+                    element.Play();
+                    if (ViewModel != null) ViewModel.IsImmersivePlaying = true;
+                }
+            }
+        }
+
+        private MediaElement ResolveElementForPositionSlider(Slider slider)
+        {
+            if (ReferenceEquals(slider, PreviewPositionSlider)) return PreviewMediaElement;
+            if (ReferenceEquals(slider, PreviewAudioPositionSlider)) return PreviewAudioElement;
+            if (ReferenceEquals(slider, ImmersivePositionSlider)) return ImmersiveMediaElement;
+            if (ReferenceEquals(slider, ImmersiveAudioPositionSlider)) return ImmersiveAudioElement;
+            return null;
+        }
+
+        private Slider ResolveSliderForElement(MediaElement element)
+        {
+            if (ReferenceEquals(element, PreviewMediaElement)) return PreviewPositionSlider;
+            if (ReferenceEquals(element, PreviewAudioElement)) return PreviewAudioPositionSlider;
+            if (ReferenceEquals(element, ImmersiveMediaElement)) return ImmersivePositionSlider;
+            if (ReferenceEquals(element, ImmersiveAudioElement)) return ImmersiveAudioPositionSlider;
+            return null;
+        }
+
+        private static void ResetSlider(Slider slider)
+        {
+            if (slider == null) return;
+            slider.Maximum = 1;
+            slider.Value = 0;
+        }
+
+        private void VolumeSlider_OnValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (sender is Slider slider)
+            {
+                ApplyVolumeForSlider(slider, true);
+            }
+        }
+
+        private void ApplyAllVolumeSliders()
+        {
+            ApplyVolumeForSlider(PreviewVolumeSlider, false);
+            ApplyVolumeForSlider(PreviewAudioVolumeSlider, false);
+            ApplyVolumeForSlider(ImmersiveVolumeSlider, false);
+            ApplyVolumeForSlider(ImmersiveAudioVolumeSlider, false);
+        }
+
+        private void ApplyVolumeForElement(MediaElement element)
+        {
+            if (ReferenceEquals(element, PreviewMediaElement)) ApplyVolumeForSlider(PreviewVolumeSlider, false);
+            else if (ReferenceEquals(element, PreviewAudioElement)) ApplyVolumeForSlider(PreviewAudioVolumeSlider, false);
+            else if (ReferenceEquals(element, ImmersiveMediaElement)) ApplyVolumeForSlider(ImmersiveVolumeSlider, false);
+            else if (ReferenceEquals(element, ImmersiveAudioElement)) ApplyVolumeForSlider(ImmersiveAudioVolumeSlider, false);
+        }
+
+        private void ApplyVolumeForSlider(Slider slider, bool updateMuteState)
+        {
+            var element = ResolveElementForVolumeSlider(slider);
+            if (element == null || slider == null)
+            {
+                return;
+            }
+
+            var volume = Math.Min(1, Math.Max(0, slider.Value));
+            element.Volume = volume;
+            if (updateMuteState)
+            {
+                element.IsMuted = volume <= 0.001;
+            }
+        }
+
+        private MediaElement ResolveElementForVolumeSlider(Slider slider)
+        {
+            if (ReferenceEquals(slider, PreviewVolumeSlider)) return PreviewMediaElement;
+            if (ReferenceEquals(slider, PreviewAudioVolumeSlider)) return PreviewAudioElement;
+            if (ReferenceEquals(slider, ImmersiveVolumeSlider)) return ImmersiveMediaElement;
+            if (ReferenceEquals(slider, ImmersiveAudioVolumeSlider)) return ImmersiveAudioElement;
+            return null;
+        }
+
         private void StopOtherPreviewElement(MediaElement current)
         {
-            if (!ReferenceEquals(current, PreviewMediaElement)) PreviewMediaElement.Stop();
-            if (!ReferenceEquals(current, PreviewAudioElement)) PreviewAudioElement.Stop();
+            StopElementIfOther(current, PreviewMediaElement, PreviewPositionSlider);
+            StopElementIfOther(current, PreviewAudioElement, PreviewAudioPositionSlider);
         }
 
         private void StopOtherImmersiveElement(MediaElement current)
         {
-            if (!ReferenceEquals(current, ImmersiveMediaElement)) ImmersiveMediaElement.Stop();
-            if (!ReferenceEquals(current, ImmersiveAudioElement)) ImmersiveAudioElement.Stop();
+            StopElementIfOther(current, ImmersiveMediaElement, ImmersivePositionSlider);
+            StopElementIfOther(current, ImmersiveAudioElement, ImmersiveAudioPositionSlider);
+        }
+
+        private static void StopElementIfOther(MediaElement current, MediaElement target, Slider slider)
+        {
+            if (ReferenceEquals(current, target)) return;
+            target.Stop();
+            ResetSlider(slider);
         }
 
         private void StopAllMediaElements()
         {
             PreviewMediaElement.Stop();
             PreviewAudioElement.Stop();
+            ResetSlider(PreviewPositionSlider);
+            ResetSlider(PreviewAudioPositionSlider);
             StopImmersiveElements();
         }
 
@@ -233,6 +425,8 @@ namespace MyTools.Views
         {
             ImmersiveMediaElement.Stop();
             ImmersiveAudioElement.Stop();
+            ResetSlider(ImmersivePositionSlider);
+            ResetSlider(ImmersiveAudioPositionSlider);
         }
 
         private void PositionTimer_OnTick(object sender, EventArgs e)
@@ -243,9 +437,10 @@ namespace MyTools.Views
             UpdateSlider(ImmersiveAudioElement, ImmersiveAudioPositionSlider);
         }
 
-        private static void UpdateSlider(MediaElement element, Slider slider)
+        private void UpdateSlider(MediaElement element, Slider slider)
         {
             if (element == null || slider == null || !element.NaturalDuration.HasTimeSpan) return;
+            if (_draggingPositionSliders.Contains(slider) || slider.IsMouseCaptureWithin) return;
             var total = element.NaturalDuration.TimeSpan.TotalSeconds;
             if (total <= 0) return;
             slider.Maximum = total;
