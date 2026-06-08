@@ -64,7 +64,8 @@ namespace MyTools.Services
         public static async Task<CodexRotationResult> RotateToNextAsync(
             CodexProfileItem current,
             bool notifyOnSwitch,
-            CancellationToken ct)
+            CancellationToken ct,
+            bool allowFullConfigSwitch = true)
         {
             if (current == null)
             {
@@ -250,6 +251,23 @@ namespace MyTools.Services
                         RelayTestStatus = relayTestStatus,
                         RelayTestMessage = relayTestMessage,
                         RequiresCodexRestart = false
+                    };
+                }
+
+                if (!allowFullConfigSwitch)
+                {
+                    return new CodexRotationResult
+                    {
+                        Success = false,
+                        FromProfile = current.DisplayName,
+                        ToProfile = next.DisplayName,
+                        Message = "检测到 429，但当前没有可热切换的本地中转或 hot-token 模式；已停止自动覆盖 ~/.codex。",
+                        RelayTestExecuted = relayTestExecuted,
+                        RelayTestSucceeded = relayTestSucceeded,
+                        RelayTestedAt = relayTestedAt,
+                        RelayTestStatus = relayTestStatus,
+                        RelayTestMessage = relayTestMessage,
+                        RequiresCodexRestart = true
                     };
                 }
 

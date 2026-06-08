@@ -1,5 +1,22 @@
 # 开发记录
 
+## [2026-06-08] Codex 过期提醒与 429 自动热轮换
+- Codex 配置页新增过期提醒：档案加载后顶部汇总“已过期 / 即将过期”数量，单个档案状态旁显示“即将过期”或“已过期，请刷新后再轮换”；提醒仅由 `AccessTokenExpiresAt` 与 `Status` 计算，不新增持久化字段。
+- 新增 `CodexRateLimitLogMonitorService`：只读打开 `%USERPROFILE%\.codex\logs_2.sqlite`，首次读取 `MAX(id)` 作为基线，之后每 20 秒增量读取最多 50 行，识别 `codex.rate_limits` / rate-limit 日志中的 `allowed=false` 或 `limit_reached=true`，只返回 log id、时间和 reset 摘要，不记录日志正文、token 或请求内容；打开 SQLite 前设置进程级 `SQLite_ConfigureDirectory` 与 `SQLite_NoPlugins`，确保单文件嵌入的 SQLite 原生依赖可定位。
+- 429 命中后复用 `CodexRotationService.RotateToNextAsync(..., allowFullConfigSwitch: false)` 尝试自动热轮换；后台自动路径只允许本地中转或 hot-token，不会自动覆盖 `~/.codex`，也不会自动重启 Codex Desktop，避免打断当前对话或正在执行的命令。
+- `CodexRotationService` 新增 `allowFullConfigSwitch` 参数；手动“立即轮换”保持原行为，自动 429 轮换使用禁用完整写配置的安全路径。
+- `MainViewModel` 新增 429 监控 `DispatcherTimer`、过期汇总与监控状态绑定；构造期仅创建定时器和事件订阅，日志库读取仍在 Codex 档案异步加载成功后执行。已补充 `docs/规划/启动基线说明-Codex429自动轮换-2026-06-08.md`。
+- 恢复 `System.Data.SQLite` 与 `Stub.System.Data.SQLite.Core.NetFramework` 依赖用于只读读取 Codex 日志库；`CopySQLiteInteropFiles=false`，`SQLite.Interop.dll` 继续以 `costura32/costura64` 嵌入，Release 输出目录未产生散落 SQLite DLL。
+- 由于恢复 SQLite 依赖，主程序 `src\MyTools\bin\Release\net48\MyTools.exe` 增至 18,608,640 bytes（上一条安装包记录中的主程序为 13,270,016 bytes），增长用途为 Codex 429 自动轮换读取 SQLite 日志；SHA256 = `B9852E2A93B2272765D215094512A05129EC3CD9C3CA09814EAF18CB35DAD3E4`。
+- 同步更新 `docs/功能说明.md` 与 `docs/程序逻辑.md`。
+- 验证：`.dotnet\dotnet.exe build src\MyTools\MyTools.csproj -c Release` 通过，0 warning / 0 error；Release 输出目录仅包含 `MyTools.exe`、配置、PDB、脚本和 NativeBinaries，没有散落托管 DLL 或 `SQLite.Interop.dll`。
+- 重新打包 `2026.6.8.13`：首次直接运行脚本因 `dotnet` 未在 PATH 中失败；临时把仓库内置 `.dotnet` 加入 PATH 后执行 `scripts\Build-Installer.ps1 -Configuration Release -Version 2026.6.8.13` 通过，主程序、卸载器和安装器均为 0 warning / 0 error；`artifacts\installer\MyToolsSetup.exe` 大小 47,050,752 bytes，SHA256 = `6B5A9582B5CC94C82049AC215852414F4B3285BB111A592C8E54A6713701F0C3`。
+
+## [2026-06-08] 重新打包安装程序
+- 重新执行 `scripts\Build-Installer.ps1 -Configuration Release -Version 2026.6.8.0`，主程序、卸载器和安装器构建均为 0 warning / 0 error。
+- 输出安装包 `artifacts\installer\MyToolsSetup.exe`，大小 43,255,808 bytes，SHA256 = `16F13D4FB126D7D87779972895569373F3909FDAFA3946BA8A9E57DA47CC2889`。
+- 主程序 `src\MyTools\bin\Release\net48\MyTools.exe` 大小 13,270,016 bytes，SHA256 = `FE3005B26F9F5C8AEC7AFCD3C06431CAA36292AD669E921CB463932C89315F1A`。
+
 ## [2026-06-08] Codex 本地中转热轮换
 - 修复“划区域”截图粘贴后右侧缺失：`RegionSelectorWindow` 在 HWND 创建后按真实 DPI 与虚拟屏幕物理像素重新铺屏，选区像素矩形改为左上 floor、右下 ceiling；`ScreenshotService.SetClipboardCompatible()` 改为写入 32 位 BGRA 位图，并同时提供 WPF Image、32 位 DIB 与 PNG 剪贴板格式。
 - “划区域”截图修复随本节后续 `2026.6.8.11` 安装包一并发布。
@@ -1747,3 +1764,9 @@
 - `MainViewModel` 新增 `SelectAllCodexRotationCommand` 与 `InvertCodexRotationCommand`；批量更新时暂停单项自动保存，完成后一次性写入档案库并刷新轮换预览。
 - 同步更新 `docs/功能说明.md` 与 `docs/程序逻辑.md` 的 Codex 轮换说明。
 - 验证：`dotnet build src\MyTools\MyTools.csproj -c Release --no-incremental` 通过，0 warning / 0 error。
+
+## [2026-06-08] Codex 档案复制与紧凑按钮
+- Codex 档案卡片新增“复制”按钮，点击后将当前档案的 `config.toml` 与 `auth.json` 重新 DPAPI 加密为新记录；副本自动生成唯一名称，不设为激活，不继承中转测试结果，默认不加入轮换池。
+- Codex 配置面板内新增局部紧凑按钮样式，缩小顶部操作、轮换控制和档案行按钮高度、内边距与间距，避免按钮过多时放不下。
+- 同步更新 `docs/功能说明.md`、`docs/程序逻辑.md` 与启动基线说明。
+- 验证：`dotnet build src\MyTools\MyTools.csproj -c Release --no-incremental` 通过，0 warning / 0 error；当前机器已运行安装版 MyTools 单实例窗口，未关闭现有进程做截图验证。

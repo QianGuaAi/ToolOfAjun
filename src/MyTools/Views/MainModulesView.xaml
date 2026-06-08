@@ -1538,6 +1538,44 @@
     <!-- Codex config profiles panel -->
     <ContentControl x:Name="CodexProfilesHost" Content="{Binding}">
         <ContentControl.Resources>
+            <Style x:Key="CodexCompactPrimaryButton" TargetType="Button" BasedOn="{StaticResource PrimaryActionButton}">
+                <Setter Property="Height" Value="28" />
+                <Setter Property="MinWidth" Value="0" />
+                <Setter Property="Padding" Value="8,0" />
+                <Setter Property="Margin" Value="0,0,4,0" />
+                <Setter Property="FontSize" Value="12" />
+                <Setter Property="materialDesign:ButtonAssist.CornerRadius" Value="6" />
+            </Style>
+            <Style x:Key="CodexCompactSuccessButton" TargetType="Button" BasedOn="{StaticResource SuccessActionButton}">
+                <Setter Property="Height" Value="28" />
+                <Setter Property="MinWidth" Value="0" />
+                <Setter Property="Padding" Value="8,0" />
+                <Setter Property="Margin" Value="0,0,4,0" />
+                <Setter Property="FontSize" Value="12" />
+                <Setter Property="materialDesign:ButtonAssist.CornerRadius" Value="6" />
+            </Style>
+            <Style x:Key="CodexCompactGhostButton" TargetType="Button" BasedOn="{StaticResource GhostActionButton}">
+                <Setter Property="Height" Value="28" />
+                <Setter Property="MinWidth" Value="0" />
+                <Setter Property="Padding" Value="7,0" />
+                <Setter Property="Margin" Value="0,0,4,0" />
+                <Setter Property="FontSize" Value="12" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="materialDesign:ButtonAssist.CornerRadius" Value="6" />
+            </Style>
+            <Style x:Key="CodexCompactOutlinedButton" TargetType="Button" BasedOn="{StaticResource MaterialDesignOutlinedButton}">
+                <Setter Property="Height" Value="26" />
+                <Setter Property="MinWidth" Value="0" />
+                <Setter Property="Padding" Value="8,2" />
+                <Setter Property="Margin" Value="6,0,0,0" />
+                <Setter Property="FontSize" Value="12" />
+                <Setter Property="materialDesign:ButtonAssist.CornerRadius" Value="5" />
+            </Style>
+            <Style x:Key="CodexCompactIconButton" TargetType="Button" BasedOn="{StaticResource MaterialDesignIconButton}">
+                <Setter Property="Width" Value="28" />
+                <Setter Property="Height" Value="28" />
+                <Setter Property="Padding" Value="0" />
+            </Style>
             <DataTemplate x:Key="CodexProfilesDeferredTemplate">
                 <Grid Margin="16">
                     <Grid.Style>
@@ -1593,39 +1631,39 @@
                                        Grid.Column="1"
                                        VerticalAlignment="Center"
                                        HorizontalAlignment="Right">
-                                <Button Style="{StaticResource SuccessActionButton}"
-                                        Height="32"
-                                        Padding="10,0"
-                                        Margin="0,0,6,0"
+                                <Button Style="{StaticResource CodexCompactSuccessButton}"
+                                        Height="28"
+                                        Padding="8,0"
+                                        Margin="0,0,4,0"
                                         Content="测试中转"
                                         Command="{Binding TestCodexRelaysCommand}" />
-                                <Button Style="{StaticResource PrimaryActionButton}"
-                                        Height="32"
-                                        Padding="10,0"
-                                        Margin="0,0,6,0"
+                                <Button Style="{StaticResource CodexCompactPrimaryButton}"
+                                        Height="28"
+                                        Padding="8,0"
+                                        Margin="0,0,4,0"
                                         Content="导入当前账号"
                                         Command="{Binding ImportCodexProfileCommand}" />
-                                <Button Style="{StaticResource GhostActionButton}"
-                                        Height="32"
-                                        Padding="10,0"
-                                        Margin="0,0,6,0"
+                                <Button Style="{StaticResource CodexCompactGhostButton}"
+                                        Height="28"
+                                        Padding="8,0"
+                                        Margin="0,0,4,0"
                                         Content="导入 CPA Token"
                                         Command="{Binding ImportCodexCpaTokenCommand}" />
-                                <Button Style="{StaticResource GhostActionButton}"
-                                        Height="32"
-                                        Padding="10,0"
-                                        Margin="0,0,6,0"
+                                <Button Style="{StaticResource CodexCompactGhostButton}"
+                                        Height="28"
+                                        Padding="8,0"
+                                        Margin="0,0,4,0"
                                         Content="导出加密包"
                                         Command="{Binding ExportCodexProfilesEncBoxCommand}" />
-                                <Button Style="{StaticResource GhostActionButton}"
-                                        Height="32"
-                                        Padding="10,0"
-                                        Margin="0,0,6,0"
+                                <Button Style="{StaticResource CodexCompactGhostButton}"
+                                        Height="28"
+                                        Padding="8,0"
+                                        Margin="0,0,4,0"
                                         Content="导入加密包"
                                         Command="{Binding ImportCodexProfilesEncBoxCommand}" />
-                                <Button Style="{StaticResource GhostActionButton}"
-                                        Height="32"
-                                        Padding="10,0"
+                                <Button Style="{StaticResource CodexCompactGhostButton}"
+                                        Height="28"
+                                        Padding="8,0"
                                         Content="回滚上次切换"
                                         Command="{Binding RestoreLastCodexBackupCommand}" />
                             </WrapPanel>
@@ -1684,47 +1722,73 @@
                                             Content="立即轮换"
                                             Command="{Binding RotateToNextCodexProfileCommand}"
                                             IsEnabled="{Binding IsCodexRotationAvailable}"
-                                            Style="{StaticResource MaterialDesignOutlinedButton}"
-                                            Padding="12,4"
-                                            Margin="10,0,0,0" />
+                                            Style="{StaticResource CodexCompactOutlinedButton}"
+                                            Padding="8,2"
+                                            Margin="8,0,0,0" />
                                     <Button Grid.Column="2"
                                             Content="重启 Codex"
                                             Command="{Binding RestartCodexDesktopCommand}"
-                                            Style="{StaticResource MaterialDesignOutlinedButton}"
-                                            Padding="12,4"
-                                            Margin="8,0,0,0" />
+                                            Style="{StaticResource CodexCompactOutlinedButton}"
+                                            Padding="8,2"
+                                            Margin="6,0,0,0" />
                                     <Button Grid.Column="3"
                                             Content="启动本地中转"
                                             Command="{Binding EnableCodexLocalRelayCommand}"
                                             ToolTip="启动本地 relay，并通过 relay 测试当前 NewAPI。"
-                                            Style="{StaticResource MaterialDesignOutlinedButton}"
-                                            Padding="12,4"
-                                            Margin="8,0,0,0" />
+                                            Style="{StaticResource CodexCompactOutlinedButton}"
+                                            Padding="8,2"
+                                            Margin="6,0,0,0" />
                                     <Button Grid.Column="4"
                                             Content="重启 Codex 使用中转"
                                             Command="{Binding RestartCodexWithLocalRelayCommand}"
                                             IsEnabled="{Binding CanRestartCodexWithLocalRelay}"
                                             ToolTip="仅在本地中转测试为绿色时可用。"
-                                            Style="{StaticResource MaterialDesignOutlinedButton}"
-                                            Padding="12,4"
-                                            Margin="8,0,0,0" />
+                                            Style="{StaticResource CodexCompactOutlinedButton}"
+                                            Padding="8,2"
+                                            Margin="6,0,0,0" />
                                     <Button Grid.Column="5"
                                             Content="全选轮换"
                                             Command="{Binding SelectAllCodexRotationCommand}"
-                                            Style="{StaticResource MaterialDesignOutlinedButton}"
-                                            Padding="12,4"
-                                            Margin="8,0,0,0" />
+                                            Style="{StaticResource CodexCompactOutlinedButton}"
+                                            Padding="8,2"
+                                            Margin="6,0,0,0" />
                                     <Button Grid.Column="6"
                                             Content="反选轮换"
                                             Command="{Binding InvertCodexRotationCommand}"
-                                            Style="{StaticResource MaterialDesignOutlinedButton}"
-                                            Padding="12,4"
-                                            Margin="8,0,0,0" />
-                                    <TextBlock Grid.Column="7"
-                                               Text="{Binding CodexNextSwitchPreview}"
-                                               Margin="12,0,0,0"
-                                               VerticalAlignment="Center"
-                                               Foreground="{DynamicResource MaterialDesignBodyLight}" />
+                                            Style="{StaticResource CodexCompactOutlinedButton}"
+                                            Padding="8,2"
+                                            Margin="6,0,0,0" />
+                                    <StackPanel Grid.Column="7"
+                                                Margin="12,0,0,0"
+                                                VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding CodexNextSwitchPreview}"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   Foreground="{DynamicResource MaterialDesignBodyLight}" />
+                                        <WrapPanel Margin="0,3,0,0">
+                                            <Border CornerRadius="999"
+                                                    Padding="7,2"
+                                                    Margin="0,0,6,0"
+                                                    Visibility="{Binding HasCodexExpiryReminder, Converter={StaticResource BoolToVis}}">
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Setter Property="Background" Value="{DynamicResource BrushCodexStatusWarn}" />
+                                                        <Setter Property="TextElement.Foreground" Value="White" />
+                                                        <Setter Property="TextElement.FontSize" Value="11" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsCodexExpiryCritical}" Value="True">
+                                                                <Setter Property="Background" Value="{DynamicResource BrushCodexStatusExpired}" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
+                                                <TextBlock Text="{Binding CodexExpirySummaryText}" TextTrimming="CharacterEllipsis" />
+                                            </Border>
+                                            <TextBlock Text="{Binding CodexRateLimitStatusText}"
+                                                       MaxWidth="300"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       Style="{StaticResource TextCaption}" />
+                                        </WrapPanel>
+                                    </StackPanel>
                                     <CheckBox Grid.Column="8"
                                               Content="轮换后通知"
                                               IsChecked="{Binding CodexRotationSettings.NotifyOnSwitch}"
@@ -1836,6 +1900,25 @@
                                                     <Border Margin="8,0,0,0"
                                                             CornerRadius="999"
                                                             Padding="7,2"
+                                                            Visibility="{Binding HasExpiryReminder, Converter={StaticResource BoolToVis}}">
+                                                        <Border.Style>
+                                                            <Style TargetType="Border">
+                                                                <Setter Property="Background" Value="{DynamicResource BrushCodexStatusWarn}" />
+                                                                <Setter Property="TextElement.Foreground" Value="White" />
+                                                                <Setter Property="TextElement.FontSize" Value="11" />
+                                                                <Setter Property="TextElement.FontWeight" Value="SemiBold" />
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsStatusExpired}" Value="True">
+                                                                        <Setter Property="Background" Value="{DynamicResource BrushCodexStatusExpired}" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Border.Style>
+                                                        <TextBlock Text="{Binding ExpiryReminderText}" />
+                                                    </Border>
+                                                    <Border Margin="8,0,0,0"
+                                                            CornerRadius="999"
+                                                            Padding="7,2"
                                                             ToolTip="{Binding RelayTestMessage}">
                                                         <Border.Style>
                                                             <Style TargetType="Border">
@@ -1876,86 +1959,93 @@
                                                            ToolTip="{Binding Note}" />
                                             </Grid>
 
-                                            <WrapPanel Grid.Row="0" Grid.Column="2" Margin="0,10,10,10" VerticalAlignment="Center">
+                                            <WrapPanel Grid.Row="0" Grid.Column="2" Margin="0,8,8,8" VerticalAlignment="Center">
                                                 <ProgressBar Style="{StaticResource MaterialDesignCircularProgressBar}"
                                                              IsIndeterminate="True"
                                                              Width="18"
                                                              Height="18"
                                                              Margin="0,0,8,0"
                                                              Visibility="{Binding IsApplying, Converter={StaticResource BoolToVis}}" />
-                                                <Button Style="{StaticResource PrimaryActionButton}"
-                                                        Height="32"
-                                                        Padding="10,0"
-                                                        Margin="0,0,6,0"
+                                                <Button Style="{StaticResource CodexCompactPrimaryButton}"
+                                                        Height="28"
+                                                        Padding="8,0"
+                                                        Margin="0,0,4,0"
                                                         Content="{Binding DataContext.CodexProfileSwitchButtonText, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                         ToolTip="{Binding DataContext.CodexProfileSwitchButtonToolTip, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                         Command="{Binding DataContext.SwitchCodexProfileCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                         CommandParameter="{Binding}" />
-                                                <Button Style="{StaticResource GhostActionButton}"
-                                                        Height="32"
-                                                        Padding="8,0"
-                                                        Margin="0,0,6,0"
+                                                <Button Style="{StaticResource CodexCompactGhostButton}"
+                                                        Height="28"
+                                                        Padding="7,0"
+                                                        Margin="0,0,4,0"
                                                         Content="刷新"
                                                         Command="{Binding DataContext.RefreshCodexProfileCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                         CommandParameter="{Binding}" />
-                                                <Button Style="{StaticResource GhostActionButton}"
-                                                        Height="32"
-                                                        Padding="8,0"
-                                                        Margin="0,0,6,0"
+                                                <Button Style="{StaticResource CodexCompactGhostButton}"
+                                                        Height="28"
+                                                        Padding="7,0"
+                                                        Margin="0,0,4,0"
+                                                        Content="复制"
+                                                        Command="{Binding DataContext.CopyCodexProfileCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                        CommandParameter="{Binding}" />
+                                                <Button Style="{StaticResource CodexCompactGhostButton}"
+                                                        Height="28"
+                                                        Padding="7,0"
+                                                        Margin="0,0,4,0"
                                                         Content="改名"
                                                         Command="{Binding DataContext.RenameCodexProfileCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                         CommandParameter="{Binding}" />
-                                                <Button Style="{StaticResource GhostActionButton}"
-                                                        Height="32"
-                                                        Padding="8,0"
-                                                        Margin="0,0,6,0"
+                                                <Button Style="{StaticResource CodexCompactGhostButton}"
+                                                        Height="28"
+                                                        Padding="7,0"
+                                                        Margin="0,0,4,0"
                                                         Content="备注"
                                                         Command="{Binding DataContext.EditCodexProfileNoteCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                         CommandParameter="{Binding}" />
-                                                <Button Style="{StaticResource GhostActionButton}"
-                                                        Height="32"
-                                                        Padding="8,0"
-                                                        Margin="0,0,6,0"
+                                                <Button Style="{StaticResource CodexCompactGhostButton}"
+                                                        Height="28"
+                                                        Padding="7,0"
+                                                        Margin="0,0,4,0"
                                                         Content="差异"
                                                         Command="{Binding DataContext.PreviewCodexProfileDiffCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                         CommandParameter="{Binding}" />
-                                                <Button Style="{StaticResource GhostActionButton}"
-                                                        Height="32"
-                                                        Padding="8,0"
-                                                        Margin="0,0,6,0"
+                                                <Button Style="{StaticResource CodexCompactGhostButton}"
+                                                        Height="28"
+                                                        Padding="7,0"
+                                                        Margin="0,0,4,0"
                                                         Content="应用到所有"
                                                         ToolTip="以此档案的 config.toml 为模板，同步到其他档案并保留各自 base_url"
                                                         Command="{Binding DataContext.ApplyCodexConfigTemplateToAllCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                         CommandParameter="{Binding}" />
-                                                <Button Style="{StaticResource GhostActionButton}"
-                                                        Height="32"
-                                                        Padding="8,0"
-                                                        Margin="0,0,6,0"
+                                                <Button Style="{StaticResource CodexCompactGhostButton}"
+                                                        Height="28"
+                                                        Padding="7,0"
+                                                        Margin="0,0,4,0"
                                                         Content="config"
                                                         Command="{Binding DataContext.EditCodexConfigTomlCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                         CommandParameter="{Binding}" />
-                                                <Button Style="{StaticResource GhostActionButton}"
-                                                        Height="32"
-                                                        Padding="8,0"
-                                                        Margin="0,0,6,0"
+                                                <Button Style="{StaticResource CodexCompactGhostButton}"
+                                                        Height="28"
+                                                        Padding="7,0"
+                                                        Margin="0,0,4,0"
                                                         Content="auth"
                                                         Command="{Binding DataContext.EditCodexAuthJsonCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                         CommandParameter="{Binding}" />
-                                                <Button Style="{StaticResource GhostActionButton}"
-                                                        Height="32"
-                                                        Padding="8,0"
-                                                        Margin="0,0,6,0"
+                                                <Button Style="{StaticResource CodexCompactGhostButton}"
+                                                        Height="28"
+                                                        Padding="7,0"
+                                                        Margin="0,0,4,0"
                                                         Content="导出"
                                                         Command="{Binding DataContext.ExportCodexProfileCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                         CommandParameter="{Binding}" />
-                                                <Button Height="32"
-                                                        Width="32"
+                                                <Button Height="28"
+                                                        Width="28"
                                                         Padding="0"
                                                         Command="{Binding DataContext.DeleteCodexProfileCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                         CommandParameter="{Binding}"
-                                                        Style="{StaticResource MaterialDesignIconButton}"
+                                                        Style="{StaticResource CodexCompactIconButton}"
                                                         ToolTip="删除档案">
-                                                    <materialDesign:PackIcon Kind="DeleteOutline" Width="17" Height="17" />
+                                                    <materialDesign:PackIcon Kind="DeleteOutline" Width="16" Height="16" />
                                                 </Button>
                                             </WrapPanel>
                                             <StackPanel Grid.Row="1"

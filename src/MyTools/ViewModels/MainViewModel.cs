@@ -174,6 +174,17 @@ namespace MyTools.ViewModels
         private bool _isCodexLocalRelayChecking;
         private bool _isCodexLocalRelaySwitchMode;
         private CodexRotationSettings _codexRotationSettings = new CodexRotationSettings();
+        private readonly DispatcherTimer _codexRateLimitMonitorTimer;
+        private readonly CancellationTokenSource _codexRateLimitMonitorCts = new CancellationTokenSource();
+        private bool _isCodexRateLimitMonitoring;
+        private bool _isCodexRateLimitHandling;
+        private long _codexRateLimitLastSeenLogId;
+        private long _codexRateLimitLastHandledLogId;
+        private DateTime? _codexRateLimitLastSwitchAt;
+        private string _codexRateLimitStatusText = "429 自动轮换未启动。";
+        private string _codexExpirySummaryText = "未加载 Codex 档案。";
+        private bool _hasCodexExpiryReminder;
+        private bool _isCodexExpiryCritical;
         private bool _isAutoStartEnabled;
         private FileHashResult _currentFileHashResult;
         private string _fileHashResult = string.Empty;
@@ -245,6 +256,7 @@ namespace MyTools.ViewModels
         private readonly AsyncRelayParameterCommand _refreshCodexProfileCommand;
         private readonly AsyncRelayParameterCommand _renameCodexProfileCommand;
         private readonly AsyncRelayParameterCommand _editCodexProfileNoteCommand;
+        private readonly AsyncRelayParameterCommand _copyCodexProfileCommand;
         private readonly AsyncRelayCommand _restoreLastCodexBackupCommand;
         private readonly AsyncRelayCommand _exportCodexProfilesEncBoxCommand;
         private readonly AsyncRelayCommand _importCodexProfilesEncBoxCommand;
@@ -357,6 +369,11 @@ namespace MyTools.ViewModels
                 Interval = TimeSpan.FromSeconds(1)
             };
             _audioRecordingTimer.Tick += AudioRecordingTimer_OnTick;
+            _codexRateLimitMonitorTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(20)
+            };
+            _codexRateLimitMonitorTimer.Tick += CodexRateLimitMonitorTimer_OnTick;
 
             RefreshCommand = new RelayCommand(Refresh);
             ShowHomeCommand = new RelayCommand(() => SwitchModule("Home"));
@@ -592,6 +609,8 @@ namespace MyTools.ViewModels
             RenameCodexProfileCommand = _renameCodexProfileCommand;
             _editCodexProfileNoteCommand = new AsyncRelayParameterCommand(EditCodexProfileNoteAsync, parameter => parameter is CodexProfileItem);
             EditCodexProfileNoteCommand = _editCodexProfileNoteCommand;
+            _copyCodexProfileCommand = new AsyncRelayParameterCommand(CopyCodexProfileAsync, parameter => parameter is CodexProfileItem);
+            CopyCodexProfileCommand = _copyCodexProfileCommand;
             _restoreLastCodexBackupCommand = new AsyncRelayCommand(RestoreLastCodexBackupAsync);
             RestoreLastCodexBackupCommand = _restoreLastCodexBackupCommand;
             _exportCodexProfilesEncBoxCommand = new AsyncRelayCommand(ExportCodexProfilesEncBoxAsync);
@@ -1938,6 +1957,7 @@ namespace MyTools.ViewModels
         public ICommand RefreshCodexProfileCommand { get; }
         public ICommand RenameCodexProfileCommand { get; }
         public ICommand EditCodexProfileNoteCommand { get; }
+        public ICommand CopyCodexProfileCommand { get; }
         public ICommand RestoreLastCodexBackupCommand { get; }
         public ICommand ExportCodexProfilesEncBoxCommand { get; }
         public ICommand ImportCodexProfilesEncBoxCommand { get; }
@@ -2874,6 +2894,61 @@ namespace MyTools.ViewModels
             set { _codexProfilesStatusMessage = value; OnPropertyChanged(); }
         }
 
+        public string CodexExpirySummaryText
+        {
+            get => _codexExpirySummaryText;
+            private set
+            {
+                if (string.Equals(_codexExpirySummaryText, value, StringComparison.Ordinal)) return;
+                _codexExpirySummaryText = value ?? string.Empty;
+                OnPropertyChanged();
+            }
+        }
+
+        public bool HasCodexExpiryReminder
+        {
+            get => _hasCodexExpiryReminder;
+            private set
+            {
+                if (_hasCodexExpiryReminder == value) return;
+                _hasCodexExpiryReminder = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public bool IsCodexExpiryCritical
+        {
+            get => _isCodexExpiryCritical;
+            private set
+            {
+                if (_isCodexExpiryCritical == value) return;
+                _isCodexExpiryCritical = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public string CodexRateLimitStatusText
+        {
+            get => _codexRateLimitStatusText;
+            private set
+            {
+                if (string.Equals(_codexRateLimitStatusText, value, StringComparison.Ordinal)) return;
+                _codexRateLimitStatusText = value ?? string.Empty;
+                OnPropertyChanged();
+            }
+        }
+
+        public bool IsCodexRateLimitMonitoring
+        {
+            get => _isCodexRateLimitMonitoring;
+            private set
+            {
+                if (_isCodexRateLimitMonitoring == value) return;
+                _isCodexRateLimitMonitoring = value;
+                OnPropertyChanged();
+            }
+        }
+
         public ICommand LockWin10Command { get; }
         public ICommand ExitCommand { get; }
         public ICommand RestoreCommand { get; }
@@ -3643,6 +3718,8 @@ namespace MyTools.ViewModels
 
                     CodexProfilesStatusMessage = statusMessage;
                     UpdateCodexRotationState();
+                    UpdateCodexExpirySummary();
+                    StartCodexRateLimitMonitoring();
                     _codexProfilesLoadedSuccessfully = true;
                 });
             }
@@ -3785,6 +3862,12 @@ namespace MyTools.ViewModels
                 SafeFireAndForget(SaveCodexProfilesAsync());
             }
 
+            if (e.PropertyName == nameof(CodexProfileItem.Status)
+                || e.PropertyName == nameof(CodexProfileItem.AccessTokenExpiresAt))
+            {
+                UpdateCodexExpirySummary();
+                UpdateCodexRotationState();
+            }
         }
 
         private async Task SaveCodexProfilesAsync()
@@ -4375,6 +4458,70 @@ namespace MyTools.ViewModels
             item.Remark = string.IsNullOrWhiteSpace(item.Note) ? item.DisplayName : item.Note;
             await SaveCodexProfilesAsync();
             CodexProfilesStatusMessage = $"已更新「{item.DisplayName}」备注。";
+        }
+
+        private async Task CopyCodexProfileAsync(object parameter)
+        {
+            if (!(parameter is CodexProfileItem item))
+            {
+                return;
+            }
+
+            try
+            {
+                var configTomlBytes = await ResolveCodexProfileFileBytesAsync(item, CodexConfigProfileService.ConfigFileName).ConfigureAwait(true);
+                var authJsonBytes = await ResolveCodexProfileFileBytesAsync(item, CodexConfigProfileService.AuthFileName).ConfigureAwait(true);
+                if (configTomlBytes == null || authJsonBytes == null)
+                {
+                    MessageBox.Show(
+                        "该档案没有可复制的 config.toml 或 auth.json，请先刷新或重新导入当前账号。",
+                        "复制 Codex 档案",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                    return;
+                }
+
+                var sourceName = string.IsNullOrWhiteSpace(item.DisplayName) ? item.Name : item.DisplayName;
+                var copyName = EnsureUniqueCodexDisplayName((string.IsNullOrWhiteSpace(sourceName) ? "Codex 账号" : sourceName.Trim()) + "_复制", null);
+                var protectedConfig = CodexConfigProfileService.ProtectBytesToBase64(configTomlBytes);
+                var protectedAuth = CodexConfigProfileService.ProtectBytesToBase64(authJsonBytes);
+                var copy = new CodexProfileItem
+                {
+                    DisplayName = copyName,
+                    Name = copyName,
+                    AccountEmail = CodexProfileLibraryService.ParseAccountEmail(authJsonBytes),
+                    Note = item.Note ?? string.Empty,
+                    Remark = string.IsNullOrWhiteSpace(item.Note) ? copyName : item.Note,
+                    Tags = item.Tags ?? string.Empty,
+                    LastAppliedAt = null,
+                    LastImportedAt = DateTime.UtcNow,
+                    AccessTokenExpiresAt = CodexProfileLibraryService.ParseAccessTokenExp(authJsonBytes),
+                    RefreshTokenExpiresAt = null,
+                    ProtectedConfigTomlBase64 = protectedConfig,
+                    ProtectedAuthJsonBase64 = protectedAuth,
+                    ConfigTomlContentProtected = protectedConfig,
+                    AuthJsonContentProtected = protectedAuth,
+                    StatusMessage = "由「" + sourceName + "」复制生成。",
+                    EnableRotation = false,
+                    RotationPriority = item.RotationPriority,
+                    RelayTestStatus = CodexProfileItem.RelayStatusUnknown,
+                    RelayTestedAt = null,
+                    RelayTestMessage = string.Empty
+                };
+                copy.Status = CodexProfileLibraryService.ComputeStatus(copy.AccessTokenExpiresAt);
+
+                AddCodexProfileItem(copy);
+                SortCodexProfilesByLastApplied();
+                await SaveCodexProfilesAsync().ConfigureAwait(true);
+                UpdateCodexRotationState();
+                CodexProfilesStatusMessage = $"已复制「{sourceName}」为「{copy.DisplayName}」。";
+                AppLogService.Information("Copied Codex profile {SourceName} to {CopyName}", SafeCodexLogName(sourceName), SafeCodexLogName(copy.DisplayName));
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(new InvalidOperationException(ex.Message), "Copying Codex profile failed for {DisplayName} with {ErrorType}", SafeCodexLogName(item.DisplayName), ex.GetType().Name);
+                MessageBox.Show(ex.Message, "复制 Codex 档案失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         private async Task RestoreLastCodexBackupAsync()
@@ -5061,6 +5208,211 @@ namespace MyTools.ViewModels
             _rotateToNextCodexProfileCommand?.RaiseCanExecuteChanged();
             _selectAllCodexRotationCommand?.RaiseCanExecuteChanged();
             _invertCodexRotationCommand?.RaiseCanExecuteChanged();
+        }
+
+        private void UpdateCodexExpirySummary()
+        {
+            var items = CodexProfiles?.Where(item => item != null).ToList() ?? new List<CodexProfileItem>();
+            if (items.Count == 0)
+            {
+                HasCodexExpiryReminder = false;
+                IsCodexExpiryCritical = false;
+                CodexExpirySummaryText = "未加载 Codex 档案。";
+                return;
+            }
+
+            var expired = items.Count(item => item.IsStatusExpired);
+            var warn = items.Count(item => item.IsStatusWarn);
+            HasCodexExpiryReminder = expired > 0 || warn > 0;
+            IsCodexExpiryCritical = expired > 0;
+            CodexExpirySummaryText = HasCodexExpiryReminder
+                ? $"过期提醒：已过期 {expired} 个，即将过期 {warn} 个。"
+                : "过期提醒：全部可用。";
+        }
+
+        private void StartCodexRateLimitMonitoring()
+        {
+            if (_isDisposed || _codexRateLimitMonitorTimer.IsEnabled)
+            {
+                return;
+            }
+
+            IsCodexRateLimitMonitoring = true;
+            CodexRateLimitStatusText = "429 自动轮换：初始化中。";
+            SafeFireAndForget(InitializeCodexRateLimitMonitoringAsync());
+        }
+
+        private async Task InitializeCodexRateLimitMonitoringAsync()
+        {
+            var result = await CodexRateLimitLogMonitorService.InitializeBaselineAsync(_codexRateLimitMonitorCts.Token).ConfigureAwait(false);
+            await (Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher).InvokeAsync(() =>
+            {
+                if (_isDisposed)
+                {
+                    return;
+                }
+
+                if (!result.Success)
+                {
+                    IsCodexRateLimitMonitoring = false;
+                    CodexRateLimitStatusText = result.Message;
+                    return;
+                }
+
+                _codexRateLimitLastSeenLogId = result.LastSeenLogId;
+                CodexRateLimitStatusText = "429 自动轮换：监控中。";
+                _codexRateLimitMonitorTimer.Start();
+            });
+        }
+
+        private void CodexRateLimitMonitorTimer_OnTick(object sender, EventArgs e)
+        {
+            if (_isCodexRateLimitHandling || _isDisposed)
+            {
+                return;
+            }
+
+            SafeFireAndForget(CheckCodexRateLimitAsync());
+        }
+
+        private async Task CheckCodexRateLimitAsync()
+        {
+            if (_isCodexRateLimitHandling)
+            {
+                return;
+            }
+
+            _isCodexRateLimitHandling = true;
+            try
+            {
+                var probe = await CodexRateLimitLogMonitorService.ProbeAsync(_codexRateLimitLastSeenLogId, _codexRateLimitMonitorCts.Token).ConfigureAwait(false);
+                await (Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher).InvokeAsync(() =>
+                {
+                    if (_isDisposed)
+                    {
+                        return;
+                    }
+
+                    if (probe.Success)
+                    {
+                        _codexRateLimitLastSeenLogId = Math.Max(_codexRateLimitLastSeenLogId, probe.LastSeenLogId);
+                    }
+
+                    if (!probe.Success)
+                    {
+                        CodexRateLimitStatusText = probe.Message;
+                    }
+                    else if (!probe.Detected)
+                    {
+                        CodexRateLimitStatusText = "429 自动轮换：监控中。";
+                    }
+                });
+
+                if (probe.Success && probe.Detected)
+                {
+                    await HandleCodexRateLimitHitAsync(probe).ConfigureAwait(false);
+                }
+            }
+            finally
+            {
+                _isCodexRateLimitHandling = false;
+            }
+        }
+
+        private async Task HandleCodexRateLimitHitAsync(CodexRateLimitProbeResult probe)
+        {
+            if (probe == null || probe.LogId <= 0 || probe.LogId == _codexRateLimitLastHandledLogId)
+            {
+                return;
+            }
+
+            if (_codexRateLimitLastSwitchAt.HasValue
+                && DateTime.Now - _codexRateLimitLastSwitchAt.Value < TimeSpan.FromMinutes(2))
+            {
+                await SetCodexRateLimitStatusOnUiAsync("检测到 429，但刚刚已轮换，已跳过重复触发。").ConfigureAwait(false);
+                return;
+            }
+
+            CodexProfileItem current = null;
+            await (Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher).InvokeAsync(() =>
+            {
+                current = CodexProfiles?.FirstOrDefault(p => p != null && p.IsActive);
+            });
+            if (current == null)
+            {
+                await SetCodexRateLimitStatusOnUiAsync("检测到 429，但未找到当前活动账号。").ConfigureAwait(false);
+                return;
+            }
+
+            await SetCodexRateLimitStatusOnUiAsync(probe.Message + " 正在尝试热轮换。").ConfigureAwait(false);
+            var result = await CodexRotationService.RotateToNextAsync(
+                current,
+                CodexRotationSettings.NotifyOnSwitch,
+                CancellationToken.None,
+                allowFullConfigSwitch: false).ConfigureAwait(false);
+
+            CodexProfilesFile snapshotToSave = null;
+            await (Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher).InvokeAsync(() =>
+            {
+                if (_isDisposed)
+                {
+                    return;
+                }
+
+                if (result.RelayTestExecuted)
+                {
+                    var testedItem = CodexProfiles?.FirstOrDefault(p =>
+                        p != null && string.Equals(p.DisplayName, result.ToProfile, StringComparison.OrdinalIgnoreCase));
+                    if (testedItem != null)
+                    {
+                        testedItem.RelayTestStatus = string.IsNullOrWhiteSpace(result.RelayTestStatus)
+                            ? (result.RelayTestSucceeded ? CodexProfileItem.RelayStatusOk : CodexProfileItem.RelayStatusFailed)
+                            : result.RelayTestStatus;
+                        testedItem.RelayTestedAt = result.RelayTestedAt ?? DateTime.Now;
+                        testedItem.RelayTestMessage = LimitRelayTestMessage(result.RelayTestMessage);
+                    }
+                }
+
+                if (result.Success)
+                {
+                    current.IsActive = false;
+                    var next = CodexProfiles?.FirstOrDefault(p => p != null && p.DisplayName == result.ToProfile);
+                    if (next != null)
+                    {
+                        next.IsActive = true;
+                        next.LastAppliedAt = DateTime.Now;
+                        next.StatusMessage = $"429 自动轮换：{next.LastAppliedAt:yyyy-MM-dd HH:mm:ss}";
+                    }
+
+                    _codexRateLimitLastHandledLogId = probe.LogId;
+                    _codexRateLimitLastSwitchAt = DateTime.Now;
+                    CodexRateLimitStatusText = $"429 自动轮换完成：{result.FromProfile} → {result.ToProfile}";
+                    CodexProfilesStatusMessage = CodexRateLimitStatusText;
+                    SortCodexProfilesByLastApplied();
+                    UpdateCodexRotationState();
+                    UpdateCodexExpirySummary();
+                    snapshotToSave = BuildCodexProfilesFileFromCollection();
+                }
+                else
+                {
+                    _codexRateLimitLastHandledLogId = probe.LogId;
+                    CodexRateLimitStatusText = "429 自动轮换未执行：" + result.Message;
+                    CodexProfilesStatusMessage = CodexRateLimitStatusText;
+                    snapshotToSave = BuildCodexProfilesFileFromCollection();
+                }
+            });
+
+            if (snapshotToSave != null)
+            {
+                await CodexProfileLibraryService.SaveAsync(snapshotToSave, CancellationToken.None).ConfigureAwait(false);
+            }
+        }
+
+        private Task SetCodexRateLimitStatusOnUiAsync(string message)
+        {
+            return (Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher)
+                .InvokeAsync(() => CodexRateLimitStatusText = message ?? string.Empty)
+                .Task;
         }
 
         private void SetCodexLocalRelayStatus(string status, string message, bool updateCheckedAt)
@@ -12380,6 +12732,10 @@ namespace MyTools.ViewModels
             _queryCts = null;
             _audioRecordingTimer.Stop();
             _audioRecordingTimer.Tick -= AudioRecordingTimer_OnTick;
+            _codexRateLimitMonitorTimer.Stop();
+            _codexRateLimitMonitorTimer.Tick -= CodexRateLimitMonitorTimer_OnTick;
+            _codexRateLimitMonitorCts.Cancel();
+            _codexRateLimitMonitorCts.Dispose();
 
             if (_sensorTimer != null)
             {
@@ -13797,6 +14153,7 @@ namespace MyTools.ViewModels
             _exportCodexProfileCommand?.RaiseCanExecuteChanged();
             _previewCodexProfileDiffCommand?.RaiseCanExecuteChanged();
             _applyCodexConfigTemplateToAllCommand?.RaiseCanExecuteChanged();
+            _copyCodexProfileCommand?.RaiseCanExecuteChanged();
             _restartCodexWithLocalRelayCommand?.RaiseCanExecuteChanged();
             _copyBenchmarkResultsCommand?.RaiseCanExecuteChanged();
             _exportBenchmarkResultsCommand?.RaiseCanExecuteChanged();
@@ -14008,6 +14365,7 @@ namespace MyTools.ViewModels
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(AccessTokenExpiresText));
                 OnPropertyChanged(nameof(RemainingValidityText));
+                OnPropertyChanged(nameof(ExpiryReminderText));
             }
         }
 
@@ -14085,6 +14443,8 @@ namespace MyTools.ViewModels
                 OnPropertyChanged(nameof(IsStatusWarn));
                 OnPropertyChanged(nameof(IsStatusExpired));
                 OnPropertyChanged(nameof(IsStatusUnknown));
+                OnPropertyChanged(nameof(HasExpiryReminder));
+                OnPropertyChanged(nameof(ExpiryReminderText));
             }
         }
 
@@ -14226,6 +14586,28 @@ namespace MyTools.ViewModels
 
         [JsonIgnore]
         public bool IsStatusUnknown => !IsStatusOk && !IsStatusWarn && !IsStatusExpired;
+
+        [JsonIgnore]
+        public bool HasExpiryReminder => IsStatusWarn || IsStatusExpired;
+
+        [JsonIgnore]
+        public string ExpiryReminderText
+        {
+            get
+            {
+                if (IsStatusExpired)
+                {
+                    return "已过期，请刷新后再轮换";
+                }
+
+                if (IsStatusWarn)
+                {
+                    return "即将过期，" + RemainingValidityText;
+                }
+
+                return string.Empty;
+            }
+        }
 
         [JsonIgnore]
         public bool IsRelayStatusOk => string.Equals(RelayTestStatus, RelayStatusOk, StringComparison.Ordinal);
