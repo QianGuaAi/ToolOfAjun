@@ -16,6 +16,19 @@ namespace MyTools.Services
     {
         private const int TimeoutSeconds = 15;
 
+        public static CodexRelayRuntimeInfo InspectRuntime(byte[] configTomlBytes, byte[] authJsonBytes)
+        {
+            var config = ParseConfig(configTomlBytes);
+            return new CodexRelayRuntimeInfo
+            {
+                BaseUrl = config.BaseUrl ?? string.Empty,
+                Model = config.Model ?? string.Empty,
+                RequiresOpenAiAuth = config.RequiresOpenAiAuth,
+                WireApi = config.WireApi ?? string.Empty,
+                Token = ResolveToken(config, authJsonBytes)
+            };
+        }
+
         public static async Task<CodexRelayTestResult> TestAsync(byte[] configTomlBytes, byte[] authJsonBytes, CancellationToken ct)
         {
             var config = ParseConfig(configTomlBytes);
@@ -586,5 +599,16 @@ namespace MyTools.Services
                 Host = host ?? string.Empty
             };
         }
+    }
+
+    public sealed class CodexRelayRuntimeInfo
+    {
+        public string BaseUrl { get; set; }
+        public string Model { get; set; }
+        public bool RequiresOpenAiAuth { get; set; }
+        public string WireApi { get; set; }
+        public string Token { get; set; }
+
+        public bool HasToken => !string.IsNullOrWhiteSpace(Token);
     }
 }

@@ -1568,8 +1568,31 @@
                                 <GradientStop Color="{DynamicResource BrushHeaderGradientEndColor}" Offset="1" />
                             </LinearGradientBrush>
                         </Border.Background>
-                        <DockPanel LastChildFill="True">
-                            <WrapPanel DockPanel.Dock="Right" VerticalAlignment="Center">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Row="0"
+                                        Grid.Column="0"
+                                        Orientation="Horizontal"
+                                        VerticalAlignment="Center">
+                                <Border Width="32" Height="32" CornerRadius="8" Background="{StaticResource BrushTealGradient}" Margin="0,0,10,0" VerticalAlignment="Center">
+                                    <materialDesign:PackIcon Kind="FolderCogOutline" Width="16" Height="16" Foreground="White" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                </Border>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Codex 账号切换器" Style="{StaticResource TextHeadline}" />
+                                    <TextBlock Text="本地加密保存多个账号档案，切换后可温和重启并继续原会话" Style="{StaticResource TextCaption}" Margin="0,1,0,0" />
+                                </StackPanel>
+                            </StackPanel>
+                            <WrapPanel Grid.Row="0"
+                                       Grid.Column="1"
+                                       VerticalAlignment="Center"
+                                       HorizontalAlignment="Right">
                                 <Button Style="{StaticResource SuccessActionButton}"
                                         Height="32"
                                         Padding="10,0"
@@ -1606,9 +1629,18 @@
                                         Content="回滚上次切换"
                                         Command="{Binding RestoreLastCodexBackupCommand}" />
                             </WrapPanel>
-                            <Border Background="{DynamicResource BrushCard}" CornerRadius="4" Padding="12,8" Margin="0,8,0,0">
+                            <Border Grid.Row="1"
+                                    Grid.Column="0"
+                                    Grid.ColumnSpan="2"
+                                    Background="{DynamicResource BrushCard}"
+                                    CornerRadius="4"
+                                    Padding="12,8"
+                                    Margin="0,8,0,0">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="Auto" />
@@ -1616,52 +1648,91 @@
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <Button Grid.Column="0"
+                                    <StackPanel Grid.Column="0"
+                                                Orientation="Horizontal"
+                                                VerticalAlignment="Center"
+                                                ToolTip="{Binding CodexLocalRelayStatusMessage}">
+                                        <Border Width="10"
+                                                Height="10"
+                                                CornerRadius="5"
+                                                VerticalAlignment="Center"
+                                                Margin="0,0,6,0">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Setter Property="Background" Value="{DynamicResource BrushCodexStatusUnknown}" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsCodexLocalRelayStatusOk}" Value="True">
+                                                            <Setter Property="Background" Value="{DynamicResource BrushCodexStatusOk}" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding IsCodexLocalRelayStatusFailed}" Value="True">
+                                                            <Setter Property="Background" Value="{DynamicResource BrushCodexStatusExpired}" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding IsCodexLocalRelayStatusTesting}" Value="True">
+                                                            <Setter Property="Background" Value="{DynamicResource BrushCodexStatusWarn}" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                        </Border>
+                                        <TextBlock Text="{Binding CodexLocalRelayDisplayText}"
+                                                   MaxWidth="180"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource MaterialDesignBodyLight}" />
+                                    </StackPanel>
+                                    <Button Grid.Column="1"
                                             Content="立即轮换"
                                             Command="{Binding RotateToNextCodexProfileCommand}"
                                             IsEnabled="{Binding IsCodexRotationAvailable}"
                                             Style="{StaticResource MaterialDesignOutlinedButton}"
-                                            Padding="12,4" />
-                                    <Button Grid.Column="1"
+                                            Padding="12,4"
+                                            Margin="10,0,0,0" />
+                                    <Button Grid.Column="2"
                                             Content="重启 Codex"
                                             Command="{Binding RestartCodexDesktopCommand}"
                                             Style="{StaticResource MaterialDesignOutlinedButton}"
                                             Padding="12,4"
                                             Margin="8,0,0,0" />
-                                    <Button Grid.Column="2"
+                                    <Button Grid.Column="3"
+                                            Content="启动本地中转"
+                                            Command="{Binding EnableCodexLocalRelayCommand}"
+                                            ToolTip="启动本地 relay，并通过 relay 测试当前 NewAPI。"
+                                            Style="{StaticResource MaterialDesignOutlinedButton}"
+                                            Padding="12,4"
+                                            Margin="8,0,0,0" />
+                                    <Button Grid.Column="4"
+                                            Content="重启 Codex 使用中转"
+                                            Command="{Binding RestartCodexWithLocalRelayCommand}"
+                                            IsEnabled="{Binding CanRestartCodexWithLocalRelay}"
+                                            ToolTip="仅在本地中转测试为绿色时可用。"
+                                            Style="{StaticResource MaterialDesignOutlinedButton}"
+                                            Padding="12,4"
+                                            Margin="8,0,0,0" />
+                                    <Button Grid.Column="5"
                                             Content="全选轮换"
                                             Command="{Binding SelectAllCodexRotationCommand}"
                                             Style="{StaticResource MaterialDesignOutlinedButton}"
                                             Padding="12,4"
                                             Margin="8,0,0,0" />
-                                    <Button Grid.Column="3"
+                                    <Button Grid.Column="6"
                                             Content="反选轮换"
                                             Command="{Binding InvertCodexRotationCommand}"
                                             Style="{StaticResource MaterialDesignOutlinedButton}"
                                             Padding="12,4"
                                             Margin="8,0,0,0" />
-                                    <TextBlock Grid.Column="4"
+                                    <TextBlock Grid.Column="7"
                                                Text="{Binding CodexNextSwitchPreview}"
                                                Margin="12,0,0,0"
                                                VerticalAlignment="Center"
                                                Foreground="{DynamicResource MaterialDesignBodyLight}" />
-                                    <CheckBox Grid.Column="5"
+                                    <CheckBox Grid.Column="8"
                                               Content="轮换后通知"
                                               IsChecked="{Binding CodexRotationSettings.NotifyOnSwitch}"
                                               VerticalAlignment="Center"
                                               Style="{StaticResource MaterialDesignCheckBox}" />
                                 </Grid>
                             </Border>
-                            <StackPanel Orientation="Horizontal">
-                                <Border Width="32" Height="32" CornerRadius="8" Background="{StaticResource BrushTealGradient}" Margin="0,0,10,0" VerticalAlignment="Center">
-                                    <materialDesign:PackIcon Kind="FolderCogOutline" Width="16" Height="16" Foreground="White" VerticalAlignment="Center" HorizontalAlignment="Center" />
-                                </Border>
-                                <StackPanel VerticalAlignment="Center">
-                                    <TextBlock Text="Codex 账号切换器" Style="{StaticResource TextHeadline}" />
-                                    <TextBlock Text="本地加密保存多个账号档案，切换后可温和重启并继续原会话" Style="{StaticResource TextCaption}" Margin="0,1,0,0" />
-                                </StackPanel>
-                            </StackPanel>
-                        </DockPanel>
+                        </Grid>
                     </Border>
 
                     <Border Grid.Row="1"
@@ -1699,8 +1770,10 @@
                         </Grid>
                     </Border>
 
-                    <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
-                        <ItemsControl ItemsSource="{Binding CodexProfiles}">
+                    <ScrollViewer Grid.Row="2"
+                                  VerticalScrollBarVisibility="Auto"
+                                  Background="{DynamicResource MaterialDesignFlatBackground}">
+                        <ItemsControl x:Name="CodexProfilesItems" ItemsSource="{Binding CodexProfiles}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
                                     <materialDesign:Card Padding="0" Margin="0,0,0,8">
@@ -1720,8 +1793,12 @@
                                                 <ColumnDefinition Width="*" />
                                                 <ColumnDefinition Width="Auto" />
                                             </Grid.ColumnDefinitions>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                            </Grid.RowDefinitions>
 
-                                            <Border Grid.Column="0" Width="4" CornerRadius="8,0,0,8">
+                                            <Border Grid.RowSpan="2" Grid.Column="0" Width="4" CornerRadius="8,0,0,8">
                                                 <Border.Style>
                                                     <Style TargetType="Border">
                                                         <Setter Property="Background" Value="{DynamicResource BrushCodexStatusUnknown}" />
@@ -1744,7 +1821,7 @@
                                                 </Border.Style>
                                             </Border>
 
-                                            <Grid Grid.Column="1" Margin="12,10,12,10">
+                                            <Grid Grid.Row="0" Grid.Column="1" Margin="12,10,12,10">
                                                 <Grid.RowDefinitions>
                                                     <RowDefinition Height="Auto" />
                                                     <RowDefinition Height="Auto" />
@@ -1799,7 +1876,7 @@
                                                            ToolTip="{Binding Note}" />
                                             </Grid>
 
-                                            <WrapPanel Grid.Column="2" Margin="0,10,10,10" VerticalAlignment="Center">
+                                            <WrapPanel Grid.Row="0" Grid.Column="2" Margin="0,10,10,10" VerticalAlignment="Center">
                                                 <ProgressBar Style="{StaticResource MaterialDesignCircularProgressBar}"
                                                              IsIndeterminate="True"
                                                              Width="18"
@@ -1810,7 +1887,8 @@
                                                         Height="32"
                                                         Padding="10,0"
                                                         Margin="0,0,6,0"
-                                                        Content="切换"
+                                                        Content="{Binding DataContext.CodexProfileSwitchButtonText, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                        ToolTip="{Binding DataContext.CodexProfileSwitchButtonToolTip, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                         Command="{Binding DataContext.SwitchCodexProfileCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                         CommandParameter="{Binding}" />
                                                 <Button Style="{StaticResource GhostActionButton}"
@@ -1880,7 +1958,11 @@
                                                     <materialDesign:PackIcon Kind="DeleteOutline" Width="17" Height="17" />
                                                 </Button>
                                             </WrapPanel>
-                                            <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                            <StackPanel Grid.Row="1"
+                                                        Grid.Column="1"
+                                                        Grid.ColumnSpan="2"
+                                                        Orientation="Horizontal"
+                                                        Margin="12,0,10,10">
                                                 <CheckBox Content="加入轮换"
                                                           IsChecked="{Binding EnableRotation, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                           VerticalAlignment="Center"
@@ -1899,6 +1981,34 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                     </ScrollViewer>
+                    <Border Grid.Row="2"
+                            Margin="0,8,0,0"
+                            Padding="24"
+                            BorderBrush="{DynamicResource MaterialDesignDivider}"
+                            BorderThickness="1"
+                            CornerRadius="6"
+                            Background="{DynamicResource MaterialDesignPaper}"
+                            Visibility="{Binding ElementName=CodexProfilesItems, Path=HasItems, Converter={StaticResource InverseBoolToVis}}">
+                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <materialDesign:PackIcon Kind="FolderCogOutline"
+                                                     Width="34"
+                                                     Height="34"
+                                                     Opacity="0.55"
+                                                     HorizontalAlignment="Center"
+                                                     Foreground="{DynamicResource MaterialDesignBodyLight}" />
+                            <TextBlock Text="暂无 Codex 档案"
+                                       Margin="0,10,0,0"
+                                       FontWeight="SemiBold"
+                                       HorizontalAlignment="Center"
+                                       Foreground="{DynamicResource MaterialDesignBody}" />
+                            <TextBlock Text="{Binding CodexProfilesStatusMessage}"
+                                       Margin="0,4,0,0"
+                                       MaxWidth="520"
+                                       TextWrapping="Wrap"
+                                       TextAlignment="Center"
+                                       Style="{StaticResource TextCaption}" />
+                        </StackPanel>
+                    </Border>
                 </Grid>
             </DataTemplate>
         </ContentControl.Resources>

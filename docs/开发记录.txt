@@ -1,5 +1,52 @@
 # 开发记录
 
+## [2026-06-08] Codex 本地中转热轮换
+- 修复“划区域”截图粘贴后右侧缺失：`RegionSelectorWindow` 在 HWND 创建后按真实 DPI 与虚拟屏幕物理像素重新铺屏，选区像素矩形改为左上 floor、右下 ceiling；`ScreenshotService.SetClipboardCompatible()` 改为写入 32 位 BGRA 位图，并同时提供 WPF Image、32 位 DIB 与 PNG 剪贴板格式。
+- “划区域”截图修复随本节后续 `2026.6.8.11` 安装包一并发布。
+- 新增 `CodexLocalRelayService`：本地 relay 把 Codex provider 固定到 `http://127.0.0.1:<port>/v1` 后转发到真实 NewAPI，真实 `base_url` 与 key 由本地中转管理，key 使用 DPAPI 当前用户范围加密保存。
+- “启用热轮换”改为两步式本地中转：点击“启动本地中转”只保存/启动 relay，并通过本地 relay 测试当前 NewAPI，不修改 `~/.codex/config.toml`；relay 灯号为绿色后，“重启 Codex 使用中转”才可点击，负责写入 `[model_providers.mytools_local_relay]` 与 `auth.command` helper 并重启 Codex App。
+- `立即轮换` 在目标中转测试通过后优先走本地中转热切；本地中转已启用时不会退回覆盖 `~/.codex`，避免破坏固定本地 provider。
+- 档案卡片“切换”在本地中转启用后也会先测试目标 NewAPI，测试通过后只切换本地上游，不备份、不覆盖 `~/.codex`，通常无需重启 Codex App。
+- 修复手动还原 Codex 配置后的本地中转恢复：当前 Codex 已固定到 relay 时，“启动本地中转”会优先使用 MyTools 已保存的 DPAPI 本地中转配置测试真实上游，不把本地 `127.0.0.1` 误当 NewAPI；“重启 Codex 使用中转”、手动切换和立即轮换若发现固定本地配置被还原则同步修复，并明确提示重启 Codex App。
+- 本地中转通过 `MyTools.exe --codex-local-relay` 隐藏后台进程运行，仅监听 `127.0.0.1`，每次请求前读取最新上游设置；正在流式输出的请求不强制中断，下一次请求使用新上游。
+- 重新打包 `2026.6.8.5`：`scripts\Build-Installer.ps1 -Configuration Release -Version 2026.6.8.5` 通过，主程序、卸载器和安装器均为 0 warning / 0 error；`artifacts\installer\MyToolsSetup.exe` 大小 43,250,688 bytes，SHA256 = `66DE505EEBE44DA3CF7446DA6D60672F0AD0BD4728A09AA290762B635F548BEB`。
+- 修复 FRP 页面输入框文字不可见：`FrpView.xaml` 的服务器、端口、Token、规则备注和预设下拉框改用页面本地 WPF 输入样式，显式设置前景、背景、选区、焦点和禁用态颜色，避免 MaterialDesign 全局模板把输入文字刷成浅色。
+- 重新打包 `2026.6.8.6`：`scripts\Build-Installer.ps1 -Configuration Release -Version 2026.6.8.6` 通过，主程序、卸载器和安装器均为 0 warning / 0 error；`artifacts\installer\MyToolsSetup.exe` 大小 43,250,688 bytes，SHA256 = `9977741C824FDD70705ABC4DC7872A38B5A37265D68C1CE0FF18D4C91F3D620D`。
+- 重新打包 `2026.6.8.7`：临时把仓库内置 `.dotnet` 加入 PATH 后执行 `scripts\Build-Installer.ps1 -Configuration Release -Version 2026.6.8.7` 通过，主程序、卸载器和安装器均为 0 warning / 0 error；`artifacts\installer\MyToolsSetup.exe` 大小 43,253,760 bytes，SHA256 = `6A4CC752FD14B8DA14C3340CC05316A5F98923DB835672CE4AD1C60C95AFA552`。
+- 重新打包 `2026.6.8.8`：临时把仓库内置 `.dotnet` 加入 PATH 后执行 `scripts\Build-Installer.ps1 -Configuration Release -Version 2026.6.8.8` 通过，主程序、卸载器和安装器均为 0 warning / 0 error；`artifacts\installer\MyToolsSetup.exe` 大小 43,253,760 bytes，SHA256 = `FB076143F2CDAEF3EBA209ABCDDED4C608C0860D1B71C98EB4838AD29B81966A`。
+- 重新打包 `2026.6.8.9`：临时把仓库内置 `.dotnet` 加入 PATH 后执行 `scripts\Build-Installer.ps1 -Configuration Release -Version 2026.6.8.9` 通过，主程序、卸载器和安装器均为 0 warning / 0 error；`artifacts\installer\MyToolsSetup.exe` 大小 43,254,272 bytes，SHA256 = `36D7A2114E92EB8934E6DD8F099353121BC96E9E771F4665E85DC44D4DD88EC0`。
+- 重新打包 `2026.6.8.10`：临时把仓库内置 `.dotnet` 加入 PATH 后执行 `scripts\Build-Installer.ps1 -Configuration Release -Version 2026.6.8.10` 通过，主程序、卸载器和安装器均为 0 warning / 0 error；`artifacts\installer\MyToolsSetup.exe` 大小 43,254,272 bytes，SHA256 = `11225C66B8844CF1CF728ADB7776BF417201B95653BB1022911C88565B25DE35`。
+- 修复点击“启动本地中转”后 relay 已实际监听但 UI 仍弹出“后台进程已退出，退出码：3”的误报：`IsLocalRelayHealthyAsync` 改为读取完整 `/health` HTTP 响应，避免首次只读到 header 时把已有 relay 误判为不可用；后台进程等待结束后报错前也会再复核一次 health。
+- 重新打包 `2026.6.8.11`：临时把仓库内置 `.dotnet` 加入 PATH 后执行 `scripts\Build-Installer.ps1 -Configuration Release -Version 2026.6.8.11` 通过，主程序、卸载器和安装器均为 0 warning / 0 error；`artifacts\installer\MyToolsSetup.exe` 大小 43,255,808 bytes，SHA256 = `C4A9C70A1B6E5C4608E9906E675FE482A79B684CF061FBD21E3FF1B6D380C06B`。
+- 同步更新 `docs/功能说明.md` 与 `docs/程序逻辑.md`；本次不修改 `App.OnStartup`、`MainWindow` 构造函数或启动期同步 IO。
+- 验证：`.dotnet\dotnet.exe build src\MyTools\MyTools.csproj -c Release` 通过，0 warning / 0 error。
+- 重新打包：`powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Build-Installer.ps1 -Configuration Release -Version 2026.6.8.0` 通过；安装包 `artifacts\installer\MyToolsSetup.exe` 大小 43,248,128 bytes，SHA256 = `A54042FD69DA1D7CD54E1DCB3187315614818119721775A988C19091D6696984`。
+- 修复启用时后台 relay 冷启动超过 5 秒导致误报健康检查失败的问题：健康检查等待窗口放宽到 40 秒，并在后台进程提前退出时显示退出码；重新打包 `2026.6.8.1`，安装包大小 43,248,640 bytes，SHA256 = `1B94EC64A398C4FD4A0E897144C76713DD71CA70D9DCC7AA0FBD5A986476A0F9`。
+- 修复 FRP“隧道穿透”页面输入框浅底低对比问题：该页面 TextBox、PasswordBox、ComboBox 改用局部高对比输入样式，明确白底、深色文字、深色光标、清晰边框和 hint 前景，避免 MaterialDesign 默认主题导致输入内容不可见。
+- 重新打包 `2026.6.8.2`：安装包 `artifacts\installer\MyToolsSetup.exe` 大小 43,248,640 bytes，SHA256 = `5A1BDD236FE024F3C11BB53D82B624B321FF74FA465DBE34DF844111C06D55D5`。
+- 修复已有本地 relay 健康监听时，重复启动备用后台进程因端口占用退出 `3` 被误判为“启用本地中转失败”的问题：后台启动轮询改为以 `/health` 最终可达作为成功条件，记录新进程退出码但继续等待完整健康窗口；重新打包 `2026.6.8.3`，安装包大小 43,248,640 bytes，SHA256 = `31EE8E6A751DF5DAF7A2F84E4184FA3A4A4F20DD01AEC7FCB9DAC16942C8E114`；验证 `http://127.0.0.1:48176/health` 返回 `MyTools Codex local relay is running.`。
+- Codex 面板新增 relay 状态灯和“重启 Codex 使用中转”按钮；按钮仅在 relay 灯号为绿色时可用，避免把 Codex 切到未通过探测的本地代理。
+- 验证：`.dotnet\dotnet.exe build src\MyTools\MyTools.csproj -c Release` 通过，0 warning / 0 error。
+- 档案行主按钮改为随本地中转模式动态显示：普通模式为“切换”，本地中转模式为“本地切换”，tooltip 同步说明是否覆盖 `~/.codex`；底层仍复用同一个切换命令并按 `CodexLocalRelayService.IsEnabledAsync()` 分流。
+- 修复进入 Codex 配置页后档案库偶发空白：`CurrentModule` 切到 `CodexProfiles` 时也会触发加载兜底；若此前请求过加载但未成功完成、列表为空且本地 `profiles.json` 存在，则允许重试加载。已确认当前用户 `%LOCALAPPDATA%\MyTools\Codex\profiles.json` 可 DPAPI 解密且包含 5 条档案。
+- 修复 Codex 配置页与文件验证页的视觉串层风险：Codex 顶部操作区改为两行 Grid，档案卡片的“加入轮换/优先级”固定在卡片第二行，并为 Codex 列表区增加专属空态边界，避免空列表或焦点虚线被误看成下一个模块内容。
+- 验证：`.dotnet\dotnet.exe build src\MyTools\MyTools.csproj -c Release` 通过，0 warning / 0 error；未启动测试新 exe，因为当前已有安装版 `C:\Program Files\AjunTools\MyTools\MyTools.exe` 在运行。
+
+## [2026-06-08] 更新 FRP 默认服务器
+- `FrpDefaults.DefaultServerAddress` 改为 `47.120.63.249`，服务器预设说明同步改为 `47.120.63.249 · frps v0.50.0`；已有本地保存的非空 FRP 地址仍不会被覆盖。
+- 同步更新 `docs/功能说明.md` 与 `docs/程序逻辑.md` 中 FRP 默认服务器描述；本次不修改启动流程、构造函数、Token 加密或日志脱敏逻辑。
+- 验证：`.dotnet\dotnet.exe build src\MyTools\MyTools.csproj -c Release` 通过，0 warning / 0 error。
+- 服务器 `47.120.63.249` 已安装并启用 `frps v0.50.0`，配置文件为 `/etc/frps.ini`，systemd 服务为 `frps.service`，监听 `7000/tcp`；UFW 已放行 `7000/tcp`，公网 TCP 连通性验证通过，现有 nginx `80/tcp` 服务保持正常。
+- 远程桌面 FRP 预设端口 `33890/tcp` 已在服务器 UFW 放行；该端口需等待客户端 frpc 启动 RDP 映射后才会由 frps 实际监听。
+
+## [2026-06-08] Codex 轮换前中转预检
+- “立即轮换”现在会先对即将轮到的目标档案执行一次 `CodexRelayTestService` 中转测试；测试失败时停止轮换，不备份、不覆盖当前 `~/.codex`，并把目标档案灯号更新为“不可用”。
+- `CodexRotationResult` 返回轮换前测试状态、时间和 160 字以内摘要，`MainViewModel` 在轮换按钮流程中同步显示“测试中 / 可用 / 不可用”状态。
+- 复核本机 Codex 26.602.4764.0：Windows 上 `codex app-server daemon` 生命周期仍提示仅支持 Unix，当前桌面 App 无公开 reload auth/config 入口；官方手册确认 `auth.command` 支持按 `refresh_interval_ms` 主动刷新 token，且不能与 `requires_openai_auth` 混用。
+- 新增 `CodexHotTokenService` 与“启用热轮换”按钮：首次基于当前 `~/.codex` 生成 MyTools `auth.command` provider、DPAPI 加密 token 文件和 PowerShell 读取脚本，需重启一次 Codex App；后续同一 `base_url` 的轮换只更新 token 文件，不再提示重启。
+- 同步更新 `docs/功能说明.md` 与 `docs/程序逻辑.md`；本次不修改 `App.OnStartup`、`MainWindow` 构造函数或启动期后台加载流程。
+- 验证：`.dotnet\dotnet.exe build src\MyTools\MyTools.csproj -c Release` 通过，0 warning / 0 error。
+
 ## [2026-06-07] 修复多媒体入口只读文本绑定崩溃
 - 修复进入“多媒体”时 `TextBox.Text` 默认 TwoWay 绑定只读属性 `PreviewDocumentText`，导致 `InvalidOperationException` 并弹出运行错误的问题。
 - `PreviewDocumentText` 作为文档预览输出保持只读，XAML 绑定改为 `Mode=OneWay`。

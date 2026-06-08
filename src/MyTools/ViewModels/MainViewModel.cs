@@ -168,6 +168,11 @@ namespace MyTools.ViewModels
         private bool _isCapturingAudioRecordHotkey;
         private string _codexProfilesStatusMessage = "拖入包含 config.toml 和 auth.json 的文件夹，生成可应用的 Codex 配置记录。";
         private string _codexNextSwitchPreview = "无可用轮换目标";
+        private string _codexLocalRelayStatus = CodexProfileItem.RelayStatusUnknown;
+        private string _codexLocalRelayStatusMessage = "本地中转未测试。";
+        private DateTime? _codexLocalRelayCheckedAt;
+        private bool _isCodexLocalRelayChecking;
+        private bool _isCodexLocalRelaySwitchMode;
         private CodexRotationSettings _codexRotationSettings = new CodexRotationSettings();
         private bool _isAutoStartEnabled;
         private FileHashResult _currentFileHashResult;
@@ -245,6 +250,8 @@ namespace MyTools.ViewModels
         private readonly AsyncRelayCommand _importCodexProfilesEncBoxCommand;
         private readonly AsyncRelayCommand _rotateToNextCodexProfileCommand;
         private readonly AsyncRelayCommand _restartCodexDesktopCommand;
+        private readonly AsyncRelayCommand _enableCodexLocalRelayCommand;
+        private readonly AsyncRelayCommand _restartCodexWithLocalRelayCommand;
         private readonly AsyncRelayParameterCommand _toggleCodexProfileRotationCommand;
         private readonly AsyncRelayCommand _testCodexRelaysCommand;
         private readonly AsyncRelayCommand _selectAllCodexRotationCommand;
@@ -288,6 +295,8 @@ namespace MyTools.ViewModels
         private bool _screenshotStartupLoadRequested;
         private bool _videoViewerStartupLoadRequested;
         private bool _codexProfilesLoadRequested;
+        private bool _codexProfilesLoadInProgress;
+        private bool _codexProfilesLoadedSuccessfully;
         private bool _systemOptimizationLoadRequested;
         private bool _weChatStartupLoadRequested;
         private bool _frpConfigLoadRequested;
@@ -596,6 +605,10 @@ namespace MyTools.ViewModels
             RotateToNextCodexProfileCommand = _rotateToNextCodexProfileCommand;
             _restartCodexDesktopCommand = new AsyncRelayCommand(RestartCodexDesktopAsync);
             RestartCodexDesktopCommand = _restartCodexDesktopCommand;
+            _enableCodexLocalRelayCommand = new AsyncRelayCommand(EnableCodexLocalRelayAsync);
+            EnableCodexLocalRelayCommand = _enableCodexLocalRelayCommand;
+            _restartCodexWithLocalRelayCommand = new AsyncRelayCommand(RestartCodexWithLocalRelayAsync, () => CanRestartCodexWithLocalRelay);
+            RestartCodexWithLocalRelayCommand = _restartCodexWithLocalRelayCommand;
             _toggleCodexProfileRotationCommand = new AsyncRelayParameterCommand(ToggleCodexProfileRotationAsync, parameter => parameter is CodexProfileItem);
             ToggleCodexProfileRotationCommand = _toggleCodexProfileRotationCommand;
             _testCodexRelaysCommand = new AsyncRelayCommand(TestCodexRelaysAsync, () => CodexProfiles != null && CodexProfiles.Count > 0);
@@ -942,6 +955,11 @@ namespace MyTools.ViewModels
                 else if (prev == "System" && value != "System" && string.Equals(CurrentSystemSection, "SystemInfo", StringComparison.Ordinal) && _isSensorsRunning && SensorTimer.IsEnabled)
                 {
                     SensorTimer.Stop();
+                }
+
+                if (string.Equals(value, "CodexProfiles", StringComparison.Ordinal))
+                {
+                    EnsureCodexProfilesLoading();
                 }
             }
         }
@@ -1928,6 +1946,8 @@ namespace MyTools.ViewModels
         public ICommand EditCodexAuthJsonCommand { get; }
         public ICommand RotateToNextCodexProfileCommand { get; }
         public ICommand RestartCodexDesktopCommand { get; }
+        public ICommand EnableCodexLocalRelayCommand { get; }
+        public ICommand RestartCodexWithLocalRelayCommand { get; }
         public ICommand ToggleCodexProfileRotationCommand { get; }
         public ICommand TestCodexRelaysCommand { get; }
         public ICommand SelectAllCodexRotationCommand { get; }
@@ -1969,6 +1989,91 @@ namespace MyTools.ViewModels
                     && !string.Equals(p.DisplayName, current.DisplayName, StringComparison.Ordinal));
             }
         }
+
+        public string CodexLocalRelayStatus
+        {
+            get => string.IsNullOrWhiteSpace(_codexLocalRelayStatus) ? CodexProfileItem.RelayStatusUnknown : _codexLocalRelayStatus;
+            private set
+            {
+                var next = string.IsNullOrWhiteSpace(value) ? CodexProfileItem.RelayStatusUnknown : value;
+                if (string.Equals(_codexLocalRelayStatus, next, StringComparison.Ordinal)) return;
+                _codexLocalRelayStatus = next;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(IsCodexLocalRelayStatusOk));
+                OnPropertyChanged(nameof(IsCodexLocalRelayStatusFailed));
+                OnPropertyChanged(nameof(IsCodexLocalRelayStatusTesting));
+                OnPropertyChanged(nameof(IsCodexLocalRelayStatusUnknown));
+                OnPropertyChanged(nameof(CodexLocalRelayDisplayText));
+                OnPropertyChanged(nameof(CanRestartCodexWithLocalRelay));
+                _restartCodexWithLocalRelayCommand?.RaiseCanExecuteChanged();
+            }
+        }
+
+        public string CodexLocalRelayStatusMessage
+        {
+            get => string.IsNullOrWhiteSpace(_codexLocalRelayStatusMessage) ? "本地中转未测试。" : _codexLocalRelayStatusMessage;
+            private set
+            {
+                if (string.Equals(_codexLocalRelayStatusMessage, value, StringComparison.Ordinal)) return;
+                _codexLocalRelayStatusMessage = value ?? string.Empty;
+                OnPropertyChanged();
+            }
+        }
+
+        public bool IsCodexLocalRelayChecking
+        {
+            get => _isCodexLocalRelayChecking;
+            private set
+            {
+                if (_isCodexLocalRelayChecking == value) return;
+                _isCodexLocalRelayChecking = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(IsCodexLocalRelayStatusTesting));
+                OnPropertyChanged(nameof(IsCodexLocalRelayStatusUnknown));
+                OnPropertyChanged(nameof(CanRestartCodexWithLocalRelay));
+                _restartCodexWithLocalRelayCommand?.RaiseCanExecuteChanged();
+            }
+        }
+
+        public bool IsCodexLocalRelayStatusOk => string.Equals(CodexLocalRelayStatus, CodexProfileItem.RelayStatusOk, StringComparison.Ordinal);
+
+        public bool IsCodexLocalRelayStatusFailed => string.Equals(CodexLocalRelayStatus, CodexProfileItem.RelayStatusFailed, StringComparison.Ordinal);
+
+        public bool IsCodexLocalRelayStatusTesting => IsCodexLocalRelayChecking || string.Equals(CodexLocalRelayStatus, CodexProfileItem.RelayStatusTesting, StringComparison.Ordinal);
+
+        public bool IsCodexLocalRelayStatusUnknown => !IsCodexLocalRelayStatusOk && !IsCodexLocalRelayStatusFailed && !IsCodexLocalRelayStatusTesting;
+
+        public bool CanRestartCodexWithLocalRelay => IsCodexLocalRelayStatusOk && !IsCodexLocalRelayChecking;
+
+        public string CodexLocalRelayDisplayText
+        {
+            get
+            {
+                var checkedAt = _codexLocalRelayCheckedAt.HasValue
+                    ? " · " + _codexLocalRelayCheckedAt.Value.ToString("MM-dd HH:mm")
+                    : string.Empty;
+                return "本地中转：" + CodexLocalRelayStatus + checkedAt;
+            }
+        }
+
+        public bool IsCodexLocalRelaySwitchMode
+        {
+            get => _isCodexLocalRelaySwitchMode;
+            private set
+            {
+                if (_isCodexLocalRelaySwitchMode == value) return;
+                _isCodexLocalRelaySwitchMode = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(CodexProfileSwitchButtonText));
+                OnPropertyChanged(nameof(CodexProfileSwitchButtonToolTip));
+            }
+        }
+
+        public string CodexProfileSwitchButtonText => IsCodexLocalRelaySwitchMode ? "本地切换" : "切换";
+
+        public string CodexProfileSwitchButtonToolTip => IsCodexLocalRelaySwitchMode
+            ? "测试这条记录的 NewAPI，测试通过后只切换本地中转上游，不覆盖 ~/.codex。"
+            : "把这条记录应用到 Codex 配置，切换前自动备份 ~/.codex。";
 
         public bool IsVideoRecording
         {
@@ -3041,12 +3146,24 @@ namespace MyTools.ViewModels
 
         private void EnsureCodexProfilesLoading()
         {
-            if (_codexProfilesLoadRequested)
+            if (_codexProfilesLoadInProgress)
             {
                 return;
             }
 
+            if (_codexProfilesLoadRequested)
+            {
+                if (_codexProfilesLoadedSuccessfully
+                    || CodexProfiles == null
+                    || CodexProfiles.Count > 0
+                    || !File.Exists(CodexProfileLibraryService.ProfilesFilePath))
+                {
+                    return;
+                }
+            }
+
             _codexProfilesLoadRequested = true;
+            _codexProfilesLoadInProgress = true;
             SafeFireAndForget(LoadCodexProfilesAsync());
         }
 
@@ -3465,8 +3582,10 @@ namespace MyTools.ViewModels
             {
                 var file = await CodexProfileLibraryService.LoadAsync(CancellationToken.None);
                 var active = await CodexProfileLibraryService.LoadActiveAsync(CancellationToken.None);
+                var localRelayStart = await CodexLocalRelayService.TryStartEnabledAsync(CancellationToken.None);
                 await Application.Current.Dispatcher.InvokeAsync(() =>
                 {
+                    IsCodexLocalRelaySwitchMode = localRelayStart.Enabled;
                     foreach (var item in CodexProfiles)
                     {
                         item.PropertyChanged -= CodexProfileItem_OnPropertyChanged;
@@ -3487,16 +3606,55 @@ namespace MyTools.ViewModels
                     }
 
                     SortCodexProfilesByLastApplied();
-                    CodexProfilesStatusMessage = CodexProfiles.Count == 0
+                    var statusMessage = CodexProfiles.Count == 0
                         ? "未保存 Codex 账号档案。请先在 Codex CLI 登录一次，然后点击导入当前账号。"
                         : $"已加载 {CodexProfiles.Count} 个 Codex 账号档案。本机：{Environment.MachineName}";
+                    if (localRelayStart.Enabled)
+                    {
+                        statusMessage += localRelayStart.Success
+                            ? $" 本地中转：{localRelayStart.LocalBaseUrl} 已启动。"
+                            : $" 本地中转启动失败：{localRelayStart.Message}";
+
+                        if (localRelayStart.Success)
+                        {
+                            if (!IsCodexLocalRelayStatusOk)
+                            {
+                                SetCodexLocalRelayStatus(
+                                    CodexProfileItem.RelayStatusUnknown,
+                                    $"本地中转已启动：{localRelayStart.LocalBaseUrl}。点击“启动本地中转”测试当前 NewAPI。",
+                                    false);
+                            }
+                        }
+                        else
+                        {
+                            SetCodexLocalRelayStatus(
+                                CodexProfileItem.RelayStatusFailed,
+                                "本地中转启动失败：" + localRelayStart.Message,
+                                true);
+                        }
+                    }
+                    else if (!IsCodexLocalRelayStatusOk)
+                    {
+                        SetCodexLocalRelayStatus(
+                            CodexProfileItem.RelayStatusUnknown,
+                            "本地中转未启动。点击“启动本地中转”后会测试当前 NewAPI。",
+                            false);
+                    }
+
+                    CodexProfilesStatusMessage = statusMessage;
                     UpdateCodexRotationState();
+                    _codexProfilesLoadedSuccessfully = true;
                 });
             }
             catch (Exception ex)
             {
                 AppLogService.Error(new InvalidOperationException(ex.Message), "Loading Codex config profiles failed with {ErrorType}", ex.GetType().Name);
+                _codexProfilesLoadedSuccessfully = false;
                 CodexProfilesStatusMessage = "读取 Codex 配置记录失败。";
+            }
+            finally
+            {
+                _codexProfilesLoadInProgress = false;
             }
         }
 
@@ -3749,9 +3907,13 @@ namespace MyTools.ViewModels
                 return;
             }
 
+            var localRelayEnabled = await CodexLocalRelayService.IsEnabledAsync(CancellationToken.None).ConfigureAwait(true);
+            var confirmMessage = localRelayEnabled
+                ? $"即将通过本地中转切换到「{item.DisplayName}」。\n\n工具会先测试目标 NewAPI；测试通过后只切换本地中转上游，不覆盖当前 ~/.codex，通常无需重启 Codex App。继续？"
+                : $"即将切换到「{item.DisplayName}」，当前 ~/.codex 将自动备份。继续？";
             var confirm = MessageBox.Show(
-                $"即将切换到「{item.DisplayName}」，当前 ~/.codex 将自动备份。继续？",
-                "切换 Codex 账号",
+                confirmMessage,
+                localRelayEnabled ? "本地中转切换 Codex 账号" : "切换 Codex 账号",
                 MessageBoxButton.OKCancel,
                 MessageBoxImage.Question);
             if (confirm != MessageBoxResult.OK)
@@ -3782,6 +3944,11 @@ namespace MyTools.ViewModels
                     item.ProtectedAuthJsonBase64 = CodexConfigProfileService.ProtectBytesToBase64(authJsonBytes);
                     item.ConfigTomlContentProtected = item.ProtectedConfigTomlBase64;
                     item.AuthJsonContentProtected = item.ProtectedAuthJsonBase64;
+                }
+
+                if (await TrySwitchCodexProfileThroughLocalRelayAsync(item, configTomlBytes, authJsonBytes).ConfigureAwait(true))
+                {
+                    return;
                 }
 
                 var previousActive = CodexProfiles.FirstOrDefault(profile => profile.IsActive)?.DisplayName ?? "codex";
@@ -3821,6 +3988,7 @@ namespace MyTools.ViewModels
             catch (Exception ex)
             {
                 AppLogService.Error(new InvalidOperationException(ex.Message), "Switching Codex profile failed for {ProfileName} with {ErrorType}", SafeCodexLogName(item.DisplayName), ex.GetType().Name);
+                item.IsRelayTesting = false;
                 item.StatusMessage = "切换失败：" + ex.Message;
                 MessageBox.Show(ex.Message, "Codex 账号切换失败", MessageBoxButton.OK, MessageBoxImage.Error);
             }
@@ -3829,6 +3997,109 @@ namespace MyTools.ViewModels
                 item.IsApplying = false;
             }
         }
+
+        private async Task<bool> TrySwitchCodexProfileThroughLocalRelayAsync(CodexProfileItem item, byte[] configTomlBytes, byte[] authJsonBytes)
+        {
+            if (!await CodexLocalRelayService.IsEnabledAsync(CancellationToken.None).ConfigureAwait(true))
+            {
+                return false;
+            }
+
+            item.IsRelayTesting = true;
+            item.RelayTestStatus = CodexProfileItem.RelayStatusTesting;
+            item.RelayTestMessage = "切换前正在测试中转...";
+            item.StatusMessage = "正在测试本地中转上游...";
+            CodexProfilesStatusMessage = $"正在测试「{item.DisplayName}」的 NewAPI 中转...";
+
+            var relayTest = await CodexRelayTestService.TestAsync(configTomlBytes, authJsonBytes, CancellationToken.None).ConfigureAwait(true);
+            item.IsRelayTesting = false;
+            item.RelayTestStatus = relayTest.Success ? CodexProfileItem.RelayStatusOk : CodexProfileItem.RelayStatusFailed;
+            item.RelayTestedAt = DateTime.Now;
+            item.RelayTestMessage = LimitRelayTestMessage(relayTest.Message);
+
+            if (!relayTest.Success)
+            {
+                item.StatusMessage = "切换停止：中转测试未通过。";
+                CodexProfilesStatusMessage = "本地中转切换已停止：" + item.RelayTestMessage;
+                await SaveCodexProfilesAsync().ConfigureAwait(true);
+                MessageBox.Show(
+                    "目标 NewAPI 测试未通过，已停止切换。\n\n" + item.RelayTestMessage,
+                    "本地中转切换已停止",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                return true;
+            }
+
+            item.StatusMessage = "正在切换本地中转上游...";
+            var relaySwitch = await CodexLocalRelayService
+                .TryApplyProfileAsync(configTomlBytes, authJsonBytes, item.DisplayName, CancellationToken.None)
+                .ConfigureAwait(true);
+
+            if (!relaySwitch.Success)
+            {
+                item.RelayTestStatus = CodexProfileItem.RelayStatusFailed;
+                item.RelayTestMessage = LimitRelayTestMessage(relaySwitch.Message);
+                item.StatusMessage = "切换停止：" + item.RelayTestMessage;
+                CodexProfilesStatusMessage = "本地中转切换已停止：" + relaySwitch.Message;
+                await SaveCodexProfilesAsync().ConfigureAwait(true);
+                MessageBox.Show(
+                    relaySwitch.Message,
+                    "本地中转切换已停止",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                return true;
+            }
+
+            item.LastAppliedAt = DateTime.Now;
+            item.LastImportedAt = item.LastImportedAt == default(DateTime) ? DateTime.UtcNow : item.LastImportedAt;
+            item.AccountEmail = CodexProfileLibraryService.ParseAccountEmail(authJsonBytes);
+            item.AccessTokenExpiresAt = CodexProfileLibraryService.ParseAccessTokenExp(authJsonBytes);
+            item.Status = CodexProfileLibraryService.ComputeStatus(item.AccessTokenExpiresAt);
+            item.StatusMessage = relaySwitch.RequiresCodexRestart
+                ? $"本地中转已切换，Codex 配置已修复：{item.LastAppliedAt:yyyy-MM-dd HH:mm:ss}"
+                : $"本地中转已切换：{item.LastAppliedAt:yyyy-MM-dd HH:mm:ss}";
+
+            foreach (var profile in CodexProfiles)
+            {
+                profile.IsActive = ReferenceEquals(profile, item);
+            }
+
+            await CodexProfileLibraryService.SaveActiveAsync(new CodexActiveFile
+            {
+                ActiveDisplayName = item.DisplayName,
+                SwitchedAtUtc = DateTime.UtcNow
+            }, CancellationToken.None).ConfigureAwait(true);
+
+            CodexProfilesStatusMessage = relaySwitch.RequiresCodexRestart
+                ? $"已通过本地中转切换到「{item.DisplayName}」，并已修复 Codex 固定本地配置。请重启 Codex App 后使用。"
+                : $"已通过本地中转切换到「{item.DisplayName}」。Codex App 下一次请求将使用新的 NewAPI 上游。";
+            SortCodexProfilesByLastApplied();
+            await SaveCodexProfilesAsync().ConfigureAwait(true);
+            UpdateCodexRotationState();
+            AppLogService.Information("Switched Codex local relay to {DisplayName}", SafeCodexLogName(item.DisplayName));
+            if (relaySwitch.RequiresCodexRestart)
+            {
+                var restartNow = MessageBox.Show(
+                    $"已通过本地中转切换到「{item.DisplayName}」，并把 Codex 配置重新固定到本地 relay。\n\nCodex 固定连接：{relaySwitch.LocalBaseUrl}\n当前上游：{relaySwitch.UpstreamBaseUrl}\n\n当前已运行的 Codex App 后端仍可能使用旧配置。是否现在温和重启 Codex App？",
+                    "Codex 本地中转配置已修复",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Information);
+                if (restartNow == MessageBoxResult.Yes)
+                {
+                    await RestartCodexDesktopCoreAsync().ConfigureAwait(true);
+                }
+            }
+            else
+            {
+                MessageBox.Show(
+                    $"已通过本地中转切换到「{item.DisplayName}」。\n\nCodex 固定连接：{relaySwitch.LocalBaseUrl}\n当前上游：{relaySwitch.UpstreamBaseUrl}\n\n正在生成的回复不会被强行中断；下一次请求会使用新上游，通常无需重启 Codex App。",
+                    "Codex 本地中转已切换",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
+            return true;
+        }
+
         private async Task ExportCodexProfileAsync(object parameter)
         {
             if (!(parameter is CodexProfileItem item))
@@ -4484,9 +4755,46 @@ namespace MyTools.ViewModels
             }
 
             await SaveCodexProfilesAsync();
-            CodexProfilesStatusMessage = $"正在切换 Codex 账号...";
+            var nextCandidate = FindNextCodexRotationTarget(current);
+            if (nextCandidate != null)
+            {
+                nextCandidate.IsRelayTesting = true;
+                nextCandidate.RelayTestStatus = CodexProfileItem.RelayStatusTesting;
+                nextCandidate.RelayTestMessage = "轮换前正在测试中转...";
+                CodexProfilesStatusMessage = $"正在测试将要轮换的中转：{nextCandidate.DisplayName}...";
+            }
+            else
+            {
+                CodexProfilesStatusMessage = "正在切换 Codex 账号...";
+            }
+
             var result = await CodexRotationService.RotateToNextAsync(
                 current, CodexRotationSettings.NotifyOnSwitch, CancellationToken.None);
+
+            if (nextCandidate != null)
+            {
+                nextCandidate.IsRelayTesting = false;
+            }
+
+            if (result.RelayTestExecuted)
+            {
+                var testedItem = CodexProfiles?.FirstOrDefault(p =>
+                    p != null && string.Equals(p.DisplayName, result.ToProfile, StringComparison.OrdinalIgnoreCase));
+                if (testedItem != null)
+                {
+                    testedItem.RelayTestStatus = string.IsNullOrWhiteSpace(result.RelayTestStatus)
+                        ? (result.RelayTestSucceeded ? CodexProfileItem.RelayStatusOk : CodexProfileItem.RelayStatusFailed)
+                        : result.RelayTestStatus;
+                    testedItem.RelayTestedAt = result.RelayTestedAt ?? DateTime.Now;
+                    testedItem.RelayTestMessage = LimitRelayTestMessage(result.RelayTestMessage);
+                }
+            }
+            else if (!result.Success && nextCandidate != null)
+            {
+                nextCandidate.RelayTestStatus = CodexProfileItem.RelayStatusFailed;
+                nextCandidate.RelayTestedAt = DateTime.Now;
+                nextCandidate.RelayTestMessage = LimitRelayTestMessage(result.Message);
+            }
 
             if (result.Success)
             {
@@ -4499,23 +4807,52 @@ namespace MyTools.ViewModels
                     next.StatusMessage = $"已轮换：{next.LastAppliedAt:yyyy-MM-dd HH:mm:ss}";
                 }
 
-                CodexProfilesStatusMessage = $"已写入：{result.FromProfile} → {result.ToProfile}。请重启 Codex App 后使用。";
+                CodexProfilesStatusMessage = result.UsedLocalRelaySwitch
+                    ? (result.RequiresCodexRestart
+                        ? $"已切换本地中转：{result.FromProfile} → {result.ToProfile}，并已修复 Codex 固定本地配置。请重启 Codex App 后使用。"
+                        : $"已切换本地中转：{result.FromProfile} → {result.ToProfile}。Codex 下一次请求会使用新上游。")
+                    : (result.UsedHotTokenRefresh
+                        ? $"已热轮换：{result.FromProfile} → {result.ToProfile}。等待 Codex 自动刷新 token。"
+                        : $"已写入：{result.FromProfile} → {result.ToProfile}。请重启 Codex App 后使用。");
                 SortCodexProfilesByLastApplied();
                 await SaveCodexProfilesAsync();
                 UpdateCodexRotationState();
-                var restartNow = MessageBox.Show(
-                    $"已把 Codex 配置写入为「{result.ToProfile}」。\n\n当前已运行的 Codex App 后端不会热加载 auth.json。是否现在温和重启 Codex App？\n\n已保存的对话历史通常会保留；正在生成的回复或正在执行的命令会被中断。请确认当前 Codex 没有正在工作。",
-                    "Codex 账号轮换已写入",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Information);
-                if (restartNow == MessageBoxResult.Yes)
+                if (result.RequiresCodexRestart)
                 {
-                    await RestartCodexDesktopCoreAsync();
+                    var restartTitle = result.UsedLocalRelaySwitch
+                        ? "Codex 本地中转配置已修复"
+                        : "Codex 账号轮换已写入";
+                    var restartMessage = result.UsedLocalRelaySwitch
+                        ? $"已把本地中转上游切换为「{result.ToProfile}」，并把 Codex 配置重新固定到本地 relay。\n\n当前已运行的 Codex App 后端仍可能使用旧配置。是否现在温和重启 Codex App？\n\n已保存的对话历史通常会保留；正在生成的回复或正在执行的命令会被中断。请确认当前 Codex 没有正在工作。"
+                        : $"已把 Codex 配置写入为「{result.ToProfile}」。\n\n当前已运行的 Codex App 后端不会热加载 auth.json。是否现在温和重启 Codex App？\n\n已保存的对话历史通常会保留；正在生成的回复或正在执行的命令会被中断。请确认当前 Codex 没有正在工作。";
+                    var restartNow = MessageBox.Show(
+                        restartMessage,
+                        restartTitle,
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Information);
+                    if (restartNow == MessageBoxResult.Yes)
+                    {
+                        await RestartCodexDesktopCoreAsync();
+                    }
+                }
+                else
+                {
+                    var liveMessage = result.UsedLocalRelaySwitch
+                        ? $"已把本地中转上游切换为「{result.ToProfile}」。\n\nCodex App 固定连接本地 relay，下一次请求会使用新的 NewAPI base_url 和 key，通常无需重启。"
+                        : $"已把热轮换 token 更新为「{result.ToProfile}」。\n\nCodex App 会按 auth.command 的刷新间隔读取新 token，通常无需重启。";
+                    MessageBox.Show(
+                        liveMessage,
+                        result.UsedLocalRelaySwitch ? "Codex 本地中转已切换" : "Codex 热轮换已更新",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
                 }
             }
             else
             {
-                CodexProfilesStatusMessage = $"轮换失败：{result.Message}";
+                CodexProfilesStatusMessage = result.RelayTestExecuted
+                    ? $"轮换已停止：{result.Message}"
+                    : result.Message;
+                await SaveCodexProfilesAsync();
             }
         }
 
@@ -4532,6 +4869,78 @@ namespace MyTools.ViewModels
             }
 
             await RestartCodexDesktopCoreAsync();
+        }
+
+        private async Task EnableCodexLocalRelayAsync()
+        {
+            try
+            {
+                IsCodexLocalRelayChecking = true;
+                SetCodexLocalRelayStatus(
+                    CodexProfileItem.RelayStatusTesting,
+                    "正在启动本地中转，并通过 relay 测试当前 NewAPI...",
+                    true);
+                CodexProfilesStatusMessage = "正在启动本地中转，并通过 relay 测试当前 NewAPI...";
+
+                var result = await CodexLocalRelayService.StartFromCurrentCodexAndProbeAsync(CancellationToken.None);
+                IsCodexLocalRelaySwitchMode = result.Enabled;
+                CodexProfilesStatusMessage = result.Message;
+                SetCodexLocalRelayStatus(
+                    result.Success ? CodexProfileItem.RelayStatusOk : CodexProfileItem.RelayStatusFailed,
+                    string.IsNullOrWhiteSpace(result.ProbeMessage) ? result.Message : result.ProbeMessage,
+                    true);
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(new InvalidOperationException(ex.Message), "Starting Codex local relay probe failed with {ErrorType}", ex.GetType().Name);
+                CodexProfilesStatusMessage = "启动本地中转失败：" + ex.Message;
+                SetCodexLocalRelayStatus(CodexProfileItem.RelayStatusFailed, ex.Message, true);
+                MessageBox.Show(ex.Message, "启动 Codex 本地中转失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                IsCodexLocalRelayChecking = false;
+            }
+        }
+
+        private async Task RestartCodexWithLocalRelayAsync()
+        {
+            if (!CanRestartCodexWithLocalRelay)
+            {
+                CodexProfilesStatusMessage = "请先启动本地中转，并确认当前 NewAPI 测试通过。";
+                return;
+            }
+
+            var confirm = MessageBox.Show(
+                "将把 Codex 配置固定到 MyTools 本地中转，然后关闭并重新打开 Codex App。\n\n已保存的对话历史通常会保留；正在生成的回复或正在执行的命令会被中断。现在重启吗？",
+                "重启 Codex 使用中转",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+            if (confirm != MessageBoxResult.Yes)
+            {
+                return;
+            }
+
+            try
+            {
+                CodexProfilesStatusMessage = "正在写入 Codex 本地中转配置...";
+                var result = await CodexLocalRelayService.ConfigureCurrentCodexToUseRelayAsync(CancellationToken.None);
+                CodexProfilesStatusMessage = result.Message;
+                if (!result.Success)
+                {
+                    SetCodexLocalRelayStatus(CodexProfileItem.RelayStatusFailed, result.Message, true);
+                    MessageBox.Show(result.Message, "Codex 本地中转未就绪", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                await RestartCodexDesktopCoreAsync();
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(new InvalidOperationException(ex.Message), "Restarting Codex with local relay failed with {ErrorType}", ex.GetType().Name);
+                CodexProfilesStatusMessage = "重启 Codex 使用中转失败：" + ex.Message;
+                MessageBox.Show(ex.Message, "重启 Codex 使用中转失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         private async Task RestartCodexDesktopCoreAsync()
@@ -4621,7 +5030,21 @@ namespace MyTools.ViewModels
                 return;
             }
 
-            var next = CodexProfiles?
+            var next = FindNextCodexRotationTarget(current);
+
+            CodexNextSwitchPreview = next == null
+                ? "无可用轮换目标"
+                : $"当前：{current.DisplayName} → 切换至：{next.DisplayName}";
+        }
+
+        private CodexProfileItem FindNextCodexRotationTarget(CodexProfileItem current)
+        {
+            if (current == null)
+            {
+                return null;
+            }
+
+            return CodexProfiles?
                 .Where(p => p != null
                             && p.EnableRotation
                             && p.Status != CodexProfileLibraryService.StatusExpired
@@ -4629,10 +5052,6 @@ namespace MyTools.ViewModels
                 .OrderBy(p => p.RotationPriority)
                 .ThenBy(p => p.LastAppliedAt ?? DateTime.MinValue)
                 .FirstOrDefault();
-
-            CodexNextSwitchPreview = next == null
-                ? "无可用轮换目标"
-                : $"当前：{current.DisplayName} → 切换至：{next.DisplayName}";
         }
 
         private void UpdateCodexRotationState()
@@ -4642,6 +5061,16 @@ namespace MyTools.ViewModels
             _rotateToNextCodexProfileCommand?.RaiseCanExecuteChanged();
             _selectAllCodexRotationCommand?.RaiseCanExecuteChanged();
             _invertCodexRotationCommand?.RaiseCanExecuteChanged();
+        }
+
+        private void SetCodexLocalRelayStatus(string status, string message, bool updateCheckedAt)
+        {
+            _codexLocalRelayCheckedAt = updateCheckedAt ? DateTime.Now : (DateTime?)null;
+            CodexLocalRelayStatusMessage = string.IsNullOrWhiteSpace(message) ? "本地中转未测试。" : message.Trim();
+            CodexLocalRelayStatus = status;
+            OnPropertyChanged(nameof(CodexLocalRelayDisplayText));
+            OnPropertyChanged(nameof(CanRestartCodexWithLocalRelay));
+            _restartCodexWithLocalRelayCommand?.RaiseCanExecuteChanged();
         }
 
         private static string SafeCodexLogName(string value)
@@ -13368,6 +13797,7 @@ namespace MyTools.ViewModels
             _exportCodexProfileCommand?.RaiseCanExecuteChanged();
             _previewCodexProfileDiffCommand?.RaiseCanExecuteChanged();
             _applyCodexConfigTemplateToAllCommand?.RaiseCanExecuteChanged();
+            _restartCodexWithLocalRelayCommand?.RaiseCanExecuteChanged();
             _copyBenchmarkResultsCommand?.RaiseCanExecuteChanged();
             _exportBenchmarkResultsCommand?.RaiseCanExecuteChanged();
             (RetryConvertQueueItemCommand as AsyncRelayParameterCommand)?.RaiseCanExecuteChanged();

@@ -36,6 +36,36 @@ namespace MyTools
             {
                 CosturaBootstrap.EnsureInitialized();
 
+                if (CodexLocalRelayService.IsRelayProcessMode(e.Args))
+                {
+                    ShutdownMode = ShutdownMode.OnExplicitShutdown;
+                    base.OnStartup(e);
+                    Task.Run(async () =>
+                    {
+                        var exitCode = 0;
+                        try
+                        {
+                            var result = await CodexLocalRelayService.StartRelayProcessModeAsync(CancellationToken.None).ConfigureAwait(false);
+                            if (!result.Success)
+                            {
+                                exitCode = 2;
+                            }
+                            else
+                            {
+                                await Task.Delay(Timeout.Infinite).ConfigureAwait(false);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            exitCode = 3;
+                            LogException("Codex 本地中转后台启动失败", ex);
+                        }
+
+                        Dispatcher.Invoke(() => Shutdown(exitCode));
+                    });
+                    return;
+                }
+
                 bool isNewInstance;
                 _singleInstanceMutex = new Mutex(true, @"Local\MyTools_SingleInstance", out isNewInstance);
                 if (!isNewInstance)

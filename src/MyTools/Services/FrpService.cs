@@ -691,13 +691,13 @@ namespace MyTools.Services
     {
         public static IReadOnlyList<FrpServerPreset> All { get; } = new[]
         {
-            new FrpServerPreset("阿里云主服务器", FrpDefaults.DefaultServerAddress, FrpDefaults.DefaultServerPort, "120.26.50.234 · frps v0.50.0")
+            new FrpServerPreset("阿里云主服务器", FrpDefaults.DefaultServerAddress, FrpDefaults.DefaultServerPort, "47.120.63.249 · frps v0.50.0")
         };
     }
 
     public static class FrpDefaults
     {
-        public const string DefaultServerAddress = "120.26.50.234";
+        public const string DefaultServerAddress = "47.120.63.249";
         public const int DefaultServerPort = 7000;
     }
 }

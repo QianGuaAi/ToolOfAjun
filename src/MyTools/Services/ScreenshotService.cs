@@ -3,6 +3,8 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Windows;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
 namespace MyTools.Services
@@ -54,7 +56,7 @@ namespace MyTools.Services
             var width  = GetSystemMetrics(SM_CXVIRTUALSCREEN);
             var height = GetSystemMetrics(SM_CYVIRTUALSCREEN);
 
-            using (var bitmap = new Bitmap(width, height, PixelFormat.Format32bppArgb))
+            using (var bitmap = new Bitmap(width, height, System.Drawing.Imaging.PixelFormat.Format32bppArgb))
             using (var g = Graphics.FromImage(bitmap))
             {
                 g.CopyFromScreen(left, top, 0, 0, new System.Drawing.Size(width, height),
@@ -108,36 +110,24 @@ namespace MyTools.Services
             BitmapSource finalBmp = null;
             try
             {
-                // 把图先转成 Bgr24 并通过 BMP 编/解码强制实例化为真正的像素位图。
-                // 直接用 FormatConvertedBitmap 是惰性的，部分场景 SetImage 拿不到像素。
-                var converted = src.Format == System.Windows.Media.PixelFormats.Bgr24
+                // 把图先转成 32bpp BGRA 并复制像素，避免区域截图任意宽度在 24bpp DIB
+                // 行对齐上被部分粘贴目标误读，表现为右侧缺失。
+                var converted = src.Format == PixelFormats.Bgra32
                     ? src
-                    : new System.Windows.Media.Imaging.FormatConvertedBitmap(src, System.Windows.Media.PixelFormats.Bgr24, null, 0);
-                if (converted.CanFreeze && !converted.IsFrozen) converted.Freeze();
-
-                using (var ms = new MemoryStream())
-                {
-                    var enc = new System.Windows.Media.Imaging.BmpBitmapEncoder();
-                    enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(converted));
-                    enc.Save(ms);
-                    ms.Position = 0;
-                    var dec = new System.Windows.Media.Imaging.BmpBitmapDecoder(
-                        ms,
-                        System.Windows.Media.Imaging.BitmapCreateOptions.None,
-                        System.Windows.Media.Imaging.BitmapCacheOption.OnLoad);
-                    finalBmp = dec.Frames[0];
-                    if (finalBmp.CanFreeze && !finalBmp.IsFrozen) finalBmp.Freeze();
-                }
+                    : new FormatConvertedBitmap(src, PixelFormats.Bgra32, null, 0);
+                finalBmp = CopyBitmapSource(converted);
+                var dibBytes = CreateDibBytes(finalBmp);
+                var pngBytes = CreatePngBytes(finalBmp);
 
                 // STA 线程要求：保证当前在 UI 线程上调用
                 var disp = System.Windows.Application.Current?.Dispatcher;
                 if (disp == null || disp.CheckAccess())
                 {
-                    System.Windows.Clipboard.SetImage(finalBmp);
+                    SetClipboardData(finalBmp, dibBytes, pngBytes);
                 }
                 else
                 {
-                    disp.Invoke(() => System.Windows.Clipboard.SetImage(finalBmp));
+                    disp.Invoke(() => SetClipboardData(finalBmp, dibBytes, pngBytes));
                 }
                 AppLogService.Information("Clipboard image set ({W}x{H}, {Fmt}).",
                     finalBmp.PixelWidth, finalBmp.PixelHeight, finalBmp.Format);
@@ -150,13 +140,90 @@ namespace MyTools.Services
             }
         }
 
+        private static BitmapSource CopyBitmapSource(BitmapSource source)
+        {
+            var stride = checked(source.PixelWidth * 4);
+            var pixels = new byte[checked(stride * source.PixelHeight)];
+            source.CopyPixels(pixels, stride, 0);
+            var copy = BitmapSource.Create(
+                source.PixelWidth,
+                source.PixelHeight,
+                NormalizeDpi(source.DpiX),
+                NormalizeDpi(source.DpiY),
+                PixelFormats.Bgra32,
+                null,
+                pixels,
+                stride);
+            copy.Freeze();
+            return copy;
+        }
+
+        private static void SetClipboardData(BitmapSource bitmap, byte[] dibBytes, byte[] pngBytes)
+        {
+            var data = new DataObject();
+            data.SetImage(bitmap);
+            data.SetData(DataFormats.Dib, new MemoryStream(dibBytes), false);
+            data.SetData("PNG", new MemoryStream(pngBytes), false);
+            data.SetData("image/png", new MemoryStream(pngBytes), false);
+            Clipboard.SetDataObject(data, true);
+        }
+
+        private static byte[] CreatePngBytes(BitmapSource bitmap)
+        {
+            using (var stream = new MemoryStream())
+            {
+                var encoder = new PngBitmapEncoder();
+                encoder.Frames.Add(BitmapFrame.Create(bitmap));
+                encoder.Save(stream);
+                return stream.ToArray();
+            }
+        }
+
+        private static byte[] CreateDibBytes(BitmapSource bitmap)
+        {
+            var width = bitmap.PixelWidth;
+            var height = bitmap.PixelHeight;
+            var stride = checked(width * 4);
+            var pixels = new byte[checked(stride * height)];
+            bitmap.CopyPixels(pixels, stride, 0);
+
+            using (var stream = new MemoryStream())
+            using (var writer = new BinaryWriter(stream))
+            {
+                writer.Write(40); // BITMAPINFOHEADER
+                writer.Write(width);
+                writer.Write(height); // positive height = bottom-up DIB
+                writer.Write((short)1);
+                writer.Write((short)32);
+                writer.Write(0); // BI_RGB
+                writer.Write(checked(stride * height));
+                writer.Write(0);
+                writer.Write(0);
+                writer.Write(0);
+                writer.Write(0);
+
+                for (var y = height - 1; y >= 0; y--)
+                {
+                    writer.Write(pixels, y * stride, stride);
+                }
+
+                writer.Flush();
+                return stream.ToArray();
+            }
+        }
+
+        private static double NormalizeDpi(double dpi)
+        {
+            return double.IsNaN(dpi) || double.IsInfinity(dpi) || dpi < 10 || dpi > 2400 ? 96.0 : dpi;
+        }
+
         public static BitmapSource ConvertToBitmapSource(Bitmap bitmap)
         {
             // 直接锁定 GDI 位图像素并通过 BitmapSource.Create 复制为一份独立、已冻结的 WPF 位图。
             // 这样产生的 BitmapSource 与原 GDI Bitmap 解耦，且 Freeze 之后可跨线程访问。
             // 之前用 PngBitmapDecoder 的方式在某些条件下 Freeze 后仍会触发"调用线程无法访问此对象"。
             var rect = new System.Drawing.Rectangle(0, 0, bitmap.Width, bitmap.Height);
-            var data = bitmap.LockBits(rect, ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+            var data = bitmap.LockBits(rect, ImageLockMode.ReadOnly, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
             try
             {
                 var bs = BitmapSource.Create(

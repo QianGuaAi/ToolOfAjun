@@ -7,8 +7,114 @@
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
         <viewModels:InverseBoolToVisibilityConverter x:Key="InverseBoolToVis" />
-        <!-- Use global StandardTextBox for consistency; local style kept for minimal diff -->
-        <Style x:Key="FrpVisibleTextBox" TargetType="TextBox" BasedOn="{StaticResource StandardTextBox}" />
+        <SolidColorBrush x:Key="FrpInputForeground" Color="#111827" />
+        <SolidColorBrush x:Key="FrpInputBackground" Color="#FFFFFF" />
+        <SolidColorBrush x:Key="FrpInputBorder" Color="#64748B" />
+        <SolidColorBrush x:Key="FrpInputHint" Color="#475569" />
+        <SolidColorBrush x:Key="FrpInputSelection" Color="#BFDBFE" />
+        <SolidColorBrush x:Key="FrpInputDisabledBackground" Color="#F1F5F9" />
+        <SolidColorBrush x:Key="FrpInputDisabledForeground" Color="#64748B" />
+
+        <Style x:Key="FrpVisibleTextBox" TargetType="TextBox">
+            <Setter Property="Height" Value="36" />
+            <Setter Property="MinHeight" Value="36" />
+            <Setter Property="Padding" Value="10,0" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="FontSize" Value="{StaticResource FontSizeBody}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{StaticResource FrpInputForeground}" />
+            <Setter Property="Background" Value="{StaticResource FrpInputBackground}" />
+            <Setter Property="BorderBrush" Value="{StaticResource FrpInputBorder}" />
+            <Setter Property="BorderThickness" Value="1.25" />
+            <Setter Property="CaretBrush" Value="{StaticResource FrpInputForeground}" />
+            <Setter Property="SelectionBrush" Value="{StaticResource FrpInputSelection}" />
+            <Setter Property="SelectionTextBrush" Value="{StaticResource FrpInputForeground}" />
+            <Setter Property="TextElement.Foreground" Value="{StaticResource FrpInputForeground}" />
+            <Setter Property="materialDesign:HintAssist.Foreground" Value="{StaticResource FrpInputHint}" />
+            <Style.Triggers>
+                <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                    <Setter Property="BorderBrush" Value="{StaticResource BrushAccentPurple}" />
+                    <Setter Property="BorderThickness" Value="2" />
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Background" Value="{StaticResource FrpInputDisabledBackground}" />
+                    <Setter Property="Foreground" Value="{StaticResource FrpInputDisabledForeground}" />
+                    <Setter Property="TextElement.Foreground" Value="{StaticResource FrpInputDisabledForeground}" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="FrpVisiblePasswordBox" TargetType="PasswordBox">
+            <Setter Property="Height" Value="36" />
+            <Setter Property="MinHeight" Value="36" />
+            <Setter Property="Padding" Value="10,0" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="FontSize" Value="{StaticResource FontSizeBody}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{StaticResource FrpInputForeground}" />
+            <Setter Property="Background" Value="{StaticResource FrpInputBackground}" />
+            <Setter Property="BorderBrush" Value="{StaticResource FrpInputBorder}" />
+            <Setter Property="BorderThickness" Value="1.25" />
+            <Setter Property="SelectionBrush" Value="{StaticResource FrpInputSelection}" />
+            <Setter Property="SelectionTextBrush" Value="{StaticResource FrpInputForeground}" />
+            <Setter Property="TextElement.Foreground" Value="{StaticResource FrpInputForeground}" />
+            <Setter Property="materialDesign:HintAssist.IsFloating" Value="False" />
+            <Setter Property="materialDesign:HintAssist.Foreground" Value="{StaticResource FrpInputHint}" />
+            <Style.Triggers>
+                <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                    <Setter Property="BorderBrush" Value="{StaticResource BrushAccentPurple}" />
+                    <Setter Property="BorderThickness" Value="2" />
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Background" Value="{StaticResource FrpInputDisabledBackground}" />
+                    <Setter Property="Foreground" Value="{StaticResource FrpInputDisabledForeground}" />
+                    <Setter Property="TextElement.Foreground" Value="{StaticResource FrpInputDisabledForeground}" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="FrpVisibleComboBox" TargetType="ComboBox">
+            <Setter Property="Height" Value="36" />
+            <Setter Property="MinHeight" Value="36" />
+            <Setter Property="Padding" Value="10,0" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="FontSize" Value="{StaticResource FontSizeBody}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{StaticResource FrpInputForeground}" />
+            <Setter Property="Background" Value="{StaticResource FrpInputBackground}" />
+            <Setter Property="BorderBrush" Value="{StaticResource FrpInputBorder}" />
+            <Setter Property="BorderThickness" Value="1.25" />
+            <Setter Property="TextElement.Foreground" Value="{StaticResource FrpInputForeground}" />
+            <Setter Property="materialDesign:HintAssist.Foreground" Value="{StaticResource FrpInputHint}" />
+            <Style.Triggers>
+                <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                    <Setter Property="BorderBrush" Value="{StaticResource BrushAccentPurple}" />
+                    <Setter Property="BorderThickness" Value="2" />
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Background" Value="{StaticResource FrpInputDisabledBackground}" />
+                    <Setter Property="Foreground" Value="{StaticResource FrpInputDisabledForeground}" />
+                    <Setter Property="TextElement.Foreground" Value="{StaticResource FrpInputDisabledForeground}" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="FrpVisibleComboBoxItem" TargetType="ComboBoxItem">
+            <Setter Property="Foreground" Value="{StaticResource FrpInputForeground}" />
+            <Setter Property="Background" Value="{StaticResource FrpInputBackground}" />
+            <Setter Property="Padding" Value="10,6" />
+            <Setter Property="FontSize" Value="{StaticResource FontSizeBody}" />
+            <Style.Triggers>
+                <Trigger Property="IsHighlighted" Value="True">
+                    <Setter Property="Background" Value="#EEF2FF" />
+                    <Setter Property="Foreground" Value="{StaticResource FrpInputForeground}" />
+                </Trigger>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="#E0E7FF" />
+                    <Setter Property="Foreground" Value="{StaticResource FrpInputForeground}" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
     </UserControl.Resources>
 
     <Grid Margin="16">
@@ -57,14 +163,14 @@
 
                         <ComboBox ItemsSource="{Binding ServerPresets}"
                                   SelectedItem="{Binding SelectedServerPreset, Mode=TwoWay}"
-                                  Style="{StaticResource StandardComboBox}"
-                                  Foreground="{DynamicResource MaterialDesignBody}"
+                                  Style="{StaticResource FrpVisibleComboBox}"
+                                  ItemContainerStyle="{StaticResource FrpVisibleComboBoxItem}"
                                   materialDesign:HintAssist.Hint="选择服务器预设（自动填入地址和端口）"
                                   materialDesign:HintAssist.IsFloating="False"
                                   Margin="0,0,0,8">
                             <ComboBox.ItemTemplate>
                                 <DataTemplate>
-                                    <TextBlock Text="{Binding DisplayName}" Foreground="{DynamicResource MaterialDesignBody}" />
+                                    <TextBlock Text="{Binding DisplayName}" Foreground="{StaticResource FrpInputForeground}" />
                                 </DataTemplate>
                             </ComboBox.ItemTemplate>
                         </ComboBox>
@@ -107,8 +213,7 @@
 
                                 <Grid Grid.Column="0">
                                     <PasswordBox x:Name="FrpTokenBox"
-                                                 Height="36"
-                                                 Style="{StaticResource MaterialDesignOutlinedPasswordBox}"
+                                                 Style="{StaticResource FrpVisiblePasswordBox}"
                                                  materialDesign:HintAssist.Hint="frps.ini 里 token = 后面的密码"
                                                  materialDesign:HintAssist.IsFloating="False"
                                                  PasswordChar="*"
@@ -161,14 +266,14 @@
 
                         <ComboBox ItemsSource="{Binding PortPresets}"
                                   SelectedItem="{Binding SelectedPortPreset, Mode=TwoWay}"
-                                  Style="{StaticResource StandardComboBox}"
-                                  Foreground="{DynamicResource MaterialDesignBody}"
+                                  Style="{StaticResource FrpVisibleComboBox}"
+                                  ItemContainerStyle="{StaticResource FrpVisibleComboBoxItem}"
                                   materialDesign:HintAssist.Hint="选择常用预设（自动填入下方端口）"
                                   materialDesign:HintAssist.IsFloating="False"
                                   Margin="0,0,0,8">
                             <ComboBox.ItemTemplate>
                                 <DataTemplate>
-                                    <TextBlock Text="{Binding DisplayName}" Foreground="{DynamicResource MaterialDesignBody}" />
+                                    <TextBlock Text="{Binding DisplayName}" Foreground="{StaticResource FrpInputForeground}" />
                                 </DataTemplate>
                             </ComboBox.ItemTemplate>
                         </ComboBox>

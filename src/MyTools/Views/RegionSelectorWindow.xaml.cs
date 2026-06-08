@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
@@ -15,10 +16,12 @@ namespace MyTools.Views
     public partial class RegionSelectorWindow : Window
     {
         [DllImport("user32.dll")] private static extern int GetSystemMetrics(int nIndex);
+        [DllImport("user32.dll", SetLastError = true)] private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, uint uFlags);
         private const int SM_XVIRTUALSCREEN = 76;
         private const int SM_YVIRTUALSCREEN = 77;
         private const int SM_CXVIRTUALSCREEN = 78;
         private const int SM_CYVIRTUALSCREEN = 79;
+        private const uint SWP_NOZORDER = 0x0004;
 
         private readonly BitmapSource _snapshot;
         private readonly int _virtualWidthPx;
@@ -46,16 +49,8 @@ namespace MyTools.Views
             BackgroundImage.Source = _snapshot;
             SelectionImage.Source = _snapshot;
 
-            // 把窗口铺满整个虚拟屏幕（DIP）。
-            // 因为本进程是 Per-Monitor V2 DPI-aware：
-            // - WPF 的 Top/Left/Width/Height 单位是 "WPF DIP（按主显示器 DPI）"；
-            //   而 GetSystemMetrics 返回物理像素。这里把进程上下文 DPI 用 PresentationSource 推算出来。
-            // 简化处理：用主显示器 DPI。
-            var dpi = VisualTreeHelper.GetDpi(this);
-            Left = virtualLeftPx / dpi.DpiScaleX;
-            Top = virtualTopPx / dpi.DpiScaleY;
-            Width = _virtualWidthPx / dpi.DpiScaleX;
-            Height = _virtualHeightPx / dpi.DpiScaleY;
+            PlaceWindowByFallbackDpi(virtualLeftPx, virtualTopPx);
+            SourceInitialized += (s, e) => PlaceWindowByHwndDpi(virtualLeftPx, virtualTopPx);
 
             Loaded += (s, e) =>
             {
@@ -145,10 +140,10 @@ namespace MyTools.Views
             double y = Canvas.GetTop(SelectionBorder);
 
             var scale = GetSnapshotScale();
-            int xPx = (int)Math.Round(x * scale.X);
-            int yPx = (int)Math.Round(y * scale.Y);
-            int rightPx = (int)Math.Round((x + w) * scale.X);
-            int bottomPx = (int)Math.Round((y + h) * scale.Y);
+            int xPx = (int)Math.Floor(x * scale.X);
+            int yPx = (int)Math.Floor(y * scale.Y);
+            int rightPx = (int)Math.Ceiling((x + w) * scale.X);
+            int bottomPx = (int)Math.Ceiling((y + h) * scale.Y);
             xPx = Clamp(xPx, 0, _snapshot.PixelWidth - 1);
             yPx = Clamp(yPx, 0, _snapshot.PixelHeight - 1);
             rightPx = Clamp(rightPx, xPx + 1, _snapshot.PixelWidth);
@@ -172,6 +167,41 @@ namespace MyTools.Views
             }
 
             return new Point(_snapshot.PixelWidth / width, _snapshot.PixelHeight / height);
+        }
+
+        private void PlaceWindowByFallbackDpi(int virtualLeftPx, int virtualTopPx)
+        {
+            var dpi = VisualTreeHelper.GetDpi(this);
+            Left = virtualLeftPx / dpi.DpiScaleX;
+            Top = virtualTopPx / dpi.DpiScaleY;
+            Width = _virtualWidthPx / dpi.DpiScaleX;
+            Height = _virtualHeightPx / dpi.DpiScaleY;
+        }
+
+        private void PlaceWindowByHwndDpi(int virtualLeftPx, int virtualTopPx)
+        {
+            try
+            {
+                var source = PresentationSource.FromVisual(this);
+                var transform = source?.CompositionTarget?.TransformFromDevice ?? Matrix.Identity;
+                var topLeftDip = transform.Transform(new Point(virtualLeftPx, virtualTopPx));
+                var bottomRightDip = transform.Transform(new Point(virtualLeftPx + _virtualWidthPx, virtualTopPx + _virtualHeightPx));
+
+                Left = topLeftDip.X;
+                Top = topLeftDip.Y;
+                Width = Math.Max(1, bottomRightDip.X - topLeftDip.X);
+                Height = Math.Max(1, bottomRightDip.Y - topLeftDip.Y);
+
+                var hwnd = new WindowInteropHelper(this).Handle;
+                if (hwnd != IntPtr.Zero)
+                {
+                    SetWindowPos(hwnd, IntPtr.Zero, virtualLeftPx, virtualTopPx, _virtualWidthPx, _virtualHeightPx, SWP_NOZORDER);
+                }
+            }
+            catch (Exception ex)
+            {
+                Services.AppLogService.Warning("Place region selector window failed: {Msg}", ex.Message);
+            }
         }
 
         private static int Clamp(int value, int min, int max)
