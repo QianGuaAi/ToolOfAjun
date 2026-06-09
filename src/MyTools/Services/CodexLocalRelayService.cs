@@ -327,6 +327,48 @@ namespace MyTools.Services
             };
         }
 
+        public static async Task<CodexLocalRelayDisableResult> DisableAsync(CancellationToken ct)
+        {
+            var settings = await LoadSettingsAsync(ct).ConfigureAwait(false);
+            if (settings == null)
+            {
+                StopInCurrentProcess();
+                return new CodexLocalRelayDisableResult
+                {
+                    Success = true,
+                    WasEnabled = false,
+                    Message = "Codex 本地中转未启用；档案按钮已恢复为普通切换。"
+                };
+            }
+
+            settings = NormalizeSettings(settings);
+            var wasEnabled = settings.Enabled;
+            var shutdownRequested = false;
+            if (wasEnabled)
+            {
+                shutdownRequested = await TryRequestRelayShutdownAsync(settings, ct).ConfigureAwait(false);
+            }
+
+            settings.Enabled = false;
+            settings.UpdatedAtUtc = DateTime.UtcNow;
+            await SaveSettingsAsync(settings, ct).ConfigureAwait(false);
+            StopInCurrentProcess();
+
+            AppLogService.Information("Codex local relay disabled on port {Port}", settings.Port);
+            return new CodexLocalRelayDisableResult
+            {
+                Success = true,
+                WasEnabled = wasEnabled,
+                ShutdownRequested = shutdownRequested,
+                LocalBaseUrl = settings.LocalBaseUrl,
+                Message = wasEnabled
+                    ? (shutdownRequested
+                        ? "已停止使用 Codex 本地中转；档案按钮已恢复为“切换”。"
+                        : "已停用 Codex 本地中转设置；档案按钮已恢复为“切换”。如果旧 relay 进程仍在监听，它会因设置停用而不再转发请求。")
+                    : "Codex 本地中转原本未启用；档案按钮已恢复为普通切换。"
+            };
+        }
+
         private static CodexLocalRelayApplyResult Stop(string message)
         {
             return new CodexLocalRelayApplyResult
@@ -579,7 +621,8 @@ namespace MyTools.Services
             var text = configText ?? string.Empty;
             return text.IndexOf("model_provider = \"mytools_local_relay\"", StringComparison.OrdinalIgnoreCase) >= 0
                    && text.IndexOf("[model_providers.mytools_local_relay]", StringComparison.OrdinalIgnoreCase) >= 0
-                   && text.IndexOf(settings.LocalBaseUrl ?? string.Empty, StringComparison.OrdinalIgnoreCase) >= 0;
+                   && text.IndexOf(settings.LocalBaseUrl ?? string.Empty, StringComparison.OrdinalIgnoreCase) >= 0
+                   && HasRootAssignment(text, "disable_response_storage", "false");
         }
 
         private static async Task<CodexProfileSourceFiles> TryReadCurrentCodexFilesAsync(CancellationToken ct)
@@ -672,6 +715,21 @@ namespace MyTools.Services
                             || string.Equals(request.Path, "/health", StringComparison.OrdinalIgnoreCase))
                         {
                             await WritePlainResponseAsync(stream, HttpStatusCode.OK, "MyTools Codex local relay is running.", ct).ConfigureAwait(false);
+                            return;
+                        }
+
+                        if (IsLocalRelayShutdownPath(request.Path))
+                        {
+                            await RefreshRuntimeStateFromSettingsAsync(ct).ConfigureAwait(false);
+                            var shutdownState = GetRuntimeState();
+                            if (shutdownState != null && !IsAuthorized(request, shutdownState.LocalApiToken))
+                            {
+                                await WritePlainResponseAsync(stream, HttpStatusCode.Unauthorized, "Unauthorized.", ct).ConfigureAwait(false);
+                                return;
+                            }
+
+                            await WritePlainResponseAsync(stream, HttpStatusCode.OK, "MyTools Codex local relay is stopping.", ct).ConfigureAwait(false);
+                            _ = Task.Run(StopCurrentRelayProcessSoonAsync);
                             return;
                         }
 
@@ -1007,9 +1065,10 @@ namespace MyTools.Services
         private static string BuildRelayConfig(string configText, CodexLocalRelaySettings settings)
         {
             var lines = SplitLines(RemoveRelayProviderSections(configText, settings.ProviderId)).ToList();
-            var withProvider = SetRootModelProvider(lines, settings.ProviderId);
+            var withProvider = SetRootModelProvider(lines, settings.ProviderId).ToList();
+            var withResponseStorage = SetRootAssignment(withProvider, "disable_response_storage", "false");
             var builder = new StringBuilder();
-            foreach (var line in withProvider)
+            foreach (var line in withResponseStorage)
             {
                 builder.AppendLine(line);
             }
@@ -1071,6 +1130,70 @@ namespace MyTools.Services
             }
 
             return result;
+        }
+
+        private static IEnumerable<string> SetRootAssignment(IList<string> lines, string key, string valueLiteral)
+        {
+            var result = new List<string>();
+            var replaced = false;
+            var inserted = false;
+            var inTable = false;
+
+            foreach (var line in lines ?? new List<string>())
+            {
+                var trimmed = (line ?? string.Empty).Trim();
+                if (trimmed.StartsWith("[", StringComparison.Ordinal) && trimmed.EndsWith("]", StringComparison.Ordinal))
+                {
+                    if (!replaced && !inserted)
+                    {
+                        result.Add(key + " = " + valueLiteral);
+                        inserted = true;
+                    }
+
+                    inTable = true;
+                }
+
+                if (!inTable && IsAssignment(trimmed, key))
+                {
+                    result.Add(key + " = " + valueLiteral);
+                    replaced = true;
+                    continue;
+                }
+
+                result.Add(line ?? string.Empty);
+            }
+
+            if (!replaced && !inserted)
+            {
+                result.Insert(0, key + " = " + valueLiteral);
+            }
+
+            return result;
+        }
+
+        private static bool HasRootAssignment(string configText, string key, string expectedValue)
+        {
+            var inTable = false;
+            foreach (var line in SplitLines(configText))
+            {
+                var trimmed = (line ?? string.Empty).Trim();
+                if (trimmed.StartsWith("[", StringComparison.Ordinal) && trimmed.EndsWith("]", StringComparison.Ordinal))
+                {
+                    inTable = true;
+                    continue;
+                }
+
+                if (inTable || !IsAssignment(trimmed, key))
+                {
+                    continue;
+                }
+
+                var index = trimmed.IndexOf('=');
+                var value = index >= 0 ? trimmed.Substring(index + 1).Trim() : string.Empty;
+                return string.Equals(value, expectedValue, StringComparison.OrdinalIgnoreCase);
+            }
+
+            return false;
         }
 
         private static string RemoveRelayProviderSections(string configText, string providerId)
@@ -1363,6 +1486,99 @@ $plainBytes = [System.Security.Cryptography.ProtectedData]::Unprotect(
 
                 return Encoding.UTF8.GetString(memory.ToArray());
             }
+        }
+
+        private static async Task<bool> TryRequestRelayShutdownAsync(CodexLocalRelaySettings settings, CancellationToken ct)
+        {
+            try
+            {
+                if (settings == null || settings.Port <= 0)
+                {
+                    return false;
+                }
+
+                var localToken = string.Empty;
+                try
+                {
+                    localToken = UnprotectString(settings.ProtectedLocalApiTokenBase64);
+                }
+                catch
+                {
+                    localToken = string.Empty;
+                }
+
+                using (var client = new TcpClient())
+                {
+                    var connectTask = client.ConnectAsync(IPAddress.Loopback, settings.Port);
+                    if (await Task.WhenAny(connectTask, Task.Delay(500, ct)).ConfigureAwait(false) != connectTask)
+                    {
+                        return false;
+                    }
+
+                    await connectTask.ConfigureAwait(false);
+                    using (var stream = client.GetStream())
+                    {
+                        var authorization = string.IsNullOrWhiteSpace(localToken)
+                            ? string.Empty
+                            : "Authorization: Bearer " + localToken.Replace("\r", string.Empty).Replace("\n", string.Empty) + "\r\n";
+                        var request = Encoding.ASCII.GetBytes(
+                            "POST /__mytools/stop HTTP/1.1\r\n"
+                            + "Host: 127.0.0.1\r\n"
+                            + authorization
+                            + "Content-Length: 0\r\n"
+                            + "Connection: close\r\n\r\n");
+                        await stream.WriteAsync(request, 0, request.Length, ct).ConfigureAwait(false);
+                        var text = await ReadLocalRelayHealthResponseAsync(stream, ct).ConfigureAwait(false);
+                        return text.IndexOf("200 OK", StringComparison.OrdinalIgnoreCase) >= 0
+                               || text.IndexOf("local relay is stopping", StringComparison.OrdinalIgnoreCase) >= 0;
+                    }
+                }
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static bool IsLocalRelayShutdownPath(string path)
+        {
+            return string.Equals(path, "/__mytools/stop", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static async Task StopCurrentRelayProcessSoonAsync()
+        {
+            try
+            {
+                await Task.Delay(150).ConfigureAwait(false);
+            }
+            catch
+            {
+            }
+
+            StopInCurrentProcess();
+            if (IsRelayProcessMode(Environment.GetCommandLineArgs()))
+            {
+                Environment.Exit(0);
+            }
+        }
+
+        private static void StopInCurrentProcess()
+        {
+            TcpListener listener;
+            CancellationTokenSource listenerCts;
+            lock (SyncRoot)
+            {
+                _runtimeState = null;
+                listener = _listener;
+                listenerCts = _listenerCts;
+                _listener = null;
+                _listenerCts = null;
+                _acceptLoopTask = null;
+            }
+
+            try { listenerCts?.Cancel(); } catch { }
+            try { listener?.Stop(); } catch { }
+            try { listenerCts?.Dispose(); } catch { }
         }
 
         private static string ResolveCurrentExecutablePath()
@@ -1672,6 +1888,15 @@ $plainBytes = [System.Security.Cryptography.ProtectedData]::Unprotect(
         public bool Success { get; set; }
         public string LocalBaseUrl { get; set; }
         public string UpstreamBaseUrl { get; set; }
+        public string Message { get; set; }
+    }
+
+    public sealed class CodexLocalRelayDisableResult
+    {
+        public bool Success { get; set; }
+        public bool WasEnabled { get; set; }
+        public bool ShutdownRequested { get; set; }
+        public string LocalBaseUrl { get; set; }
         public string Message { get; set; }
     }
 

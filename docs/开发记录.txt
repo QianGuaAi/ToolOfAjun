@@ -1,5 +1,12 @@
 # 开发记录
 
+## [2026-06-09] Codex 停止使用本地中转
+- Codex 配置面板新增“停止使用本地中转”按钮；点击后禁用 `%LOCALAPPDATA%\MyTools\Codex\LocalRelay\local-relay.json` 的 `Enabled` 状态，请求隐藏 relay 退出，并把所有档案行主按钮从“本地切换”恢复为“切换”。
+- `CodexLocalRelayService` 新增禁用流程和本地 `/__mytools/stop` 关闭入口；新版本 relay 收到授权停止请求后会关闭监听并退出后台进程，旧 relay 若仍在监听也会因设置停用而不再转发请求。
+- 本地 relay 固定 Codex 配置时，新增根级 `disable_response_storage = false` 规范化；已固定到 relay 但仍关闭 response storage 的旧配置会触发备份和修复，避免 Codex 重启后续跑原会话时服务端找不到上一条 Responses API 状态。
+- `MainViewModel` 新增 `DisableCodexLocalRelayCommand` 与 `CanDisableCodexLocalRelay`，构造期仅新增命令对象创建，不执行磁盘、网络、注册表、WMI 或后台批量任务；已补充启动基线说明。
+- 同步更新 `docs/功能说明.md` 与 `docs/程序逻辑.md` 的本地中转停用逻辑。
+
 ## [2026-06-08] Codex 过期提醒与 429 自动热轮换
 - Codex 配置页新增过期提醒：档案加载后顶部汇总“已过期 / 即将过期”数量，单个档案状态旁显示“即将过期”或“已过期，请刷新后再轮换”；提醒仅由 `AccessTokenExpiresAt` 与 `Status` 计算，不新增持久化字段。
 - 新增 `CodexRateLimitLogMonitorService`：只读打开 `%USERPROFILE%\.codex\logs_2.sqlite`，首次读取 `MAX(id)` 作为基线，之后每 20 秒增量读取最多 50 行，识别 `codex.rate_limits` / rate-limit 日志中的 `allowed=false` 或 `limit_reached=true`，只返回 log id、时间和 reset 摘要，不记录日志正文、token 或请求内容；打开 SQLite 前设置进程级 `SQLite_ConfigureDirectory` 与 `SQLite_NoPlugins`，确保单文件嵌入的 SQLite 原生依赖可定位。

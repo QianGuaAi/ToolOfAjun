@@ -1683,6 +1683,7 @@
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
@@ -1739,6 +1740,14 @@
                                             Padding="8,2"
                                             Margin="6,0,0,0" />
                                     <Button Grid.Column="4"
+                                            Content="停止使用本地中转"
+                                            Command="{Binding DisableCodexLocalRelayCommand}"
+                                            IsEnabled="{Binding CanDisableCodexLocalRelay}"
+                                            ToolTip="停用 MyTools 本地 relay 设置，并把档案按钮恢复为普通切换。"
+                                            Style="{StaticResource CodexCompactOutlinedButton}"
+                                            Padding="8,2"
+                                            Margin="6,0,0,0" />
+                                    <Button Grid.Column="5"
                                             Content="重启 Codex 使用中转"
                                             Command="{Binding RestartCodexWithLocalRelayCommand}"
                                             IsEnabled="{Binding CanRestartCodexWithLocalRelay}"
@@ -1746,19 +1755,19 @@
                                             Style="{StaticResource CodexCompactOutlinedButton}"
                                             Padding="8,2"
                                             Margin="6,0,0,0" />
-                                    <Button Grid.Column="5"
+                                    <Button Grid.Column="6"
                                             Content="全选轮换"
                                             Command="{Binding SelectAllCodexRotationCommand}"
                                             Style="{StaticResource CodexCompactOutlinedButton}"
                                             Padding="8,2"
                                             Margin="6,0,0,0" />
-                                    <Button Grid.Column="6"
+                                    <Button Grid.Column="7"
                                             Content="反选轮换"
                                             Command="{Binding InvertCodexRotationCommand}"
                                             Style="{StaticResource CodexCompactOutlinedButton}"
                                             Padding="8,2"
                                             Margin="6,0,0,0" />
-                                    <StackPanel Grid.Column="7"
+                                    <StackPanel Grid.Column="8"
                                                 Margin="12,0,0,0"
                                                 VerticalAlignment="Center">
                                         <TextBlock Text="{Binding CodexNextSwitchPreview}"
@@ -1789,7 +1798,7 @@
                                                        Style="{StaticResource TextCaption}" />
                                         </WrapPanel>
                                     </StackPanel>
-                                    <CheckBox Grid.Column="8"
+                                    <CheckBox Grid.Column="9"
                                               Content="轮换后通知"
                                               IsChecked="{Binding CodexRotationSettings.NotifyOnSwitch}"
                                               VerticalAlignment="Center"

@@ -263,6 +263,7 @@ namespace MyTools.ViewModels
         private readonly AsyncRelayCommand _rotateToNextCodexProfileCommand;
         private readonly AsyncRelayCommand _restartCodexDesktopCommand;
         private readonly AsyncRelayCommand _enableCodexLocalRelayCommand;
+        private readonly AsyncRelayCommand _disableCodexLocalRelayCommand;
         private readonly AsyncRelayCommand _restartCodexWithLocalRelayCommand;
         private readonly AsyncRelayParameterCommand _toggleCodexProfileRotationCommand;
         private readonly AsyncRelayCommand _testCodexRelaysCommand;
@@ -626,6 +627,8 @@ namespace MyTools.ViewModels
             RestartCodexDesktopCommand = _restartCodexDesktopCommand;
             _enableCodexLocalRelayCommand = new AsyncRelayCommand(EnableCodexLocalRelayAsync);
             EnableCodexLocalRelayCommand = _enableCodexLocalRelayCommand;
+            _disableCodexLocalRelayCommand = new AsyncRelayCommand(DisableCodexLocalRelayAsync, () => CanDisableCodexLocalRelay);
+            DisableCodexLocalRelayCommand = _disableCodexLocalRelayCommand;
             _restartCodexWithLocalRelayCommand = new AsyncRelayCommand(RestartCodexWithLocalRelayAsync, () => CanRestartCodexWithLocalRelay);
             RestartCodexWithLocalRelayCommand = _restartCodexWithLocalRelayCommand;
             _toggleCodexProfileRotationCommand = new AsyncRelayParameterCommand(ToggleCodexProfileRotationAsync, parameter => parameter is CodexProfileItem);
@@ -1967,6 +1970,7 @@ namespace MyTools.ViewModels
         public ICommand RotateToNextCodexProfileCommand { get; }
         public ICommand RestartCodexDesktopCommand { get; }
         public ICommand EnableCodexLocalRelayCommand { get; }
+        public ICommand DisableCodexLocalRelayCommand { get; }
         public ICommand RestartCodexWithLocalRelayCommand { get; }
         public ICommand ToggleCodexProfileRotationCommand { get; }
         public ICommand TestCodexRelaysCommand { get; }
@@ -2051,7 +2055,9 @@ namespace MyTools.ViewModels
                 OnPropertyChanged(nameof(IsCodexLocalRelayStatusTesting));
                 OnPropertyChanged(nameof(IsCodexLocalRelayStatusUnknown));
                 OnPropertyChanged(nameof(CanRestartCodexWithLocalRelay));
+                OnPropertyChanged(nameof(CanDisableCodexLocalRelay));
                 _restartCodexWithLocalRelayCommand?.RaiseCanExecuteChanged();
+                _disableCodexLocalRelayCommand?.RaiseCanExecuteChanged();
             }
         }
 
@@ -2064,6 +2070,8 @@ namespace MyTools.ViewModels
         public bool IsCodexLocalRelayStatusUnknown => !IsCodexLocalRelayStatusOk && !IsCodexLocalRelayStatusFailed && !IsCodexLocalRelayStatusTesting;
 
         public bool CanRestartCodexWithLocalRelay => IsCodexLocalRelayStatusOk && !IsCodexLocalRelayChecking;
+
+        public bool CanDisableCodexLocalRelay => IsCodexLocalRelaySwitchMode && !IsCodexLocalRelayChecking;
 
         public string CodexLocalRelayDisplayText
         {
@@ -2086,6 +2094,8 @@ namespace MyTools.ViewModels
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(CodexProfileSwitchButtonText));
                 OnPropertyChanged(nameof(CodexProfileSwitchButtonToolTip));
+                OnPropertyChanged(nameof(CanDisableCodexLocalRelay));
+                _disableCodexLocalRelayCommand?.RaiseCanExecuteChanged();
             }
         }
 
@@ -5043,6 +5053,38 @@ namespace MyTools.ViewModels
                 CodexProfilesStatusMessage = "启动本地中转失败：" + ex.Message;
                 SetCodexLocalRelayStatus(CodexProfileItem.RelayStatusFailed, ex.Message, true);
                 MessageBox.Show(ex.Message, "启动 Codex 本地中转失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                IsCodexLocalRelayChecking = false;
+            }
+        }
+
+        private async Task DisableCodexLocalRelayAsync()
+        {
+            try
+            {
+                IsCodexLocalRelayChecking = true;
+                CodexProfilesStatusMessage = "正在停止使用 Codex 本地中转...";
+                var result = await CodexLocalRelayService.DisableAsync(CancellationToken.None);
+                IsCodexLocalRelaySwitchMode = false;
+
+                var message = result.Message ?? "已停止使用 Codex 本地中转；档案按钮已恢复为“切换”。";
+                var followUp = "如需让当前 Codex 配置回到某个真实账号，请点击对应档案的“切换”并按提示重启 Codex App。";
+                CodexProfilesStatusMessage = message + " " + followUp;
+                SetCodexLocalRelayStatus(CodexProfileItem.RelayStatusUnknown, CodexProfilesStatusMessage, true);
+                MessageBox.Show(
+                    CodexProfilesStatusMessage,
+                    "已停止使用 Codex 本地中转",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(new InvalidOperationException(ex.Message), "Disabling Codex local relay failed with {ErrorType}", ex.GetType().Name);
+                CodexProfilesStatusMessage = "停止使用 Codex 本地中转失败：" + ex.Message;
+                SetCodexLocalRelayStatus(CodexProfileItem.RelayStatusFailed, ex.Message, true);
+                MessageBox.Show(ex.Message, "停止使用 Codex 本地中转失败", MessageBoxButton.OK, MessageBoxImage.Error);
             }
             finally
             {
@@ -14154,6 +14196,7 @@ namespace MyTools.ViewModels
             _previewCodexProfileDiffCommand?.RaiseCanExecuteChanged();
             _applyCodexConfigTemplateToAllCommand?.RaiseCanExecuteChanged();
             _copyCodexProfileCommand?.RaiseCanExecuteChanged();
+            _disableCodexLocalRelayCommand?.RaiseCanExecuteChanged();
             _restartCodexWithLocalRelayCommand?.RaiseCanExecuteChanged();
             _copyBenchmarkResultsCommand?.RaiseCanExecuteChanged();
             _exportBenchmarkResultsCommand?.RaiseCanExecuteChanged();
