@@ -22,6 +22,7 @@ namespace MyTools.Services
         private static readonly TimeSpan GracefulCloseTimeout = TimeSpan.FromSeconds(6);
         private static readonly TimeSpan ForceCloseTimeout = TimeSpan.FromSeconds(8);
         private static readonly TimeSpan LaunchDetectTimeout = TimeSpan.FromSeconds(10);
+        private static readonly TimeSpan NoProcessStableDuration = TimeSpan.FromMilliseconds(800);
 
         public static async Task<CodexDesktopRestartResult> RestartAsync(CancellationToken cancellationToken)
         {
@@ -37,14 +38,23 @@ namespace MyTools.Services
                         TryCloseMainWindow(process);
                     }
 
-                    var closed = await WaitForProcessesToExitAsync(codexProcesses, GracefulCloseTimeout, cancellationToken);
+                    DisposeProcesses(codexProcesses);
+                    codexProcesses = null;
+
+                    var closed = await WaitForNoCodexProcessesAsync(GracefulCloseTimeout, cancellationToken);
                     if (!closed)
                     {
-                        DisposeProcesses(codexProcesses);
-                        codexProcesses = GetCodexDesktopProcesses();
-                        killedCount = TryKillProcesses(codexProcesses);
+                        var remainingProcesses = GetCodexDesktopProcesses();
+                        try
+                        {
+                            killedCount = TryKillProcesses(remainingProcesses);
+                        }
+                        finally
+                        {
+                            DisposeProcesses(remainingProcesses);
+                        }
 
-                        closed = await WaitForProcessesToExitAsync(codexProcesses, ForceCloseTimeout, cancellationToken);
+                        closed = await WaitForNoCodexProcessesAsync(ForceCloseTimeout, cancellationToken);
                         if (!closed)
                         {
                             return new CodexDesktopRestartResult
@@ -194,6 +204,47 @@ namespace MyTools.Services
             }
 
             return processList.All(HasExited);
+        }
+
+        private static async Task<bool> WaitForNoCodexProcessesAsync(
+            TimeSpan timeout,
+            CancellationToken cancellationToken)
+        {
+            var deadline = DateTime.UtcNow.Add(timeout);
+            DateTime? noProcessSince = null;
+            while (DateTime.UtcNow < deadline)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var processes = GetCodexDesktopProcesses();
+                try
+                {
+                    if (processes.Count == 0)
+                    {
+                        if (!noProcessSince.HasValue)
+                        {
+                            noProcessSince = DateTime.UtcNow;
+                        }
+
+                        if (DateTime.UtcNow - noProcessSince.Value >= NoProcessStableDuration)
+                        {
+                            return true;
+                        }
+                    }
+                    else
+                    {
+                        noProcessSince = null;
+                    }
+                }
+                finally
+                {
+                    DisposeProcesses(processes);
+                }
+
+                await Task.Delay(250, cancellationToken);
+            }
+
+            return false;
         }
 
         private static async Task<bool> WaitForCodexDesktopStartedAsync(

@@ -132,6 +132,7 @@ namespace MyTools.Services
             byte[] configTomlBytes,
             byte[] authJsonBytes,
             string displayName,
+            string effectiveUpstreamBaseUrl,
             CancellationToken ct)
         {
             var settings = await LoadSettingsAsync(ct).ConfigureAwait(false);
@@ -164,7 +165,7 @@ namespace MyTools.Services
                 return Stop("目标档案 wire_api 与本地中转当前配置不一致；该项属于 Codex config.toml 配置，需完整切换并重启。");
             }
 
-            settings.UpstreamBaseUrl = runtime.BaseUrl.Trim();
+            settings.UpstreamBaseUrl = SelectEffectiveUpstreamBaseUrl(runtime.BaseUrl, effectiveUpstreamBaseUrl);
             settings.ProtectedUpstreamTokenBase64 = ProtectString(runtime.Token);
             settings.WireApi = string.IsNullOrWhiteSpace(settings.WireApi) ? targetWireApi : settings.WireApi;
             settings.ActiveDisplayName = string.IsNullOrWhiteSpace(displayName) ? "Codex 档案" : displayName.Trim();
@@ -193,6 +194,15 @@ namespace MyTools.Services
                     ? "已切换本地中转上游，并修复 Codex 固定本地配置。请重启 Codex App 后使用。"
                     : "已切换本地中转上游，Codex App 下一次请求将使用新的 NewAPI 地址和 key。"
             };
+        }
+
+        public static Task<CodexLocalRelayApplyResult> TryApplyProfileAsync(
+            byte[] configTomlBytes,
+            byte[] authJsonBytes,
+            string displayName,
+            CancellationToken ct)
+        {
+            return TryApplyProfileAsync(configTomlBytes, authJsonBytes, displayName, string.Empty, ct);
         }
 
         public static async Task<bool> IsEnabledAsync(CancellationToken ct)
@@ -751,12 +761,63 @@ namespace MyTools.Services
                         using (var upstreamRequest = BuildUpstreamRequest(request, upstreamUri, state.UpstreamToken))
                         using (var response = await UpstreamClient.SendAsync(upstreamRequest, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false))
                         {
+                            if (!response.IsSuccessStatusCode
+                                && TryBuildV1FallbackUpstreamUri(state.UpstreamBaseUri, state.LocalBasePath, request.Path, request.Query, out var fallbackBaseUri, out var fallbackUri)
+                                && !SameUri(upstreamUri, fallbackUri))
+                            {
+                                AppLogService.Warning(
+                                    "Codex local relay upstream returned HTTP {StatusCode} {ReasonPhrase} for {Method} {Host}{Path}; retrying {RetryPath}",
+                                    (int)response.StatusCode,
+                                    response.ReasonPhrase,
+                                    request.Method,
+                                    upstreamUri.Host,
+                                    upstreamUri.AbsolutePath,
+                                    fallbackUri.AbsolutePath);
+
+                                using (var fallbackRequest = BuildUpstreamRequest(request, fallbackUri, state.UpstreamToken))
+                                using (var fallbackResponse = await UpstreamClient.SendAsync(fallbackRequest, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false))
+                                {
+                                    if (fallbackResponse.IsSuccessStatusCode)
+                                    {
+                                        await TryPersistEffectiveUpstreamBaseUrlAsync(state.UpstreamBaseUri, fallbackBaseUri, ct).ConfigureAwait(false);
+                                    }
+                                    else
+                                    {
+                                        AppLogService.Warning(
+                                            "Codex local relay v1 retry returned HTTP {StatusCode} {ReasonPhrase} for {Method} {Host}{Path}",
+                                            (int)fallbackResponse.StatusCode,
+                                            fallbackResponse.ReasonPhrase,
+                                            request.Method,
+                                            fallbackUri.Host,
+                                            fallbackUri.AbsolutePath);
+                                    }
+
+                                    await WriteUpstreamResponseAsync(stream, fallbackResponse, ct).ConfigureAwait(false);
+                                    return;
+                                }
+                            }
+
+                            if (!response.IsSuccessStatusCode)
+                            {
+                                AppLogService.Warning(
+                                    "Codex local relay upstream returned HTTP {StatusCode} {ReasonPhrase} for {Method} {Host}{Path}",
+                                    (int)response.StatusCode,
+                                    response.ReasonPhrase,
+                                    request.Method,
+                                    upstreamUri.Host,
+                                    upstreamUri.AbsolutePath);
+                            }
+
                             await WriteUpstreamResponseAsync(stream, response, ct).ConfigureAwait(false);
                         }
                     }
                     catch (Exception ex)
                     {
-                        AppLogService.Warning("Codex local relay request failed: {ErrorType}", ex.GetType().Name);
+                        AppLogService.Warning(
+                            "Codex local relay request failed: {ErrorType} for {Method} {Path}",
+                            ex.GetType().Name,
+                            request?.Method,
+                            request?.Path);
                         try
                         {
                             await WritePlainResponseAsync(stream, HttpStatusCode.BadGateway, "Codex local relay request failed.", CancellationToken.None).ConfigureAwait(false);
@@ -1060,6 +1121,127 @@ namespace MyTools.Services
                 : basePath + "/" + relativePath.TrimStart('/');
             builder.Query = (query ?? string.Empty).TrimStart('?');
             return builder.Uri;
+        }
+
+        private static bool TryBuildV1FallbackUpstreamUri(
+            Uri upstreamBaseUri,
+            string localBasePath,
+            string requestPath,
+            string query,
+            out Uri fallbackBaseUri,
+            out Uri fallbackUri)
+        {
+            fallbackBaseUri = null;
+            fallbackUri = null;
+            if (upstreamBaseUri == null)
+            {
+                return false;
+            }
+
+            var basePath = (upstreamBaseUri.AbsolutePath ?? string.Empty).Trim('/');
+            if (basePath.Equals("v1", StringComparison.OrdinalIgnoreCase)
+                || basePath.StartsWith("v1/", StringComparison.OrdinalIgnoreCase)
+                || basePath.EndsWith("/v1", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            var builder = new UriBuilder(upstreamBaseUri);
+            var path = (builder.Path ?? string.Empty).TrimEnd('/');
+            builder.Path = string.IsNullOrWhiteSpace(path) || path == "/"
+                ? "/v1"
+                : path + "/v1";
+            builder.Query = string.Empty;
+            fallbackBaseUri = builder.Uri;
+            fallbackUri = BuildUpstreamUri(fallbackBaseUri, localBasePath, requestPath, query);
+            return true;
+        }
+
+        private static bool SameUri(Uri left, Uri right)
+        {
+            return string.Equals(
+                left?.AbsoluteUri?.TrimEnd('/'),
+                right?.AbsoluteUri?.TrimEnd('/'),
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static async Task TryPersistEffectiveUpstreamBaseUrlAsync(
+            Uri previousBaseUri,
+            Uri effectiveBaseUri,
+            CancellationToken ct)
+        {
+            if (effectiveBaseUri == null || SameUri(previousBaseUri, effectiveBaseUri))
+            {
+                return;
+            }
+
+            try
+            {
+                var settings = await LoadSettingsAsync(ct).ConfigureAwait(false);
+                if (settings == null || !settings.Enabled)
+                {
+                    return;
+                }
+
+                if (!Uri.TryCreate(settings.UpstreamBaseUrl, UriKind.Absolute, out var savedBaseUri)
+                    || !SameUri(savedBaseUri, previousBaseUri))
+                {
+                    return;
+                }
+
+                settings.UpstreamBaseUrl = effectiveBaseUri.ToString().TrimEnd('/');
+                settings.UpdatedAtUtc = DateTime.UtcNow;
+                await SaveSettingsAsync(settings, ct).ConfigureAwait(false);
+
+                lock (SyncRoot)
+                {
+                    if (_runtimeState != null && SameUri(_runtimeState.UpstreamBaseUri, previousBaseUri))
+                    {
+                        _runtimeState.UpstreamBaseUri = effectiveBaseUri;
+                    }
+                }
+
+                AppLogService.Information("Codex local relay persisted effective upstream base path {Host}{Path}", effectiveBaseUri.Host, effectiveBaseUri.AbsolutePath);
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Warning("Persisting Codex local relay effective upstream failed: {ErrorType}", ex.GetType().Name);
+            }
+        }
+
+        private static string SelectEffectiveUpstreamBaseUrl(string configuredBaseUrl, string effectiveBaseUrl)
+        {
+            var configured = (configuredBaseUrl ?? string.Empty).Trim();
+            var effective = (effectiveBaseUrl ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(effective))
+            {
+                return configured;
+            }
+
+            if (!Uri.TryCreate(configured, UriKind.Absolute, out var configuredUri)
+                || !Uri.TryCreate(effective, UriKind.Absolute, out var effectiveUri))
+            {
+                return configured;
+            }
+
+            if (!string.Equals(configuredUri.Scheme, effectiveUri.Scheme, StringComparison.OrdinalIgnoreCase)
+                || !string.Equals(configuredUri.Host, effectiveUri.Host, StringComparison.OrdinalIgnoreCase)
+                || configuredUri.Port != effectiveUri.Port)
+            {
+                return configured;
+            }
+
+            var configuredPath = (configuredUri.AbsolutePath ?? string.Empty).TrimEnd('/');
+            var effectivePath = (effectiveUri.AbsolutePath ?? string.Empty).TrimEnd('/');
+            if (string.IsNullOrWhiteSpace(configuredPath) || configuredPath == "/")
+            {
+                return effective.TrimEnd('/');
+            }
+
+            return effectivePath.Equals(configuredPath, StringComparison.OrdinalIgnoreCase)
+                   || effectivePath.StartsWith(configuredPath + "/", StringComparison.OrdinalIgnoreCase)
+                ? effective.TrimEnd('/')
+                : configured;
         }
 
         private static string BuildRelayConfig(string configText, CodexLocalRelaySettings settings)

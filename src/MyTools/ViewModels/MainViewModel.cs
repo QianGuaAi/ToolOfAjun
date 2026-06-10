@@ -4125,7 +4125,7 @@ namespace MyTools.ViewModels
 
             item.StatusMessage = "正在切换本地中转上游...";
             var relaySwitch = await CodexLocalRelayService
-                .TryApplyProfileAsync(configTomlBytes, authJsonBytes, item.DisplayName, CancellationToken.None)
+                .TryApplyProfileAsync(configTomlBytes, authJsonBytes, item.DisplayName, relayTest.EffectiveBaseUrl, CancellationToken.None)
                 .ConfigureAwait(true);
 
             if (!relaySwitch.Success)

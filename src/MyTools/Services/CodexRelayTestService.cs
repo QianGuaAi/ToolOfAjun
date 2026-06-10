@@ -69,7 +69,10 @@ namespace MyTools.Services
                 {
                     var models = await SendFirstSuccessfulAsync(client, HttpMethod.Get, BuildEndpoints(baseUri, "models"), token, null, ct).ConfigureAwait(false);
                     return models.Success
-                        ? CodexRelayTestResult.Pass($"可用：{baseUri.Host} {models.EndpointPath} 返回 HTTP {(int)models.StatusCode}。", baseUri.Host)
+                        ? CodexRelayTestResult.Pass(
+                            $"可用：{baseUri.Host} {models.EndpointPath} 返回 HTTP {(int)models.StatusCode}。",
+                            baseUri.Host,
+                            BuildEffectiveBaseUrl(models.RequestUri, "models"))
                         : CodexRelayTestResult.Fail(models.Message, baseUri.Host);
                 }
 
@@ -78,7 +81,7 @@ namespace MyTools.Services
                     ["model"] = config.Model,
                     ["input"] = "ping",
                     ["max_output_tokens"] = 1,
-                    ["stream"] = false
+                    ["stream"] = true
                 }.ToString(Formatting.None);
                 RelayHttpProbeResult responses = null;
                 if (ShouldTryWireApi(config, "responses"))
@@ -86,7 +89,10 @@ namespace MyTools.Services
                     responses = await SendFirstSuccessfulAsync(client, HttpMethod.Post, BuildEndpoints(baseUri, "responses"), token, responsesBody, ct).ConfigureAwait(false);
                     if (responses.Success)
                     {
-                        return CodexRelayTestResult.Pass($"可用：{baseUri.Host} {responses.EndpointPath} 返回 HTTP {(int)responses.StatusCode}。", baseUri.Host);
+                        return CodexRelayTestResult.Pass(
+                            $"可用：{baseUri.Host} {responses.EndpointPath} 返回 HTTP {(int)responses.StatusCode}。",
+                            baseUri.Host,
+                            BuildEffectiveBaseUrl(responses.RequestUri, "responses"));
                     }
 
                     if (responses.IsAuthorizationFailure)
@@ -104,11 +110,14 @@ namespace MyTools.Services
                         ["content"] = "ping"
                     }),
                     ["max_tokens"] = 1,
-                    ["stream"] = false
+                    ["stream"] = true
                 }.ToString(Formatting.None);
                 var chat = await SendFirstSuccessfulAsync(client, HttpMethod.Post, BuildEndpoints(baseUri, "chat/completions"), token, chatBody, ct).ConfigureAwait(false);
                 return chat.Success
-                    ? CodexRelayTestResult.Pass($"可用：{baseUri.Host} {chat.EndpointPath} 返回 HTTP {(int)chat.StatusCode}。", baseUri.Host)
+                    ? CodexRelayTestResult.Pass(
+                        $"可用：{baseUri.Host} {chat.EndpointPath} 返回 HTTP {(int)chat.StatusCode}。",
+                        baseUri.Host,
+                        BuildEffectiveBaseUrl(chat.RequestUri, "chat/completions"))
                     : CodexRelayTestResult.Fail(BuildCombinedFailureMessage(responses, chat), baseUri.Host);
             }
         }
@@ -193,6 +202,7 @@ namespace MyTools.Services
                             Success = response.IsSuccessStatusCode,
                             StatusCode = status,
                             EndpointPath = uri.AbsolutePath,
+                            RequestUri = uri,
                             Message = $"HTTP {(int)status} {response.ReasonPhrase}"
                         };
                     }
@@ -511,6 +521,37 @@ namespace MyTools.Services
             return builder.Uri;
         }
 
+        private static string BuildEffectiveBaseUrl(Uri requestUri, string apiRelativePath)
+        {
+            if (requestUri == null)
+            {
+                return string.Empty;
+            }
+
+            var apiPath = "/" + (apiRelativePath ?? string.Empty).Trim('/');
+            var path = requestUri.AbsolutePath ?? string.Empty;
+            var basePath = path;
+            if (!string.IsNullOrWhiteSpace(apiPath)
+                && path.EndsWith(apiPath, StringComparison.OrdinalIgnoreCase))
+            {
+                basePath = path.Substring(0, path.Length - apiPath.Length);
+            }
+
+            if (string.IsNullOrWhiteSpace(basePath))
+            {
+                basePath = "/";
+            }
+
+            var builder = new UriBuilder(requestUri)
+            {
+                Path = basePath.TrimEnd('/'),
+                Query = string.Empty,
+                Fragment = string.Empty
+            };
+
+            return builder.Uri.ToString().TrimEnd('/');
+        }
+
         private static string NormalizeBearerToken(string token)
         {
             var value = (token ?? string.Empty).Trim();
@@ -558,6 +599,7 @@ namespace MyTools.Services
             public bool Success { get; set; }
             public HttpStatusCode StatusCode { get; set; }
             public string EndpointPath { get; set; }
+            public Uri RequestUri { get; set; }
             public string Message { get; set; }
 
             public bool IsAuthorizationFailure =>
@@ -579,14 +621,16 @@ namespace MyTools.Services
         public bool Success { get; set; }
         public string Message { get; set; }
         public string Host { get; set; }
+        public string EffectiveBaseUrl { get; set; }
 
-        public static CodexRelayTestResult Pass(string message, string host)
+        public static CodexRelayTestResult Pass(string message, string host, string effectiveBaseUrl = "")
         {
             return new CodexRelayTestResult
             {
                 Success = true,
                 Message = message ?? string.Empty,
-                Host = host ?? string.Empty
+                Host = host ?? string.Empty,
+                EffectiveBaseUrl = effectiveBaseUrl ?? string.Empty
             };
         }
 

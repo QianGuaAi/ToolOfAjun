@@ -1,5 +1,10 @@
 # 开发记录
 
+## [2026-06-10] Codex 本地中转 Win10 502 路径自愈
+- `CodexRelayTestService` 的 `/responses` 与 `/chat/completions` 探测改为 `stream=true`，并在测试成功时返回实际命中的有效上游基址；手动本地切换与轮换会把该基址写入 `local-relay.json`，避免测试命中 `/v1/...` 但真实请求仍转发到根路径 `/responses`。
+- `CodexLocalRelayService` 在上游返回非 2xx 且保存的上游基址未包含 `/v1` 时，会按同主机同端口自动补 `/v1` 重试一次；重试成功后把有效上游基址写回本地中转设置，同时保持日志脱敏，只记录方法、上游 host、路径、HTTP 状态或异常类型。
+- 同步更新 `docs/功能说明.md` 与 `docs/程序逻辑.md`；本次不修改 `App.OnStartup`、`MainWindow` 构造函数或 `MainViewModel` 构造函数，不新增启动期 IO 或新依赖。验证：`.dotnet\dotnet.exe build src\MyTools\MyTools.csproj -c Release` 通过，0 warning / 0 error。
+
 ## [2026-06-09] Codex 停止使用本地中转
 - Codex 配置面板新增“停止使用本地中转”按钮；点击后禁用 `%LOCALAPPDATA%\MyTools\Codex\LocalRelay\local-relay.json` 的 `Enabled` 状态，请求隐藏 relay 退出，并把所有档案行主按钮从“本地切换”恢复为“切换”。
 - `CodexLocalRelayService` 新增禁用流程和本地 `/__mytools/stop` 关闭入口；新版本 relay 收到授权停止请求后会关闭监听并退出后台进程，旧 relay 若仍在监听也会因设置停用而不再转发请求。

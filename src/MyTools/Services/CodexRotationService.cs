@@ -142,7 +142,9 @@ namespace MyTools.Services
                     };
                 }
 
-                var localRelay = await CodexLocalRelayService.TryApplyProfileAsync(configBytes, authBytes, next.DisplayName, ct).ConfigureAwait(false);
+                var localRelay = await CodexLocalRelayService
+                    .TryApplyProfileAsync(configBytes, authBytes, next.DisplayName, relayTest.EffectiveBaseUrl, ct)
+                    .ConfigureAwait(false);
                 if (localRelay.Success)
                 {
                     var relayActive = new CodexActiveFile
