@@ -1,5 +1,16 @@
 # 开发记录
 
+## [2026-06-10] 重新打包安装程序
+- 临时把仓库内置 `.dotnet` 加入 PATH 后执行 `scripts\Build-Installer.ps1 -Configuration Release -Version 2026.6.10.0`，主程序、卸载器和安装器构建均为 0 warning / 0 error。
+- 输出安装包 `artifacts\installer\MyToolsSetup.exe`，大小 47,059,456 bytes，SHA256 = `72A3E3665B2920BFFF7A8BC5C110C7A9278D836859DD8B1FF498C8E77EB2D324`。
+- Payload 压缩包 `artifacts\installer\MyToolsPayload.zip`，大小 46,861,370 bytes，SHA256 = `01B4D175B6A77B95355C073A1FDB3BCCF5440E0DD92DD3D6A90A151FDD359F31`；安装器文件版本为 `2026.6.10.0`。
+
+## [2026-06-10] 修复 Codex 本地中转连接失败
+- 诊断当前机器 relay 设置为 `Enabled=true`、端口 `48176`、本地固定地址 `http://127.0.0.1:48176/v1`，`/health` 返回 `MyTools Codex local relay is running.`；Codex 当前日志可见真实请求 `http://127.0.0.1:48176/v1/responses` 返回 `200 OK`，原始“重试 5 次连接失败”未复现。
+- 命中修复方向为分支 C 的自愈缺口：旧 `IsCodexConfigPinnedToLocalRelay` 只粗略检查 provider、本地 `base_url` 和 `disable_response_storage=false`，可能把缺失 `wire_api` 或 `[model_providers.mytools_local_relay.auth]` 的半坏配置误判为已固定。
+- `CodexLocalRelayService` 的固定配置判定改为结构化核对根级 provider、`disable_response_storage=false`、本地 `base_url`、`wire_api`、auth command、脚本路径、token 文件路径、`timeout_ms` 与 `refresh_interval_ms`；任一不一致都会触发已有备份流程并重写完整本地中转配置。
+- 本次不新增 NuGet 包，不把本地 token 或上游 key 明文写入文档、日志或 `config.toml`，不修改 `App.OnStartup`、`MainWindow` 构造函数或 `MainViewModel` 构造函数；验证：`.dotnet\dotnet.exe build src\MyTools\MyTools.csproj -c Release` 通过，0 warning / 0 error；Codex 日志中 3 次真实 `http://127.0.0.1:48176/v1/responses` 流式请求均返回 `200 OK`。
+
 ## [2026-06-10] Codex 本地中转 Win10 502 路径自愈
 - `CodexRelayTestService` 的 `/responses` 与 `/chat/completions` 探测改为 `stream=true`，并在测试成功时返回实际命中的有效上游基址；手动本地切换与轮换会把该基址写入 `local-relay.json`，避免测试命中 `/v1/...` 但真实请求仍转发到根路径 `/responses`。
 - `CodexLocalRelayService` 在上游返回非 2xx 且保存的上游基址未包含 `/v1` 时，会按同主机同端口自动补 `/v1` 重试一次；重试成功后把有效上游基址写回本地中转设置，同时保持日志脱敏，只记录方法、上游 host、路径、HTTP 状态或异常类型。

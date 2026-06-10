@@ -628,11 +628,30 @@ namespace MyTools.Services
 
         private static bool IsCodexConfigPinnedToLocalRelay(string configText, CodexLocalRelaySettings settings)
         {
+            settings = NormalizeSettings(settings);
+            if (settings == null)
+            {
+                return false;
+            }
+
             var text = configText ?? string.Empty;
-            return text.IndexOf("model_provider = \"mytools_local_relay\"", StringComparison.OrdinalIgnoreCase) >= 0
-                   && text.IndexOf("[model_providers.mytools_local_relay]", StringComparison.OrdinalIgnoreCase) >= 0
-                   && text.IndexOf(settings.LocalBaseUrl ?? string.Empty, StringComparison.OrdinalIgnoreCase) >= 0
-                   && HasRootAssignment(text, "disable_response_storage", "false");
+            var effectiveWireApi = string.IsNullOrWhiteSpace(settings.WireApi) ? "responses" : settings.WireApi.Trim();
+            var providerTable = "model_providers." + settings.ProviderId;
+            var provider = ReadTableAssignments(text, providerTable);
+            var auth = ReadTableAssignments(text, providerTable + ".auth");
+            return HasRootTomlScalarValue(text, "model_provider", settings.ProviderId)
+                   && HasRootTomlScalarValue(text, "disable_response_storage", "false")
+                   && HasTomlScalarValue(provider, "base_url", settings.LocalBaseUrl)
+                   && HasTomlScalarValue(provider, "wire_api", effectiveWireApi)
+                   && HasTomlScalarValue(auth, "command", "powershell.exe")
+                   && HasTomlArrayEntry(auth, "args", "-NoProfile")
+                   && HasTomlArrayEntry(auth, "args", "-ExecutionPolicy")
+                   && HasTomlArrayEntry(auth, "args", "Bypass")
+                   && HasTomlArrayEntry(auth, "args", "-File")
+                   && HasTomlArrayEntry(auth, "args", settings.ScriptPath)
+                   && HasTomlArrayEntry(auth, "args", settings.LocalTokenPath)
+                   && HasTomlScalarValue(auth, "timeout_ms", "5000")
+                   && HasTomlScalarValue(auth, "refresh_interval_ms", "60000");
         }
 
         private static async Task<CodexProfileSourceFiles> TryReadCurrentCodexFilesAsync(CancellationToken ct)
@@ -1376,6 +1395,217 @@ namespace MyTools.Services
             }
 
             return false;
+        }
+
+        private static bool HasRootTomlScalarValue(string configText, string key, string expectedValue)
+        {
+            var inTable = false;
+            foreach (var line in SplitLines(configText))
+            {
+                var trimmed = (line ?? string.Empty).Trim();
+                if (trimmed.StartsWith("[", StringComparison.Ordinal) && trimmed.EndsWith("]", StringComparison.Ordinal))
+                {
+                    inTable = true;
+                    continue;
+                }
+
+                if (inTable || !IsAssignment(trimmed, key))
+                {
+                    continue;
+                }
+
+                var index = trimmed.IndexOf('=');
+                var value = index >= 0 ? TrimTomlComment(trimmed.Substring(index + 1)).Trim() : string.Empty;
+                return string.Equals(
+                    UnquoteTomlScalar(value),
+                    expectedValue ?? string.Empty,
+                    StringComparison.OrdinalIgnoreCase);
+            }
+
+            return false;
+        }
+
+        private static Dictionary<string, string> ReadTableAssignments(string configText, string tableName)
+        {
+            var assignments = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var inTargetTable = false;
+            foreach (var line in SplitLines(configText))
+            {
+                var trimmed = (line ?? string.Empty).Trim();
+                if (trimmed.Length == 0 || trimmed.StartsWith("#", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                if (trimmed.StartsWith("[", StringComparison.Ordinal) && trimmed.EndsWith("]", StringComparison.Ordinal))
+                {
+                    inTargetTable = string.Equals(
+                        trimmed.Substring(1, trimmed.Length - 2).Trim(),
+                        tableName,
+                        StringComparison.OrdinalIgnoreCase);
+                    continue;
+                }
+
+                if (!inTargetTable)
+                {
+                    continue;
+                }
+
+                var index = trimmed.IndexOf('=');
+                if (index <= 0)
+                {
+                    continue;
+                }
+
+                var key = trimmed.Substring(0, index).Trim();
+                var value = TrimTomlComment(trimmed.Substring(index + 1)).Trim();
+                if (key.Length > 0)
+                {
+                    assignments[key] = value;
+                }
+            }
+
+            return assignments;
+        }
+
+        private static bool HasTomlScalarValue(
+            IDictionary<string, string> assignments,
+            string key,
+            string expectedValue)
+        {
+            if (assignments == null || !assignments.TryGetValue(key, out var actualValue))
+            {
+                return false;
+            }
+
+            return string.Equals(
+                UnquoteTomlScalar(actualValue),
+                expectedValue ?? string.Empty,
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool HasTomlArrayEntry(
+            IDictionary<string, string> assignments,
+            string key,
+            string expectedEntry)
+        {
+            if (assignments == null || !assignments.TryGetValue(key, out var actualValue))
+            {
+                return false;
+            }
+
+            return SplitTomlArray(actualValue).Any(value =>
+                string.Equals(value, expectedEntry ?? string.Empty, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static IEnumerable<string> SplitTomlArray(string value)
+        {
+            var trimmed = (value ?? string.Empty).Trim();
+            if (trimmed.StartsWith("[", StringComparison.Ordinal) && trimmed.EndsWith("]", StringComparison.Ordinal))
+            {
+                trimmed = trimmed.Substring(1, trimmed.Length - 2);
+            }
+
+            foreach (var item in SplitTomlCommaSeparated(trimmed))
+            {
+                yield return UnquoteTomlScalar(item);
+            }
+        }
+
+        private static IEnumerable<string> SplitTomlCommaSeparated(string value)
+        {
+            var current = new StringBuilder();
+            var inString = false;
+            var escaped = false;
+            foreach (var ch in value ?? string.Empty)
+            {
+                if (escaped)
+                {
+                    current.Append(ch);
+                    escaped = false;
+                    continue;
+                }
+
+                if (inString && ch == '\\')
+                {
+                    current.Append(ch);
+                    escaped = true;
+                    continue;
+                }
+
+                if (ch == '"')
+                {
+                    inString = !inString;
+                    current.Append(ch);
+                    continue;
+                }
+
+                if (!inString && ch == ',')
+                {
+                    yield return current.ToString().Trim();
+                    current.Clear();
+                    continue;
+                }
+
+                current.Append(ch);
+            }
+
+            var last = current.ToString().Trim();
+            if (last.Length > 0)
+            {
+                yield return last;
+            }
+        }
+
+        private static string TrimTomlComment(string value)
+        {
+            var text = value ?? string.Empty;
+            var inString = false;
+            var escaped = false;
+            for (var i = 0; i < text.Length; i++)
+            {
+                var ch = text[i];
+                if (escaped)
+                {
+                    escaped = false;
+                    continue;
+                }
+
+                if (inString && ch == '\\')
+                {
+                    escaped = true;
+                    continue;
+                }
+
+                if (ch == '"')
+                {
+                    inString = !inString;
+                    continue;
+                }
+
+                if (!inString && ch == '#')
+                {
+                    return text.Substring(0, i);
+                }
+            }
+
+            return text;
+        }
+
+        private static string UnquoteTomlScalar(string value)
+        {
+            var trimmed = (value ?? string.Empty).Trim();
+            if (trimmed.Length >= 2
+                && trimmed[0] == '"'
+                && trimmed[trimmed.Length - 1] == '"')
+            {
+                trimmed = trimmed.Substring(1, trimmed.Length - 2);
+            }
+
+            return trimmed
+                .Replace("\\\"", "\"")
+                .Replace("\\\\", "\\")
+                .Trim();
         }
 
         private static string RemoveRelayProviderSections(string configText, string providerId)
