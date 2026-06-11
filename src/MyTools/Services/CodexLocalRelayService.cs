@@ -152,7 +152,7 @@ namespace MyTools.Services
                 return Stop("目标档案缺少 base_url，无法切换本地中转上游。");
             }
 
-            if (!runtime.HasToken)
+            if (!runtime.HasToken && !CodexRelayTestService.AllowsMissingTokenForLocalProvider(runtime.BaseUrl))
             {
                 return Stop("目标档案未解析到可用于本地中转的 API key 或 token。");
             }
@@ -875,7 +875,10 @@ namespace MyTools.Services
                 }
             }
 
-            message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", NormalizeBearerToken(upstreamToken));
+            if (!string.IsNullOrWhiteSpace(upstreamToken))
+            {
+                message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", NormalizeBearerToken(upstreamToken));
+            }
             return message;
         }
 
@@ -1808,7 +1811,7 @@ $plainBytes = [System.Security.Cryptography.ProtectedData]::Unprotect(
                 throw new InvalidOperationException("当前 Codex 配置的 base_url 不是有效的 http/https 地址。");
             }
 
-            if (!runtime.HasToken)
+            if (!runtime.HasToken && !CodexRelayTestService.AllowsMissingTokenForLocalProvider(uri))
             {
                 throw new InvalidOperationException("当前 Codex 配置未解析到可用于本地中转的 API key 或 token。");
             }

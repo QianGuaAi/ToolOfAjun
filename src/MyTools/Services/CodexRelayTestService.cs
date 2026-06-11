@@ -54,7 +54,10 @@ namespace MyTools.Services
                         : CodexRelayTestResult.Fail(gateway.Message, baseUri.Host);
                 }
 
-                return CodexRelayTestResult.Fail("未找到可用于测试的 OPENAI_API_KEY、api_key 或 env_key 环境变量。", baseUri.Host);
+                if (!AllowsMissingTokenForLocalProvider(baseUri))
+                {
+                    return CodexRelayTestResult.Fail("未找到可用于测试的 OPENAI_API_KEY、api_key 或 env_key 环境变量。", baseUri.Host);
+                }
             }
 
             EnableTls12();
@@ -142,6 +145,25 @@ namespace MyTools.Services
 
                 return root;
             }
+        }
+
+        public static bool AllowsMissingTokenForLocalProvider(string baseUrl)
+        {
+            return Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri)
+                   && AllowsMissingTokenForLocalProvider(uri);
+        }
+
+        public static bool AllowsMissingTokenForLocalProvider(Uri uri)
+        {
+            if (uri == null || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+            {
+                return false;
+            }
+
+            return string.Equals(uri.Host, "localhost", StringComparison.OrdinalIgnoreCase)
+                   || string.Equals(uri.Host, "127.0.0.1", StringComparison.OrdinalIgnoreCase)
+                   || string.Equals(uri.Host, "::1", StringComparison.OrdinalIgnoreCase)
+                   || (IPAddress.TryParse(uri.Host, out var address) && IPAddress.IsLoopback(address));
         }
 
         private static async Task<RelayHttpProbeResult> SendFirstSuccessfulAsync(

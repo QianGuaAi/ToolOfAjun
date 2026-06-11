@@ -252,6 +252,7 @@ namespace MyTools.ViewModels
         private readonly AsyncRelayParameterCommand _previewCodexProfileDiffCommand;
         private readonly AsyncRelayParameterCommand _applyCodexConfigTemplateToAllCommand;
         private readonly AsyncRelayCommand _importCodexProfileCommand;
+        private readonly AsyncRelayCommand _importCodexOllamaProfilesCommand;
         private readonly AsyncRelayCommand _importCodexCpaTokenCommand;
         private readonly AsyncRelayParameterCommand _refreshCodexProfileCommand;
         private readonly AsyncRelayParameterCommand _renameCodexProfileCommand;
@@ -602,6 +603,8 @@ namespace MyTools.ViewModels
             ApplyCodexConfigTemplateToAllCommand = _applyCodexConfigTemplateToAllCommand;
             _importCodexProfileCommand = new AsyncRelayCommand(ImportCodexProfileAsync);
             ImportCodexProfileCommand = _importCodexProfileCommand;
+            _importCodexOllamaProfilesCommand = new AsyncRelayCommand(ImportCodexOllamaProfilesAsync);
+            ImportCodexOllamaProfilesCommand = _importCodexOllamaProfilesCommand;
             _importCodexCpaTokenCommand = new AsyncRelayCommand(ImportCodexCpaTokenAsync);
             ImportCodexCpaTokenCommand = _importCodexCpaTokenCommand;
             _refreshCodexProfileCommand = new AsyncRelayParameterCommand(RefreshCodexProfileAsync, parameter => parameter is CodexProfileItem);
@@ -1956,6 +1959,7 @@ namespace MyTools.ViewModels
         public ICommand PreviewCodexProfileDiffCommand { get; }
         public ICommand ApplyCodexConfigTemplateToAllCommand { get; }
         public ICommand ImportCodexProfileCommand { get; }
+        public ICommand ImportCodexOllamaProfilesCommand { get; }
         public ICommand ImportCodexCpaTokenCommand { get; }
         public ICommand RefreshCodexProfileCommand { get; }
         public ICommand RenameCodexProfileCommand { get; }
@@ -4302,6 +4306,108 @@ namespace MyTools.ViewModels
             }
         }
 
+        private async Task ImportCodexOllamaProfilesAsync()
+        {
+            try
+            {
+                CodexProfilesStatusMessage = "正在读取本机 Ollama 模型...";
+                var definitions = await CodexOllamaProfileService
+                    .LoadInstalledProfilesAsync(CancellationToken.None)
+                    .ConfigureAwait(true);
+                if (definitions.Count == 0)
+                {
+                    CodexProfilesStatusMessage = "未检测到本机 Ollama 模型。";
+                    MessageBox.Show(
+                        "未检测到本机 Ollama 模型。请确认 Ollama 正在运行，并且至少已经拉取一个模型。",
+                        "导入 Ollama 模型",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
+                    return;
+                }
+
+                var added = 0;
+                var updated = 0;
+                foreach (var definition in definitions)
+                {
+                    var protectedConfig = CodexConfigProfileService.ProtectBytesToBase64(definition.ConfigTomlBytes);
+                    var protectedAuth = CodexConfigProfileService.ProtectBytesToBase64(definition.AuthJsonBytes);
+                    var existing = CodexProfiles.FirstOrDefault(item =>
+                        IsOllamaProfileForModel(item, definition.ModelName)
+                        || string.Equals(item.DisplayName, definition.DisplayName, StringComparison.OrdinalIgnoreCase));
+                    var tags = BuildOllamaProfileTags(definition.ModelName);
+                    var note = "本机 Ollama 模型：" + definition.ModelName;
+
+                    if (existing != null)
+                    {
+                        existing.DisplayName = string.IsNullOrWhiteSpace(existing.DisplayName)
+                            ? definition.DisplayName
+                            : existing.DisplayName;
+                        existing.Name = existing.DisplayName;
+                        existing.Note = string.IsNullOrWhiteSpace(existing.Note) ? note : existing.Note;
+                        existing.Remark = string.IsNullOrWhiteSpace(existing.Note) ? existing.DisplayName : existing.Note;
+                        existing.Tags = tags;
+                        existing.FolderPath = string.Empty;
+                        existing.ProtectedConfigTomlBase64 = protectedConfig;
+                        existing.ProtectedAuthJsonBase64 = protectedAuth;
+                        existing.ConfigTomlContentProtected = protectedConfig;
+                        existing.AuthJsonContentProtected = protectedAuth;
+                        existing.AccountEmail = string.Empty;
+                        existing.AccessTokenExpiresAt = null;
+                        existing.RefreshTokenExpiresAt = null;
+                        existing.LastImportedAt = DateTime.UtcNow;
+                        existing.Status = CodexProfileLibraryService.StatusUnknown;
+                        existing.StatusMessage = "已更新本机 Ollama 模型配置。";
+                        existing.RelayTestStatus = CodexProfileItem.RelayStatusUnknown;
+                        existing.RelayTestedAt = null;
+                        existing.RelayTestMessage = string.Empty;
+                        updated++;
+                        continue;
+                    }
+
+                    var displayName = EnsureUniqueCodexDisplayName(definition.DisplayName, null);
+                    var item = CreateCodexProfileItem(
+                        string.Empty,
+                        displayName,
+                        note,
+                        tags,
+                        null,
+                        protectedConfig,
+                        protectedAuth);
+                    item.DisplayName = displayName;
+                    item.Name = displayName;
+                    item.Note = note;
+                    item.Remark = note;
+                    item.AccountEmail = string.Empty;
+                    item.AccessTokenExpiresAt = null;
+                    item.RefreshTokenExpiresAt = null;
+                    item.Status = CodexProfileLibraryService.StatusUnknown;
+                    item.StatusMessage = "已导入本机 Ollama 模型。";
+                    item.EnableRotation = false;
+                    item.RotationPriority = 0;
+                    item.RelayTestStatus = CodexProfileItem.RelayStatusUnknown;
+                    AddCodexProfileItem(item);
+                    added++;
+                }
+
+                SortCodexProfilesByLastApplied();
+                await SaveCodexProfilesAsync().ConfigureAwait(true);
+                UpdateCodexRotationState();
+                CodexProfilesStatusMessage = $"已导入 Ollama 模型：新增 {added}，更新 {updated}。";
+                AppLogService.Information("Imported Ollama Codex profiles: added = {Added}, updated = {Updated}", added, updated);
+                MessageBox.Show(
+                    $"已导入本机 Ollama 模型档案：新增 {added}，更新 {updated}。\n\n点击“测试中转”可验证这些模型；点击对应档案“切换”后重启 Codex App 即可使用。",
+                    "导入 Ollama 模型完成",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Error(new InvalidOperationException(ex.Message), "Importing Ollama Codex profiles failed with {ErrorType}", ex.GetType().Name);
+                CodexProfilesStatusMessage = "导入 Ollama 模型失败：" + ex.Message;
+                MessageBox.Show(ex.Message, "导入 Ollama 模型失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
         private async Task ImportCodexCpaTokenAsync()
         {
             try
@@ -5477,6 +5583,24 @@ namespace MyTools.ViewModels
             return value.IndexOf('@') >= 0
                 ? CodexProfileLibraryService.MaskEmail(value)
                 : value;
+        }
+
+        private static string BuildOllamaProfileTags(string modelName)
+        {
+            return "ollama,local,model:" + (modelName ?? string.Empty).Trim();
+        }
+
+        private static bool IsOllamaProfileForModel(CodexProfileItem item, string modelName)
+        {
+            if (item == null || string.IsNullOrWhiteSpace(modelName))
+            {
+                return false;
+            }
+
+            var expected = "model:" + modelName.Trim();
+            return (item.Tags ?? string.Empty)
+                .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                .Any(tag => string.Equals(tag.Trim(), expected, StringComparison.OrdinalIgnoreCase));
         }
 
         private static string LimitRelayTestMessage(string value)
@@ -14191,6 +14315,7 @@ namespace MyTools.ViewModels
             _refreshInstalledProgramsCommand?.RaiseCanExecuteChanged();
             _uninstallProgramCommand?.RaiseCanExecuteChanged();
             _importCodexProfileCommand?.RaiseCanExecuteChanged();
+            _importCodexOllamaProfilesCommand?.RaiseCanExecuteChanged();
             _importCodexCpaTokenCommand?.RaiseCanExecuteChanged();
             _exportCodexProfileCommand?.RaiseCanExecuteChanged();
             _previewCodexProfileDiffCommand?.RaiseCanExecuteChanged();

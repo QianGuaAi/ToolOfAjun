@@ -1647,6 +1647,13 @@
                                         Height="28"
                                         Padding="8,0"
                                         Margin="0,0,4,0"
+                                        Content="导入 Ollama 模型"
+                                        ToolTip="读取本机 Ollama 已安装模型，生成可供 Codex 切换的本地模型档案。"
+                                        Command="{Binding ImportCodexOllamaProfilesCommand}" />
+                                <Button Style="{StaticResource CodexCompactGhostButton}"
+                                        Height="28"
+                                        Padding="8,0"
+                                        Margin="0,0,4,0"
                                         Content="导入 CPA Token"
                                         Command="{Binding ImportCodexCpaTokenCommand}" />
                                 <Button Style="{StaticResource CodexCompactGhostButton}"

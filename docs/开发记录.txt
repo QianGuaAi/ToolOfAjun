@@ -1793,3 +1793,9 @@
 - Codex 配置面板内新增局部紧凑按钮样式，缩小顶部操作、轮换控制和档案行按钮高度、内边距与间距，避免按钮过多时放不下。
 - 同步更新 `docs/功能说明.md`、`docs/程序逻辑.md` 与启动基线说明。
 - 验证：`dotnet build src\MyTools\MyTools.csproj -c Release --no-incremental` 通过，0 warning / 0 error；当前机器已运行安装版 MyTools 单实例窗口，未关闭现有进程做截图验证。
+
+## [2026-06-11] Codex 导入本机 Ollama 模型
+- Codex 配置面板新增“导入 Ollama 模型”按钮，点击后读取 `http://127.0.0.1:11434/api/tags`，按 digest 去重，并在短别名存在时过滤同类原始 HuggingFace 名称，生成 `mytools_local_ollama` 本地模型档案。
+- Ollama 档案写入 `model_provider = "mytools_local_ollama"`、`base_url = "http://127.0.0.1:11434/v1"`、`wire_api = "responses"`，`auth.json` 保存为空 JSON；重复导入时按 `model:<模型名>` 标签更新同一条档案。
+- Codex 中转测试和本地 relay 支持本机 loopback provider 无上游 API key；转发到 Ollama 时不再发送空 `Authorization`，远程上游仍要求 key。
+- 同步更新 `docs/功能说明.md`、`docs/程序逻辑.md` 与启动基线说明。
