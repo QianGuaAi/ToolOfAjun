@@ -99,6 +99,7 @@ namespace MyTools.Services
                 UpstreamBaseUrl = runtime.BaseUrl.Trim(),
                 ProtectedUpstreamTokenBase64 = ProtectString(runtime.Token),
                 WireApi = effectiveWireApi,
+                Model = runtime.Model ?? string.Empty,
                 ActiveDisplayName = "当前 Codex 配置",
                 EnabledAtUtc = existing == null || existing.EnabledAtUtc == default(DateTime) ? DateTime.UtcNow : existing.EnabledAtUtc,
                 UpdatedAtUtc = DateTime.UtcNow
@@ -168,6 +169,7 @@ namespace MyTools.Services
             settings.UpstreamBaseUrl = SelectEffectiveUpstreamBaseUrl(runtime.BaseUrl, effectiveUpstreamBaseUrl);
             settings.ProtectedUpstreamTokenBase64 = ProtectString(runtime.Token);
             settings.WireApi = string.IsNullOrWhiteSpace(settings.WireApi) ? targetWireApi : settings.WireApi;
+            settings.Model = runtime.Model ?? string.Empty;
             settings.ActiveDisplayName = string.IsNullOrWhiteSpace(displayName) ? "Codex 档案" : displayName.Trim();
             settings.UpdatedAtUtc = DateTime.UtcNow;
 
@@ -418,6 +420,7 @@ namespace MyTools.Services
                 ProtectedUpstreamTokenBase64 = ProtectString(runtime.Token),
                 WireApi = effectiveWireApi,
                 ActiveDisplayName = string.IsNullOrWhiteSpace(activeDisplayName) ? "当前 Codex 配置" : activeDisplayName.Trim(),
+                Model = runtime?.Model ?? string.Empty,
                 EnabledAtUtc = restored == null || restored.EnabledAtUtc == default(DateTime) ? DateTime.UtcNow : restored.EnabledAtUtc,
                 UpdatedAtUtc = DateTime.UtcNow
             };
@@ -640,6 +643,10 @@ namespace MyTools.Services
             var provider = ReadTableAssignments(text, providerTable);
             var auth = ReadTableAssignments(text, providerTable + ".auth");
             return HasRootTomlScalarValue(text, "model_provider", settings.ProviderId)
+                   && (string.IsNullOrWhiteSpace(settings.Model)
+                       || HasRootTomlScalarValue(text, "model", settings.Model.Trim()))
+                   && (string.IsNullOrWhiteSpace(settings.Model)
+                       || HasRootTomlScalarValue(text, "review_model", settings.Model.Trim()))
                    && HasRootTomlScalarValue(text, "disable_response_storage", "false")
                    && HasTomlScalarValue(provider, "base_url", settings.LocalBaseUrl)
                    && HasTomlScalarValue(provider, "wire_api", effectiveWireApi)
@@ -1270,7 +1277,13 @@ namespace MyTools.Services
         {
             var lines = SplitLines(RemoveRelayProviderSections(configText, settings.ProviderId)).ToList();
             var withProvider = SetRootModelProvider(lines, settings.ProviderId).ToList();
-            var withResponseStorage = SetRootAssignment(withProvider, "disable_response_storage", "false");
+            var withModel = string.IsNullOrWhiteSpace(settings.Model)
+                ? withProvider
+                : SetRootAssignment(withProvider, "model", TomlQuote(settings.Model.Trim())).ToList();
+            var withReviewModel = string.IsNullOrWhiteSpace(settings.Model)
+                ? withModel
+                : SetRootAssignment(withModel, "review_model", TomlQuote(settings.Model.Trim())).ToList();
+            var withResponseStorage = SetRootAssignment(withReviewModel, "disable_response_storage", "false");
             var builder = new StringBuilder();
             foreach (var line in withResponseStorage)
             {
@@ -1716,6 +1729,8 @@ namespace MyTools.Services
             {
                 settings.WireApi = "responses";
             }
+
+            settings.Model = string.IsNullOrWhiteSpace(settings.Model) ? string.Empty : settings.Model.Trim();
 
             return settings;
         }
@@ -2271,6 +2286,7 @@ $plainBytes = [System.Security.Cryptography.ProtectedData]::Unprotect(
         public string UpstreamBaseUrl { get; set; }
         public string ProtectedUpstreamTokenBase64 { get; set; }
         public string WireApi { get; set; }
+        public string Model { get; set; }
         public string ActiveDisplayName { get; set; }
         public DateTime EnabledAtUtc { get; set; }
         public DateTime UpdatedAtUtc { get; set; }

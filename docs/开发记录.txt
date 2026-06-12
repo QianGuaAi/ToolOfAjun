@@ -1,5 +1,12 @@
 # 开发记录
 
+## [2026-06-12] Codex 本地中转同步模型名
+- `CodexLocalRelayService` 的本地中转设置新增目标 `Model`，启用中转或切换档案时保存目标档案解析出的模型名。
+- 修复固定 `~/.codex/config.toml` 到 `mytools_local_relay` 时只写 provider 而不更新根级 `model` / `review_model` 的问题，避免切到 Ollama 档案后仍沿用旧模型名。
+- 固定配置校验新增根级 `model` / `review_model` 核对；若当前 Codex 配置中的模型名与中转目标不一致，会先备份再重写。
+- 同步更新 `docs/功能说明.md` 与 `docs/程序逻辑.md` 的 Codex 本地中转说明。
+- 验证：`.\.dotnet\dotnet.exe build src\MyTools\MyTools.csproj -c Release --no-incremental` 通过，0 warning / 0 error。
+
 ## [2026-06-10] 重新打包安装程序
 - 临时把仓库内置 `.dotnet` 加入 PATH 后执行 `scripts\Build-Installer.ps1 -Configuration Release -Version 2026.6.10.0`，主程序、卸载器和安装器构建均为 0 warning / 0 error。
 - 输出安装包 `artifacts\installer\MyToolsSetup.exe`，大小 47,059,456 bytes，SHA256 = `72A3E3665B2920BFFF7A8BC5C110C7A9278D836859DD8B1FF498C8E77EB2D324`。
