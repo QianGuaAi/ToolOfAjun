@@ -1,5 +1,87 @@
 # 开发记录
 
+## [2026-06-20] 排班 Excel 导入
+- 排班工具栏新增“导入排班”按钮，可选择 `.xlsx` 排班表并导入为当前表格。
+- 新增 `ScheduleExcelImporter`，按导出表结构读取日期列、每日总休、人员行和班次；支持文件名 `YYYY-MM` 年月识别、当前排班年月兜底、共享字符串、旧“夜 / 大夜”归一化为“大”，以及在识别到“上班”统计列表头时还原导出空白“白”班。
+- 仅在识别到“上班”统计列表头时才按统计列还原空白白班；未识别时保留空白并给出提示，避免把其它数字列误当统计列。
+- 导入成功后提示是否立即保存为本地排班版本，同名版本覆盖前会二次确认；立即保存复用普通保存的基础校验。
+- `scripts/codex-eval.ps1 -Quick` 新增排班 Excel 导入回归，使用导出器生成真实样本后再导入并断言总休、人员、班次和白班还原，并覆盖“非上班统计列不得还原白班”的负向用例。
+- 同步更新排班功能说明、程序逻辑说明、场景控件交互说明和日程测试说明。
+
+## [2026-06-20] 重新打包安装程序
+- 使用仓库内置 `.dotnet` 临时设置 `DOTNET_ROOT` 与 PATH 后执行完整安装包流水线：`powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Build-Installer.ps1 -Configuration Release -Version 2026.6.20.5`。
+- 同步将 `scripts\Build-Installer.ps1` 默认版本更新为 `2026.6.20.5`，避免后续安装包验证使用旧默认版本覆盖新产物。
+- 主程序、卸载器和安装器构建均通过，0 warning / 0 error；安装器文件版本为 `2026.6.20.5`。
+- 本安装包已包含排班 Excel 导入按钮与导入解析回归修复。
+- 输出安装包 `artifacts\installer\MyToolsSetup.exe`，大小 47,077,376 bytes，SHA256 = `29336002642BB83C8E71CE05CF9C89BE72E74FB768FACD92D2E9786E54C1F1DF`。
+- Payload 压缩包 `artifacts\installer\MyToolsPayload.zip`，大小 46,878,964 bytes，SHA256 = `2EC4710F36A4F409013457AF05F772067E8F579FF0414CBDD7F75C6D1F126A1A`。
+
+## [2026-06-20] 排班公休底色与午班菜单调整
+- `SchedulePage` 将“公”单元格、图例和班次弹出菜单底色调整为与“午”一致的浅黄色。
+- 班次弹出菜单隐藏“午”选项；已有排班数据中的“午”仍保留显示、Excel 导出和 0.5 天休息统计。
+- `ScheduleExcelExporter` 同步将“公”导出填充色改为与“午”一致。
+- `scripts/codex-eval.ps1 -Quick` 新增“公/午”界面与 Excel 填充色一致、弹出菜单不包含“午”的回归检查。
+- 同步更新排班功能说明、程序逻辑说明、场景控件交互说明和日程测试说明。
+
+## [2026-06-20] 修复排班节假日班次底色优先级
+- `SchedulePage.ResolveCellBg` 调整班次颜色优先级，已有“小 / 大 / 感 / 公 / 午”等专用底色的单元格不再被周末或节假日蓝色列底色覆盖；空白格与不显示文字的“白”格继续使用节假日列底色。
+- `ScheduleExcelExporter` 同步采用班次专用底色优先规则，避免导出 Excel 时节假日列覆盖“小 / 大”等班次色。
+- `scripts/codex-eval.ps1 -Quick` 新增周末“小 / 大”界面画刷和 Excel 填充色回归检查。
+- 同步更新排班功能说明、程序逻辑说明和场景控件交互说明。
+
+## [2026-06-20] 重新打包安装程序
+- 使用仓库内置 `.dotnet` 临时设置 `DOTNET_ROOT` 与 PATH 后执行完整安装包流水线：`powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Build-Installer.ps1 -Configuration Release -Version 2026.6.20.4`。
+- 同步将 `scripts\Build-Installer.ps1` 默认版本更新为 `2026.6.20.4`，避免后续安装包验证使用旧默认版本覆盖新产物。
+- 主程序、卸载器和安装器构建均通过，0 warning / 0 error；安装器文件版本为 `2026.6.20.4`。
+- 本安装包已包含“公/午”同底色与班次弹出菜单隐藏“午”的排班调整。
+- 输出安装包 `artifacts\installer\MyToolsSetup.exe`，大小 47,069,696 bytes，SHA256 = `02CF8D4B1D05F531F5789D28395DD06EA1241AAF26D5D318F3F1D4BD809EE16F`。
+- Payload 压缩包 `artifacts\installer\MyToolsPayload.zip`，大小 46,871,470 bytes，SHA256 = `62DD1241B2F971AD71A66DC0EB7D5CB2693C9564648EF457CE29BD89ECEFE22A`。
+
+## [2026-06-20] 排班卡公底色互换
+- `SchedulePage` 将排班图例、班次弹出菜单和单元格渲染中的“卡”调整为绿色底色、“公”调整为粉色底色。
+- `ScheduleExcelExporter` 同步互换“卡”和“公”的导出填充色，保持 Excel 与界面一致。
+- 同步更新排班功能说明、程序逻辑说明和日程测试说明中的班次颜色描述。
+- 验证：`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\codex-eval.ps1 -Quick` 通过，0 warning / 0 error。
+
+## [2026-06-20] 修复排班导出大夜显示
+- 修复排班 Excel 导出中“大”班次被转换成“夜”的问题；导出显示现在与界面一致，旧数据中的“夜”仍会归一化为“大”。
+- 同步更新排班功能说明和程序逻辑说明。
+- `scripts/codex-eval.ps1 -Quick` 新增排班导出回归检查，构造含“大”和旧“夜”的临时排班并验证导出的工作表只显示“大”。
+- 验证：`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\codex-eval.ps1 -Quick` 通过，0 warning / 0 error。
+
+## [2026-06-20] 排班节假日列底色加深
+- `SchedulePage` 将 `HolidayService.IsHoliday` 命中的整列底色从 `#DBEAFE` 加深为 `#BFDBFE`，覆盖周六、周日以及其它配置/内置法定节假日。
+- `ScheduleExcelExporter` 同步使用 `#BFDBFE` 作为节假日表头、空白格和统计正常格底色，保持导出 Excel 与界面一致。
+- 同步更新 `docs/功能说明.md` 与 `docs/程序逻辑.md` 的排班节假日列视觉说明。
+
+## [2026-06-20] 录音静音文件拦截
+- `WasapiLoopbackAudioRecorder` 写入 WASAPI 临时 WAV 时同步统计样本峰值和可听样本数，区分“有 WAV 数据”和“有可听声音”。
+- `RecordingService` 保存独立录音或合成录像音轨前改用可听声音校验；实时统计未命中时复扫临时 WAV 文件，避免有声音时被误判为静音；未检测到可听系统声音时删除临时文件并提示检查播放声音、音量和默认播放设备，不再留下实际无声的录音文件。
+- 独立录音期间截图工具页顶部新增实时反馈状态条，展示红点、录音时长和随 WASAPI 短时采样峰值滚动变化的波形柱。
+- `RecordingService.GetActiveAudioLevelSnapshot()` 暴露只读实时电平快照；`MainViewModel` 以 250ms 节奏刷新 28 根固定波形柱，停止录音后同步清空时长和波形状态。
+- 同步更新 `docs/功能说明.md` 与 `docs/程序逻辑.md` 的截图/录像/录音说明。
+- 验证：`powershell -ExecutionPolicy Bypass -File scripts\codex-eval.ps1 -Quick` 通过，0 warning / 0 error。
+
+## [2026-06-20] 重新打包安装程序
+- 使用仓库内置 `.dotnet` 临时设置 `DOTNET_ROOT` 与 PATH 后执行完整安装包流水线：`powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Build-Installer.ps1 -Configuration Release -Version 2026.6.20.1`。
+- 同步将 `scripts\Build-Installer.ps1` 默认版本更新为 `2026.6.20.1`，避免后续 `scripts\codex-eval.ps1 -Installer` 使用旧默认版本覆盖新产物。
+- 主程序、卸载器和安装器构建均通过，0 warning / 0 error；安装器文件版本为 `2026.6.20.1`。
+- 输出安装包 `artifacts\installer\MyToolsSetup.exe`，大小 47,069,184 bytes，SHA256 = `65A609E273D7063F88B4BF160BCC46ED9FA012893737BACEB94B069E2A0E3F12`。
+- Payload 压缩包 `artifacts\installer\MyToolsPayload.zip`，大小 46,870,959 bytes，SHA256 = `90A65ABA6312A350D0D568631D56416C118499E5402DF06CAABB83131110934B`。
+
+## [2026-06-19] 录音默认 WAV 与格式选择
+- 独立录音默认输出改为 `.wav`，停止录音后直接保存 WASAPI 采集到的 WAV 文件，不再默认转成 `.m4a`。
+- 截图设置页录制参数新增“录音格式”下拉，可选择 `WAV / M4A / MP3`；选择会写入程序同目录 `MyTools.settings.json` 的 `AudioRecordingFormat` 字段，旧配置缺省时回退 `wav`。
+- `RecordingService` 新增 `AudioRecordingFormat`，`.wav` 不再要求 ffmpeg；`.m4a` 和 `.mp3` 停止录音后分别调用 ffmpeg 转码，未采集到有效声音时仍不生成静音文件。
+- 同步更新 `docs/功能说明.md` 与 `docs/程序逻辑.md` 的截图/录像/录音说明。
+- 验证：`.\.dotnet\dotnet.exe build src\MyTools\MyTools.csproj -c Release --no-incremental` 通过，0 warning / 0 error。
+
+## [2026-06-19] 重新打包安装程序
+- 使用仓库内置 `.dotnet` 临时设置 `DOTNET_ROOT` 与 PATH 后执行完整安装包流水线：`powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Build-Installer.ps1 -Configuration Release -Version 2026.6.19.0`。
+- 主程序、卸载器和安装器构建均通过，0 warning / 0 error；安装器文件版本为 `2026.6.19.0`。
+- 输出安装包 `artifacts\installer\MyToolsSetup.exe`，大小 47,065,088 bytes，SHA256 = `4BB8F90D068B130DD0A2E5F4C403353E5BCD7AD3BBD2B811F4E3ED5B59461EA0`。
+- Payload 压缩包 `artifacts\installer\MyToolsPayload.zip`，大小 46,867,015 bytes，SHA256 = `6898CFC155EDD4B927E854CFC264CF1BA11F94FD032CC36F92903AF75075DF82`。
+
 ## [2026-06-12] Codex 本地中转同步模型名
 - `CodexLocalRelayService` 的本地中转设置新增目标 `Model`，启用中转或切换档案时保存目标档案解析出的模型名。
 - 修复固定 `~/.codex/config.toml` 到 `mytools_local_relay` 时只写 provider 而不更新根级 `model` / `review_model` 的问题，避免切到 Ollama 档案后仍沿用旧模型名。

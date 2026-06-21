@@ -77,6 +77,15 @@
 - 场景相关文档统一维护在 `docs/场景驱动开发/`：`业务流程清单.md` 记录真实使用步骤，`场景实现核查台账.md` 记录实现状态和证据，`控件交互逻辑说明.md` 记录页面、弹框、按钮、校验、提示和权限展示。
 - 原有 `docs/功能说明.md`、`docs/程序逻辑.md`、`docs/开发记录.txt` 仍按本项目规则同步维护；场景驱动文档用于补充真实流程、核查证据和控件事实。
 
+### 6.2 Loop Engineering 闭环规则
+- 本项目使用 `.agents/skills/mytools-loop-engineering/SKILL.md` 作为 Codex 闭环执行流程：Inspect → Plan → Implement → Validate → Repair Loop → Review → Deposit。
+- 常规开发、修复、重构、发布准备、安装包重打和评审任务默认按该 skill 执行；一次性问答、只读解释、用户明确要求不改代码的任务除外。
+- 默认验证入口为 `scripts/codex-eval.ps1`；普通小任务优先使用 `powershell -ExecutionPolicy Bypass -File scripts\codex-eval.ps1 -Quick`，发布准备或安装包相关改动使用不带范围参数的全量验证；也可按任务范围追加 `-Build` / `-Installer` 定向验证。
+- 验证失败后必须读取具体失败日志，做最小修复并重跑相关验证；同一问题最多进行 5 次修复验证循环。超过 5 次仍未解决时，停止继续试错，说明已执行命令、关键日志、已尝试修复、剩余缺口和需要用户或外部状态补充的内容。
+- Bugfix 如能用自动化测试、构建脚本或可重复场景稳定复现，必须优先补充或更新回归测试；若暂不适合补测，交付说明中必须说明原因。
+- 非微小代码或规则改动在交付前必须使用独立审查 agent `.codex/agents/mytools-reviewer.toml`；该 agent 只读审查 diff、验证结果和项目规则，输出阻断问题、建议、待确认项和沉淀建议，阻断问题未处理前不得宣称完成。
+- 问题解决后必须判断经验沉淀位置：可执行约束优先沉淀为测试或 `scripts/codex-eval.ps1`；稳定项目规则沉淀到 `AGENTS.md`；重复流程沉淀到 `.agents/skills/`；模块知识、运行手册和业务事实沉淀到 `docs/`、`docs/规划/` 或 `docs/场景驱动开发/`。不得为了记录进度另建总结类 Markdown，除非用户明确要求。
+
 ## 七、现有功能模块
 - **WireGuard 连接**：`WireGuardService` 调用本地/系统 `wireguard.exe`，通过 `installtunnelservice` / `uninstalltunnelservice` 控制隧道，结合网卡状态判断连通性。
 - **系统托盘**：关闭按钮默认隐藏到托盘，托盘提供"显示窗口 / 退出程序"菜单及双击恢复。

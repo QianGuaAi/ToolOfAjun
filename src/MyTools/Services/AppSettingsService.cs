@@ -128,6 +128,8 @@ namespace MyTools.Services
         public List<CodexProfileSettings> CodexProfiles { get; set; } = new List<CodexProfileSettings>();
         public string RecordingOutputFolder { get; set; } = string.Empty;
         public string AudioOutputFolder { get; set; } = string.Empty;
+        /// <summary>录音输出格式：wav / m4a / mp3。</summary>
+        public string AudioRecordingFormat { get; set; } = "wav";
         public List<RecentPlaylistSettings> RecentPlaylists { get; set; } = new List<RecentPlaylistSettings>();
         public List<FavoritePlaylistSettings> FavoritePlaylists { get; set; } = new List<FavoritePlaylistSettings>();
         public List<RecentWeChatBackupSettings> RecentWeChatBackups { get; set; } = new List<RecentWeChatBackupSettings>();

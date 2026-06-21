@@ -26,6 +26,10 @@
     <Color x:Key="BrushErrorColor">#EF4444</Color>
     <Color x:Key="BrushInfoColor">#0EA5E9</Color>
     <Color x:Key="BrushInfoSoftColor">#EAF6FF</Color>
+    <Color x:Key="BrushRecordingStatusBackgroundColor">#FFF1F2</Color>
+    <Color x:Key="BrushRecordingStatusBorderColor">#FECACA</Color>
+    <Color x:Key="BrushRecordingStatusTextColor">#C62828</Color>
+    <Color x:Key="BrushRecordingStatusDurationColor">#7F1D1D</Color>
     <Color x:Key="BrushCodexStatusOkColor">#22C55E</Color>
     <Color x:Key="BrushCodexStatusWarnColor">#F59E0B</Color>
     <Color x:Key="BrushCodexStatusExpiredColor">#EF4444</Color>
@@ -56,6 +60,10 @@
     <SolidColorBrush x:Key="BrushError" Color="{StaticResource BrushErrorColor}" />
     <SolidColorBrush x:Key="BrushInfo" Color="{StaticResource BrushInfoColor}" />
     <SolidColorBrush x:Key="BrushInfoSoft" Color="{StaticResource BrushInfoSoftColor}" />
+    <SolidColorBrush x:Key="BrushRecordingStatusBackground" Color="{StaticResource BrushRecordingStatusBackgroundColor}" />
+    <SolidColorBrush x:Key="BrushRecordingStatusBorder" Color="{StaticResource BrushRecordingStatusBorderColor}" />
+    <SolidColorBrush x:Key="BrushRecordingStatusText" Color="{StaticResource BrushRecordingStatusTextColor}" />
+    <SolidColorBrush x:Key="BrushRecordingStatusDuration" Color="{StaticResource BrushRecordingStatusDurationColor}" />
     <SolidColorBrush x:Key="BrushCodexStatusOk" Color="{StaticResource BrushCodexStatusOkColor}" />
     <SolidColorBrush x:Key="BrushCodexStatusWarn" Color="{StaticResource BrushCodexStatusWarnColor}" />
     <SolidColorBrush x:Key="BrushCodexStatusExpired" Color="{StaticResource BrushCodexStatusExpiredColor}" />

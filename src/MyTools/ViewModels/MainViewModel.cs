@@ -32,6 +32,9 @@ namespace MyTools.ViewModels
 {
     public class MainViewModel : INotifyPropertyChanged, IDisposable
     {
+        private const int AudioRecordingWaveformBarCount = 28;
+        private const double AudioRecordingWaveformMinBarHeight = 4d;
+        private const double AudioRecordingWaveformMaxBarHeight = 22d;
         private ObservableCollection<NetworkData> _networkList;
         private ObservableCollection<StartupItem> _startupList;
         private ICollectionView _filteredStartupView;
@@ -148,6 +151,7 @@ namespace MyTools.ViewModels
         private bool _isDisposed;
         private DateTime _audioRecordingStartedAt;
         private string _audioRecordingIndicator = string.Empty;
+        private string _audioRecordingDurationText = "00:00";
         private string _recordingOutputFolderText = "未设置";
         private string _audioOutputFolderText = "未设置";
         private string _activeVideoOutputPath = string.Empty;
@@ -155,6 +159,7 @@ namespace MyTools.ViewModels
         private bool _isGifRecordingMode;
         private string _recordingFrameRateOption = "30 FPS";
         private string _recordingQualityOption = "均衡";
+        private string _audioRecordingFormatOption = "WAV";
         private readonly DispatcherTimer _audioRecordingTimer;
         private uint _pendingModifiers = 0x0006;
         private uint _pendingKey = 0x5A;
@@ -354,6 +359,8 @@ namespace MyTools.ViewModels
             FilteredHomeCommandView.Filter = FilterHomeCommandItem;
             HomeRecentItems = new ObservableCollection<HomeRecentItem>();
             ScreenshotHistoryItems = new ObservableCollection<ScreenshotHistoryItem>();
+            AudioRecordingWaveformBars = new ObservableCollection<AudioRecordingWaveformBar>();
+            InitializeAudioRecordingWaveformBars();
             FilteredVideoViewerPlaylistView = CollectionViewSource.GetDefaultView(VideoViewerPlaylist);
             FilteredVideoViewerPlaylistView.Filter = FilterVideoViewerPlaylistItem;
             VideoViewerRecentPlaylists = new ObservableCollection<RecentPlaylistItem>();
@@ -368,7 +375,7 @@ namespace MyTools.ViewModels
             FilteredSqlTableView.Filter = FilterSqlTable;
             _audioRecordingTimer = new DispatcherTimer
             {
-                Interval = TimeSpan.FromSeconds(1)
+                Interval = TimeSpan.FromMilliseconds(250)
             };
             _audioRecordingTimer.Tick += AudioRecordingTimer_OnTick;
             _codexRateLimitMonitorTimer = new DispatcherTimer
@@ -1854,6 +1861,8 @@ namespace MyTools.ViewModels
 
         public IReadOnlyList<string> RecordingQualityOptions { get; } = new[] { "体积优先", "均衡", "高清" };
 
+        public IReadOnlyList<string> AudioRecordingFormatOptions { get; } = new[] { "WAV", "M4A", "MP3" };
+
         public string RecordingFrameRateOption
         {
             get => _recordingFrameRateOption;
@@ -1883,6 +1892,23 @@ namespace MyTools.ViewModels
 
                 _recordingQualityOption = option;
                 OnPropertyChanged();
+            }
+        }
+
+        public string AudioRecordingFormatOption
+        {
+            get => _audioRecordingFormatOption;
+            set
+            {
+                var option = NormalizeAudioRecordingFormatOption(value);
+                if (string.Equals(_audioRecordingFormatOption, option, StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                _audioRecordingFormatOption = option;
+                OnPropertyChanged();
+                SafeFireAndForget(PersistAudioRecordingFormatAsync());
             }
         }
 
@@ -2159,6 +2185,23 @@ namespace MyTools.ViewModels
         }
 
         public bool HasAudioRecordingIndicator => !string.IsNullOrWhiteSpace(AudioRecordingIndicator);
+
+        public string AudioRecordingDurationText
+        {
+            get => _audioRecordingDurationText;
+            private set
+            {
+                if (string.Equals(_audioRecordingDurationText, value, StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                _audioRecordingDurationText = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public ObservableCollection<AudioRecordingWaveformBar> AudioRecordingWaveformBars { get; }
 
         public string RecordingOutputFolderText
         {
@@ -8959,6 +9002,8 @@ namespace MyTools.ViewModels
                             ? HotkeyService.BuildDisplayText(_pendingAudioRecordModifiers, _pendingAudioRecordKey)
                             : settings.AudioRecordHotkey.DisplayText)
                         : "未设置";
+                    _audioRecordingFormatOption = NormalizeAudioRecordingFormatOption(settings.AudioRecordingFormat);
+                    OnPropertyChanged(nameof(AudioRecordingFormatOption));
                 });
 
                 await TryRegisterHotkeyAsync(_pendingModifiers, _pendingKey, false);
@@ -9183,7 +9228,8 @@ namespace MyTools.ViewModels
                 return;
             }
 
-            if (!EnsureFfmpegAvailable())
+            var audioFormat = AudioRecordingFormat.FromExtension(AudioRecordingFormatOption);
+            if (audioFormat.RequiresFfmpeg && !EnsureFfmpegAvailable())
             {
                 return;
             }
@@ -9196,10 +9242,11 @@ namespace MyTools.ViewModels
 
             try
             {
-                _activeAudioOutputPath = BuildRecordingOutputPath(outputFolder, "录音", ".m4a");
+                _activeAudioOutputPath = BuildRecordingOutputPath(outputFolder, "录音", "." + audioFormat.Extension);
                 await Recording.StartAudioOnlyAsync(_activeAudioOutputPath, CancellationToken.None);
                 _audioRecordingStartedAt = DateTime.Now;
                 IsAudioRecording = true;
+                ResetAudioRecordingWaveform();
                 UpdateAudioRecordingIndicator();
                 _audioRecordingTimer.Start();
             }
@@ -9274,6 +9321,8 @@ namespace MyTools.ViewModels
                 _audioRecordingTimer.Stop();
                 IsAudioRecording = false;
                 AudioRecordingIndicator = string.Empty;
+                AudioRecordingDurationText = "00:00";
+                ResetAudioRecordingWaveform();
                 if (!showMessage)
                 {
                     return;
@@ -9306,6 +9355,8 @@ namespace MyTools.ViewModels
                 _audioRecordingTimer.Stop();
                 IsAudioRecording = false;
                 AudioRecordingIndicator = string.Empty;
+                AudioRecordingDurationText = "00:00";
+                ResetAudioRecordingWaveform();
             }
         }
 
@@ -9318,12 +9369,74 @@ namespace MyTools.ViewModels
             }
 
             var elapsed = DateTime.Now - _audioRecordingStartedAt;
-            AudioRecordingIndicator = $"录音中 {elapsed:mm\\:ss}";
+            var durationText = elapsed.TotalHours >= 1
+                ? elapsed.ToString(@"hh\:mm\:ss", CultureInfo.InvariantCulture)
+                : elapsed.ToString(@"mm\:ss", CultureInfo.InvariantCulture);
+            AudioRecordingDurationText = durationText;
+            AudioRecordingIndicator = $"录音中 {durationText}";
+            PushAudioRecordingLevel(Recording.GetActiveAudioLevelSnapshot());
         }
 
         private void AudioRecordingTimer_OnTick(object sender, EventArgs e)
         {
             UpdateAudioRecordingIndicator();
+        }
+
+        private void InitializeAudioRecordingWaveformBars()
+        {
+            AudioRecordingWaveformBars.Clear();
+            for (var index = 0; index < AudioRecordingWaveformBarCount; index++)
+            {
+                AudioRecordingWaveformBars.Add(new AudioRecordingWaveformBar
+                {
+                    Height = AudioRecordingWaveformMinBarHeight,
+                    Opacity = 0.35
+                });
+            }
+        }
+
+        private void ResetAudioRecordingWaveform()
+        {
+            foreach (var bar in AudioRecordingWaveformBars)
+            {
+                bar.Height = AudioRecordingWaveformMinBarHeight;
+                bar.Opacity = 0.35;
+            }
+        }
+
+        private void PushAudioRecordingLevel(RecordingAudioLevelSnapshot snapshot)
+        {
+            if (AudioRecordingWaveformBars.Count == 0)
+            {
+                InitializeAudioRecordingWaveformBars();
+            }
+
+            var sampleLevel = snapshot?.CurrentSampleLevel ?? 0d;
+            var normalizedLevel = NormalizeAudioRecordingWaveformLevel(sampleLevel);
+            var height = AudioRecordingWaveformMinBarHeight
+                + normalizedLevel * (AudioRecordingWaveformMaxBarHeight - AudioRecordingWaveformMinBarHeight);
+            var opacity = 0.35 + normalizedLevel * 0.55;
+
+            for (var index = 0; index < AudioRecordingWaveformBars.Count - 1; index++)
+            {
+                AudioRecordingWaveformBars[index].Height = AudioRecordingWaveformBars[index + 1].Height;
+                AudioRecordingWaveformBars[index].Opacity = AudioRecordingWaveformBars[index + 1].Opacity;
+            }
+
+            var last = AudioRecordingWaveformBars[AudioRecordingWaveformBars.Count - 1];
+            last.Height = Math.Round(height, 1);
+            last.Opacity = Math.Round(opacity, 2);
+        }
+
+        private static double NormalizeAudioRecordingWaveformLevel(double sampleLevel)
+        {
+            if (double.IsNaN(sampleLevel) || double.IsInfinity(sampleLevel) || sampleLevel <= 0d)
+            {
+                return 0d;
+            }
+
+            var clamped = Math.Min(1d, sampleLevel);
+            return Math.Min(1d, Math.Sqrt(clamped * 4d));
         }
 
         private bool EnsureFfmpegAvailable()
@@ -9417,6 +9530,21 @@ namespace MyTools.ViewModels
             var settings = await AppSettingsService.LoadAsync();
             RecordingOutputFolderText = string.IsNullOrWhiteSpace(settings.RecordingOutputFolder) ? "未设置" : settings.RecordingOutputFolder;
             AudioOutputFolderText = string.IsNullOrWhiteSpace(settings.AudioOutputFolder) ? "未设置" : settings.AudioOutputFolder;
+            _audioRecordingFormatOption = NormalizeAudioRecordingFormatOption(settings.AudioRecordingFormat);
+            OnPropertyChanged(nameof(AudioRecordingFormatOption));
+        }
+
+        private async Task PersistAudioRecordingFormatAsync()
+        {
+            try
+            {
+                var format = AudioRecordingFormat.FromExtension(AudioRecordingFormatOption).Extension;
+                await AppSettingsService.UpdateAsync(settings => settings.AudioRecordingFormat = format);
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Warning("Persist audio recording format failed: {Msg}", ex.Message);
+            }
         }
 
         private async Task SelectRecordingOutputFolderAsync()
@@ -9464,6 +9592,12 @@ namespace MyTools.ViewModels
         {
             Directory.CreateDirectory(outputFolder);
             return Path.Combine(outputFolder, $"{prefix}_{DateTime.Now:yyyyMMdd_HHmmss}{extension}");
+        }
+
+        private static string NormalizeAudioRecordingFormatOption(string value)
+        {
+            var extension = AudioRecordingFormat.NormalizeExtension(value);
+            return extension.ToUpperInvariant();
         }
 
         private static void OpenFileInExplorer(string filePath)
@@ -12949,6 +13083,8 @@ namespace MyTools.ViewModels
                     Recording.StopAudioOnlyAsync().GetAwaiter().GetResult();
                     IsAudioRecording = false;
                     AudioRecordingIndicator = string.Empty;
+                    AudioRecordingDurationText = "00:00";
+                    ResetAudioRecordingWaveform();
                 }
             }
             catch (Exception ex)
@@ -14929,6 +15065,49 @@ namespace MyTools.ViewModels
         public string TimeText => CreatedAt == default(DateTime)
             ? string.Empty
             : CreatedAt.ToString("MM-dd HH:mm:ss");
+    }
+
+    public class AudioRecordingWaveformBar : INotifyPropertyChanged
+    {
+        private double _height;
+        private double _opacity = 0.35;
+
+        public double Height
+        {
+            get => _height;
+            set
+            {
+                if (Math.Abs(_height - value) < 0.01)
+                {
+                    return;
+                }
+
+                _height = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public double Opacity
+        {
+            get => _opacity;
+            set
+            {
+                if (Math.Abs(_opacity - value) < 0.01)
+                {
+                    return;
+                }
+
+                _opacity = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public event PropertyChangedEventHandler PropertyChanged;
+
+        private void OnPropertyChanged([CallerMemberName] string propertyName = null)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
     }
 
     public class VideoPlaylistItem : INotifyPropertyChanged

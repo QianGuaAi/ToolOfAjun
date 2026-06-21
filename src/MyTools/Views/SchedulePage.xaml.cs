@@ -45,19 +45,20 @@ namespace MyTools.Views
         private const int EmployeeRowOverscan = 12; // Increased for smoother scrolling on large rosters (perf optimization)
         private static readonly string[] DowZh = { "日", "一", "二", "三", "四", "五", "六" };
         private static readonly Brush HeaderBg = FrozenBrush(0xF1, 0xF5, 0xF9);
-        private static readonly Brush HolidayColumnBg = FrozenBrush(0xDB, 0xEA, 0xFE);
+        private static readonly Brush HolidayColumnBg = FrozenBrush(0xBF, 0xDB, 0xFE);
         private static readonly Brush QuotaMismatchBg = FrozenBrush(0xFE, 0xE2, 0xE2);
         private static readonly Brush BorderBg = FrozenBrush(0xE2, 0xE8, 0xF0);
         private static readonly Brush CellDayBg = FrozenBrush(0xFF, 0xFF, 0xFF);
-        private static readonly Brush CellCardBg = FrozenBrush(0xFB, 0xCF, 0xE8);
+        private static readonly Brush CellCardBg = FrozenBrush(0xA7, 0xF3, 0xD0);
         private static readonly Brush CellDeputyBg = FrozenBrush(0x99, 0x1B, 0x1B);
         private static readonly Brush CellInfectBg = FrozenBrush(0xFE, 0xE2, 0xE2);
         private static readonly Brush CellBigBg = FrozenBrush(0x1E, 0x29, 0x3B);
         private static readonly Brush CellSmallBg = FrozenBrush(0x47, 0x55, 0x69);
         private static readonly Brush CellRestBg = FrozenBrush(0xFD, 0xEC, 0xC8);
-        private static readonly Brush CellPublicBg = FrozenBrush(0xA7, 0xF3, 0xD0);
+        private static readonly Brush CellPublicBg = FrozenBrush(0xFE, 0xF3, 0xC7);
         private static readonly Brush CellHalfBg = FrozenBrush(0xFE, 0xF3, 0xC7);
         private static readonly Brush SerialTextFg = FrozenBrush(0x64, 0x74, 0x8B);
+        private static readonly string[] ShiftPickerVisibleLabels = { "白", "卡", "副", "感", "大夜", "小", "休", "公", "小1", "清空" };
 
         public SchedulePage()
         {
@@ -720,23 +721,23 @@ namespace MyTools.Views
         private static Brush ResolveCellBg(ShiftCell cell, bool isHoliday)
         {
             var code = ShiftCodes.Normalize(cell?.Code);
-            if (code == ShiftCodes.Rest) return CellRestBg;
-            if (code == ShiftCodes.Card) return CellCardBg;
-            if (code == ShiftCodes.Deputy) return CellDeputyBg;
-            if (isHoliday) return HolidayColumnBg;
             if (string.IsNullOrEmpty(code))
             {
-                return Brushes.White;
+                return isHoliday ? HolidayColumnBg : Brushes.White;
             }
+
             switch (code)
             {
-                case "白": return isHoliday ? CellDayBg : Brushes.White;
-                case "感": return CellInfectBg;
-                case "大": return CellBigBg;
-                case "小": return CellSmallBg;
-                case "公": return CellPublicBg;
-                case "午": return CellHalfBg;
-                default: return Brushes.White;
+                case ShiftCodes.Day: return isHoliday ? HolidayColumnBg : Brushes.White;
+                case ShiftCodes.Card: return CellCardBg;
+                case ShiftCodes.Deputy: return CellDeputyBg;
+                case ShiftCodes.Infect: return CellInfectBg;
+                case ShiftCodes.Big: return CellBigBg;
+                case ShiftCodes.Small: return CellSmallBg;
+                case ShiftCodes.Rest: return CellRestBg;
+                case ShiftCodes.Public: return CellPublicBg;
+                case ShiftCodes.Half: return CellHalfBg;
+                default: return isHoliday ? HolidayColumnBg : Brushes.White;
             }
         }
 
@@ -761,6 +762,11 @@ namespace MyTools.Views
                     return Brushes.White;
                 default: return Brushes.Black;
             }
+        }
+
+        private static string[] GetShiftPickerVisibleLabels()
+        {
+            return ShiftPickerVisibleLabels;
         }
 
         private static string DisplayCellCode(string code)
@@ -932,20 +938,46 @@ namespace MyTools.Views
             }
 
             Add("白", () => _vm.SetCell(empIdx, dayIdx, ShiftCodes.Day), Brushes.White);
-            Add("卡", () => _vm.SetCell(empIdx, dayIdx, ShiftCodes.Card), new SolidColorBrush(Color.FromRgb(0xFB, 0xCF, 0xE8)));
-            Add("副", () => _vm.SetCell(empIdx, dayIdx, ShiftCodes.Deputy), new SolidColorBrush(Color.FromRgb(0x99, 0x1B, 0x1B)), Brushes.White);
-            Add("感", () => _vm.SetCell(empIdx, dayIdx, ShiftCodes.Infect), new SolidColorBrush(Color.FromRgb(0xFF, 0xEB, 0xEE)));
-            Add("大夜", () => _vm.SetCell(empIdx, dayIdx, ShiftCodes.Big), new SolidColorBrush(Color.FromRgb(0x37, 0x47, 0x4F)), Brushes.White);
-            Add("小", () => _vm.SetCell(empIdx, dayIdx, ShiftCodes.Small), new SolidColorBrush(Color.FromRgb(0x78, 0x90, 0x9C)), Brushes.White);
-            Add("休", () => _vm.SetCell(empIdx, dayIdx, ShiftCodes.Rest), new SolidColorBrush(Color.FromRgb(0xFD, 0xEC, 0xC8)));
-            Add("公", () => _vm.SetCell(empIdx, dayIdx, ShiftCodes.Public), new SolidColorBrush(Color.FromRgb(0xA5, 0xD6, 0xA7)));
-            Add("午", () => _vm.SetCell(empIdx, dayIdx, ShiftCodes.Half), new SolidColorBrush(Color.FromRgb(0xFF, 0xF9, 0xC4)));
+            var labels = GetShiftPickerVisibleLabels();
+            for (var i = 1; i < labels.Length; i++)
+            {
+                var label = labels[i];
+                if (label == "小1")
+                {
+                    panel.Children.Add(new Border { Width = 252, Height = 1, Background = new SolidColorBrush(Color.FromRgb(0xE0, 0xE0, 0xE0)), Margin = new Thickness(0, 4, 0, 4) });
+                }
 
-            // separator
-            panel.Children.Add(new Border { Width = 252, Height = 1, Background = new SolidColorBrush(Color.FromRgb(0xE0, 0xE0, 0xE0)), Margin = new Thickness(0, 4, 0, 4) });
-
-            Add("小1", () => _vm.ApplySmallNight1(empIdx, dayIdx), new SolidColorBrush(Color.FromRgb(0xFF, 0xCC, 0x80)));
-            Add("清空", () => _vm.SetCell(empIdx, dayIdx, ""), Brushes.WhiteSmoke);
+                switch (label)
+                {
+                    case "卡":
+                        Add(label, () => _vm.SetCell(empIdx, dayIdx, ShiftCodes.Card), new SolidColorBrush(Color.FromRgb(0xA7, 0xF3, 0xD0)));
+                        break;
+                    case "副":
+                        Add(label, () => _vm.SetCell(empIdx, dayIdx, ShiftCodes.Deputy), new SolidColorBrush(Color.FromRgb(0x99, 0x1B, 0x1B)), Brushes.White);
+                        break;
+                    case "感":
+                        Add(label, () => _vm.SetCell(empIdx, dayIdx, ShiftCodes.Infect), new SolidColorBrush(Color.FromRgb(0xFF, 0xEB, 0xEE)));
+                        break;
+                    case "大夜":
+                        Add(label, () => _vm.SetCell(empIdx, dayIdx, ShiftCodes.Big), new SolidColorBrush(Color.FromRgb(0x37, 0x47, 0x4F)), Brushes.White);
+                        break;
+                    case "小":
+                        Add(label, () => _vm.SetCell(empIdx, dayIdx, ShiftCodes.Small), new SolidColorBrush(Color.FromRgb(0x78, 0x90, 0x9C)), Brushes.White);
+                        break;
+                    case "休":
+                        Add(label, () => _vm.SetCell(empIdx, dayIdx, ShiftCodes.Rest), new SolidColorBrush(Color.FromRgb(0xFD, 0xEC, 0xC8)));
+                        break;
+                    case "公":
+                        Add(label, () => _vm.SetCell(empIdx, dayIdx, ShiftCodes.Public), new SolidColorBrush(Color.FromRgb(0xFE, 0xF3, 0xC7)));
+                        break;
+                    case "小1":
+                        Add(label, () => _vm.ApplySmallNight1(empIdx, dayIdx), new SolidColorBrush(Color.FromRgb(0xFF, 0xCC, 0x80)));
+                        break;
+                    case "清空":
+                        Add(label, () => _vm.SetCell(empIdx, dayIdx, ""), Brushes.WhiteSmoke);
+                        break;
+                }
+            }
 
             border.Child = panel;
             popup.Child = border;

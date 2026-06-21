@@ -156,13 +156,14 @@ namespace MyTools.Services
 
         public async Task StartAudioOnlyAsync(string outputPath, CancellationToken cancellationToken)
         {
-            if (!TryGetFfmpegPath(out var ffmpegPath))
+            ValidateOutputPath(outputPath);
+            EnsureIdle();
+            var format = AudioRecordingFormat.FromPath(outputPath);
+            var ffmpegPath = string.Empty;
+            if (format.RequiresFfmpeg && !TryGetFfmpegPath(out ffmpegPath))
             {
                 throw new FileNotFoundException("未找到 ffmpeg.exe。", ExpectedFfmpegPath);
             }
-
-            ValidateOutputPath(outputPath);
-            EnsureIdle();
 
             var loopbackRecorder = TryStartLoopbackRecorder(outputPath, out var loopbackAudioPath);
             if (loopbackRecorder == null)
@@ -184,7 +185,7 @@ namespace MyTools.Services
             }
 
             await Task.CompletedTask.ConfigureAwait(false);
-            AppLogService.Information("System audio recording started: {Path}", outputPath);
+            AppLogService.Information("System audio recording started: {Path}, format={Format}", outputPath, format.Extension);
         }
 
         public Task<RecordingStopResult> StopVideoRecordingAsync()
@@ -195,6 +196,24 @@ namespace MyTools.Services
         public Task<RecordingStopResult> StopAudioOnlyAsync()
         {
             return StopCurrentAsync(RecordingTaskKind.Audio);
+        }
+
+        public RecordingAudioLevelSnapshot GetActiveAudioLevelSnapshot()
+        {
+            WasapiLoopbackAudioRecorder loopbackRecorder;
+            lock (_syncRoot)
+            {
+                loopbackRecorder = _activeLoopbackRecorder;
+            }
+
+            var stats = loopbackRecorder?.ConsumeLiveAudioLevelStats() ?? new AudioLevelStats();
+            return new RecordingAudioLevelSnapshot
+            {
+                CurrentSampleLevel = stats.CurrentSampleLevel,
+                MaxSampleLevel = stats.MaxSampleLevel,
+                BytesRecorded = stats.BytesRecorded,
+                HasAudibleAudio = stats.HasAudibleAudio
+            };
         }
 
         private async Task<RecordingStopResult> StopCurrentAsync(RecordingTaskKind expectedTaskKind)
@@ -264,7 +283,7 @@ namespace MyTools.Services
                 {
                     try
                     {
-                        videoHasAudio = await MuxVideoAndLoopbackAudioAsync(ffmpegPath, processOutputPath, loopbackAudioPath, outputPath).ConfigureAwait(false);
+                        videoHasAudio = await MuxVideoAndLoopbackAudioAsync(ffmpegPath, processOutputPath, loopbackAudioPath, loopbackRecorder, outputPath).ConfigureAwait(false);
                     }
                     catch (Exception ex)
                     {
@@ -279,7 +298,7 @@ namespace MyTools.Services
                 }
                 else if (!timedOut && expectedTaskKind == RecordingTaskKind.Audio)
                 {
-                    await EncodeLoopbackAudioAsync(ffmpegPath, loopbackAudioPath, outputPath).ConfigureAwait(false);
+                    await SaveLoopbackAudioAsync(ffmpegPath, loopbackAudioPath, loopbackRecorder, outputPath).ConfigureAwait(false);
                 }
 
                 var fileSize = GetFileSize(outputPath);
@@ -563,17 +582,22 @@ namespace MyTools.Services
             }
         }
 
-        private async Task<bool> MuxVideoAndLoopbackAudioAsync(string ffmpegPath, string videoPath, string audioPath, string outputPath)
+        private async Task<bool> MuxVideoAndLoopbackAudioAsync(string ffmpegPath, string videoPath, string audioPath, WasapiLoopbackAudioRecorder recorder, string outputPath)
         {
             if (string.IsNullOrWhiteSpace(videoPath) || !File.Exists(videoPath))
             {
                 return false;
             }
 
-            if (string.IsNullOrWhiteSpace(audioPath) || !File.Exists(audioPath) || GetFileSize(audioPath) <= 44)
+            if (!HasUsableLoopbackAudio(audioPath, recorder, out var audioStats))
             {
                 File.Copy(videoPath, outputPath, true);
-                AppLogService.Warning("Loopback audio file is empty; saved video without audio: {Path}", outputPath);
+                AppLogService.Warning(
+                    "Loopback audio is empty or silent; saved video without audio: {Path}, bytes={Bytes}, peak={Peak}, audibleSamples={Samples}",
+                    outputPath,
+                    audioStats.BytesRecorded,
+                    audioStats.MaxSampleLevel,
+                    audioStats.AudibleSampleCount);
                 return false;
             }
 
@@ -587,19 +611,56 @@ namespace MyTools.Services
             return true;
         }
 
-        private async Task EncodeLoopbackAudioAsync(string ffmpegPath, string audioPath, string outputPath)
+        private async Task SaveLoopbackAudioAsync(string ffmpegPath, string audioPath, WasapiLoopbackAudioRecorder recorder, string outputPath)
+        {
+            if (!HasUsableLoopbackAudio(audioPath, recorder, out var audioStats))
+            {
+                TryDeleteFile(outputPath);
+                AppLogService.Warning(
+                    "Loopback audio save cancelled because audio is empty or silent: {Path}, bytes={Bytes}, peak={Peak}, audibleSamples={Samples}",
+                    outputPath,
+                    audioStats.BytesRecorded,
+                    audioStats.MaxSampleLevel,
+                    audioStats.AudibleSampleCount);
+                throw new InvalidOperationException(
+                    "未检测到可听的系统声音，录音文件已取消保存。\n\n"
+                    + "请确认电脑正在播放声音、播放器和系统音量未静音，并且当前默认播放设备就是正在出声的设备。");
+            }
+
+            var format = AudioRecordingFormat.FromPath(outputPath);
+            TryDeleteFile(outputPath);
+            if (!format.RequiresFfmpeg)
+            {
+                File.Move(audioPath, outputPath);
+                return;
+            }
+
+            var codecArgs = format.FfmpegCodecArguments;
+            var arguments = string.Format(
+                "-y -i \"{0}\" {1} \"{2}\"",
+                audioPath,
+                codecArgs,
+                outputPath);
+            await RunFfmpegUtilityAsync(ffmpegPath, arguments, TimeSpan.FromSeconds(60)).ConfigureAwait(false);
+        }
+
+        private static bool HasUsableLoopbackAudio(string audioPath, WasapiLoopbackAudioRecorder recorder, out AudioLevelStats audioStats)
         {
             if (string.IsNullOrWhiteSpace(audioPath) || !File.Exists(audioPath) || GetFileSize(audioPath) <= 44)
             {
-                throw new InvalidOperationException("未采集到系统声音，请确认电脑正在播放音频并且存在默认播放设备。");
+                audioStats = new AudioLevelStats(0, 0d, 0);
+                return false;
             }
 
-            TryDeleteFile(outputPath);
-            var arguments = string.Format(
-                "-y -i \"{0}\" -c:a aac -b:a 160k -ar 44100 -ac 2 \"{1}\"",
-                audioPath,
-                outputPath);
-            await RunFfmpegUtilityAsync(ffmpegPath, arguments, TimeSpan.FromSeconds(60)).ConfigureAwait(false);
+            var liveStats = recorder?.GetLiveAudioLevelStats() ?? new AudioLevelStats(0, 0d, 0);
+            if (liveStats.HasAudibleAudio)
+            {
+                audioStats = liveStats;
+                return true;
+            }
+
+            audioStats = WasapiLoopbackAudioRecorder.ScanWaveFile(audioPath);
+            return audioStats.HasAudibleAudio;
         }
 
         private async Task RunFfmpegUtilityAsync(string ffmpegPath, string arguments, TimeSpan timeout)
@@ -866,5 +927,60 @@ namespace MyTools.Services
         public long DurationSeconds { get; set; }
         public long FileSizeBytes { get; set; }
         public bool VideoHasAudio { get; set; }
+    }
+
+    public sealed class RecordingAudioLevelSnapshot
+    {
+        public double CurrentSampleLevel { get; set; }
+        public double MaxSampleLevel { get; set; }
+        public long BytesRecorded { get; set; }
+        public bool HasAudibleAudio { get; set; }
+    }
+
+    public sealed class AudioRecordingFormat
+    {
+        private static readonly AudioRecordingFormat WavFormat = new AudioRecordingFormat("wav", false, string.Empty);
+        private static readonly AudioRecordingFormat M4aFormat = new AudioRecordingFormat("m4a", true, "-c:a aac -b:a 160k -ar 44100 -ac 2");
+        private static readonly AudioRecordingFormat Mp3Format = new AudioRecordingFormat("mp3", true, "-c:a libmp3lame -b:a 192k -ar 44100 -ac 2");
+
+        private AudioRecordingFormat(string extension, bool requiresFfmpeg, string ffmpegCodecArguments)
+        {
+            Extension = extension;
+            RequiresFfmpeg = requiresFfmpeg;
+            FfmpegCodecArguments = ffmpegCodecArguments;
+        }
+
+        public string Extension { get; }
+
+        public bool RequiresFfmpeg { get; }
+
+        public string FfmpegCodecArguments { get; }
+
+        public static AudioRecordingFormat FromPath(string outputPath)
+        {
+            return FromExtension(Path.GetExtension(outputPath));
+        }
+
+        public static AudioRecordingFormat FromExtension(string extension)
+        {
+            var normalized = NormalizeExtension(extension);
+            if (string.Equals(normalized, "m4a", StringComparison.OrdinalIgnoreCase))
+            {
+                return M4aFormat;
+            }
+
+            if (string.Equals(normalized, "mp3", StringComparison.OrdinalIgnoreCase))
+            {
+                return Mp3Format;
+            }
+
+            return WavFormat;
+        }
+
+        public static string NormalizeExtension(string extension)
+        {
+            var value = (extension ?? string.Empty).Trim().TrimStart('.').ToLowerInvariant();
+            return value == "m4a" || value == "mp3" || value == "wav" ? value : "wav";
+        }
     }
 }

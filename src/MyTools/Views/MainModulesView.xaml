@@ -543,13 +543,65 @@
                                     </Border.Background>
                                     <DockPanel>
                                         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                                            <StackPanel Orientation="Horizontal"
-                                                        VerticalAlignment="Center"
-                                                        Margin="0,0,12,0"
-                                                        Visibility="{Binding HasAudioRecordingIndicator, Converter={StaticResource BoolToVis}}">
-                                                <Ellipse Width="8" Height="8" Fill="#E53935" Margin="0,0,6,0" VerticalAlignment="Center" />
-                                                <TextBlock Text="{Binding AudioRecordingIndicator}" Foreground="#C62828" FontWeight="SemiBold" VerticalAlignment="Center" />
-                                            </StackPanel>
+                                            <Border MinWidth="188"
+                                                    Height="34"
+                                                    Margin="0,0,12,0"
+                                                    Padding="10,5"
+                                                    CornerRadius="17"
+                                                    Background="{StaticResource BrushRecordingStatusBackground}"
+                                                    BorderBrush="{StaticResource BrushRecordingStatusBorder}"
+                                                    BorderThickness="1"
+                                                    Visibility="{Binding HasAudioRecordingIndicator, Converter={StaticResource BoolToVis}}">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                        <ColumnDefinition Width="*" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <Ellipse Grid.Column="0"
+                                                             Width="8"
+                                                             Height="8"
+                                                             Fill="{StaticResource BrushRecordingStatusText}"
+                                                             Margin="0,0,7,0"
+                                                             VerticalAlignment="Center" />
+                                                    <TextBlock Grid.Column="1"
+                                                               Text="录音中"
+                                                               Foreground="{StaticResource BrushRecordingStatusText}"
+                                                               FontWeight="SemiBold"
+                                                               VerticalAlignment="Center"
+                                                               Margin="0,0,8,0" />
+                                                    <TextBlock Grid.Column="2"
+                                                               Text="{Binding AudioRecordingDurationText}"
+                                                               Foreground="{StaticResource BrushRecordingStatusDuration}"
+                                                               FontFamily="Consolas"
+                                                               FontWeight="SemiBold"
+                                                               VerticalAlignment="Center"
+                                                               Margin="0,0,10,0" />
+                                                    <ItemsControl Grid.Column="3"
+                                                                  ItemsSource="{Binding AudioRecordingWaveformBars}"
+                                                                  Height="22"
+                                                                  VerticalAlignment="Center"
+                                                                  IsHitTestVisible="False">
+                                                        <ItemsControl.ItemsPanel>
+                                                            <ItemsPanelTemplate>
+                                                                <UniformGrid Rows="1" />
+                                                            </ItemsPanelTemplate>
+                                                        </ItemsControl.ItemsPanel>
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate>
+                                                                <Border Width="3"
+                                                                        Height="{Binding Height}"
+                                                                        CornerRadius="1.5"
+                                                                        Background="{StaticResource BrushRecordingStatusText}"
+                                                                        Opacity="{Binding Opacity}"
+                                                                        HorizontalAlignment="Center"
+                                                                        VerticalAlignment="Center" />
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                </Grid>
+                                            </Border>
                                             <Button Style="{StaticResource PrimaryActionButton}"
                                                     Command="{Binding TakeScreenshotNowCommand}"
                                                     Margin="0,0,8,0"
@@ -757,17 +809,23 @@
                                                     </StackPanel>
                                                 </Grid>
                 
-                                                <UniformGrid Rows="1" Columns="2" Margin="0,0,0,10">
+                                                <UniformGrid Rows="1" Columns="3" Margin="0,0,0,10">
                                                     <StackPanel Margin="0,0,8,0">
                                                         <TextBlock Text="录像帧率" Style="{StaticResource TextCaption}" Margin="0,0,0,4" />
                                                         <ComboBox ItemsSource="{Binding RecordingFrameRateOptions}"
                                                                   SelectedItem="{Binding RecordingFrameRateOption, Mode=TwoWay}"
                                                                   Height="32" />
                                                     </StackPanel>
-                                                    <StackPanel>
+                                                    <StackPanel Margin="0,0,8,0">
                                                         <TextBlock Text="MP4 画质" Style="{StaticResource TextCaption}" Margin="0,0,0,4" />
                                                         <ComboBox ItemsSource="{Binding RecordingQualityOptions}"
                                                                   SelectedItem="{Binding RecordingQualityOption, Mode=TwoWay}"
+                                                                  Height="32" />
+                                                    </StackPanel>
+                                                    <StackPanel>
+                                                        <TextBlock Text="录音格式" Style="{StaticResource TextCaption}" Margin="0,0,0,4" />
+                                                        <ComboBox ItemsSource="{Binding AudioRecordingFormatOptions}"
+                                                                  SelectedItem="{Binding AudioRecordingFormatOption, Mode=TwoWay}"
                                                                   Height="32" />
                                                     </StackPanel>
                                                 </UniformGrid>

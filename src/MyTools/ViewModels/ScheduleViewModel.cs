@@ -40,6 +40,7 @@ namespace MyTools.ViewModels
             ClearRandomCellsCommand = new RelayCommand(ClearRandomCells, () => Current != null);
             LoadVersionCommand = new AsyncRelayParameterCommand(LoadVersionAsync);
             ExportExcelCommand = new AsyncRelayCommand(ExportExcelAsync, () => Current != null);
+            ImportExcelCommand = new AsyncRelayCommand(ImportExcelAsync);
             ImportEmployeeTemplateCommand = new AsyncRelayCommand(ImportEmployeeTemplateAsync, () => Current != null);
             ExportEmployeeTemplateCommand = new AsyncRelayCommand(ExportEmployeeTemplateAsync, () => Current != null && Current.Employees.Count > 0);
             CopyPreviousMonthEmployeesCommand = new AsyncRelayCommand(CopyPreviousMonthEmployeesAsync, () => Current != null);
@@ -233,6 +234,7 @@ namespace MyTools.ViewModels
         public ICommand ClearRandomCellsCommand { get; }
         public ICommand LoadVersionCommand { get; }
         public ICommand ExportExcelCommand { get; }
+        public ICommand ImportExcelCommand { get; }
         public ICommand ImportEmployeeTemplateCommand { get; }
         public ICommand ExportEmployeeTemplateCommand { get; }
         public ICommand CopyPreviousMonthEmployeesCommand { get; }
@@ -280,6 +282,118 @@ namespace MyTools.ViewModels
                 StatusMessage = "导出失败：" + ex.Message;
                 System.Windows.MessageBox.Show(ex.Message, "导出失败", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
             }
+        }
+
+        private async Task ImportExcelAsync()
+        {
+            var dialog = new Microsoft.Win32.OpenFileDialog
+            {
+                Title = "导入排班 Excel",
+                Filter = "Excel 文件 (*.xlsx)|*.xlsx",
+                DefaultExt = ".xlsx",
+                CheckFileExists = true
+            };
+            if (dialog.ShowDialog() != true) return;
+
+            if (Current != null)
+            {
+                var resp = MessageBox.Show(
+                    "导入排班 Excel 会替换当前表格内容；如果当前表格还没保存，请先取消并保存。\n\n继续导入？",
+                    "导入排班 Excel",
+                    MessageBoxButton.OKCancel,
+                    MessageBoxImage.Question);
+                if (resp != MessageBoxResult.OK) return;
+            }
+
+            try
+            {
+                ScheduleExcelImportResult result;
+                if (Current != null)
+                {
+                    result = await ScheduleExcelImporter.ImportAsync(dialog.FileName, Current.Year, Current.Month, null).ConfigureAwait(true);
+                }
+                else
+                {
+                    result = await ScheduleExcelImporter.ImportAsync(dialog.FileName).ConfigureAwait(true);
+                }
+
+                Current = result.Schedule;
+                StatusMessage = BuildImportStatusMessage(dialog.FileName, result);
+
+                var saveNowMessage = BuildImportSavePrompt(result);
+                var saveNow = MessageBox.Show(
+                    saveNowMessage,
+                    "导入排班 Excel",
+                    MessageBoxButton.YesNo,
+                    result.Warnings.Count > 0 ? MessageBoxImage.Warning : MessageBoxImage.Information);
+                if (saveNow == MessageBoxResult.Yes)
+                {
+                    if (ScheduleService.VersionExists(Current.Year, Current.Month, Current.VersionName))
+                    {
+                        var overwrite = MessageBox.Show(
+                            $"{Current.Year}-{Current.Month:00} 已有版本【{Current.VersionName}】。是否覆盖保存？",
+                            "保存导入排班",
+                            MessageBoxButton.YesNo,
+                            MessageBoxImage.Question);
+                        if (overwrite != MessageBoxResult.Yes)
+                        {
+                            StatusMessage += " 当前导入结果尚未保存。";
+                            return;
+                        }
+                    }
+
+                    var validationIssues = BuildSaveValidationIssues(Current).ToList();
+                    if (validationIssues.Count > 0)
+                    {
+                        ShowSaveValidationIssues(validationIssues, "导入结果基础数据不完整，不能保存：", "保存导入排班");
+                        StatusMessage = $"导入结果未保存：{validationIssues.Count} 项基础数据校验未通过。";
+                        return;
+                    }
+
+                    var path = await ScheduleService.SaveAsync(Current).ConfigureAwait(true);
+                    LoadVersions();
+                    StatusMessage = $"已导入并保存：{path}";
+                }
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Warning("Schedule Excel import failed: {Msg}", ex.Message);
+                StatusMessage = "导入排班 Excel 失败：" + ex.Message;
+                MessageBox.Show(ex.Message, "导入排班 Excel 失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private static string BuildImportStatusMessage(string filePath, ScheduleExcelImportResult result)
+        {
+            var schedule = result?.Schedule;
+            if (schedule == null)
+            {
+                return "导入排班 Excel 完成。";
+            }
+
+            var warningSuffix = result.Warnings.Count > 0 ? $"，{result.Warnings.Count} 条提示" : string.Empty;
+            return $"已导入 {schedule.Year}-{schedule.Month:00}/{schedule.VersionName}，{schedule.Employees.Count} 位人员{warningSuffix}：{Path.GetFileName(filePath)}";
+        }
+
+        private static string BuildImportSavePrompt(ScheduleExcelImportResult result)
+        {
+            var schedule = result?.Schedule;
+            var message = schedule == null
+                ? "导入成功。是否立即保存为本地排班版本？"
+                : $"导入成功：{schedule.Year}-{schedule.Month:00}/{schedule.VersionName}，{schedule.Employees.Count} 位人员。\n\n是否立即保存为本地排班版本？";
+
+            if (result != null && result.Warnings.Count > 0)
+            {
+                var warnings = string.Join(Environment.NewLine, result.Warnings.Take(6).Select(item => "· " + item));
+                if (result.Warnings.Count > 6)
+                {
+                    warnings += Environment.NewLine + $"· 另有 {result.Warnings.Count - 6} 条提示未显示";
+                }
+
+                message += Environment.NewLine + Environment.NewLine + "导入提示：" + Environment.NewLine + warnings;
+            }
+
+            return message;
         }
 
         private static string BuildExportFileName(ScheduleVersion schedule)
@@ -556,18 +670,8 @@ namespace MyTools.ViewModels
                 var validationIssues = BuildSaveValidationIssues(Current).ToList();
                 if (validationIssues.Count > 0)
                 {
-                    var detail = string.Join(Environment.NewLine, validationIssues.Take(12).Select(item => "· " + item));
-                    if (validationIssues.Count > 12)
-                    {
-                        detail += Environment.NewLine + $"· 另有 {validationIssues.Count - 12} 项未显示";
-                    }
-
                     StatusMessage = $"保存被阻止：{validationIssues.Count} 项基础数据校验未通过。";
-                    MessageBox.Show(
-                        "排班基础数据不完整，不能保存：\n\n" + detail,
-                        "排班保存校验",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Warning);
+                    ShowSaveValidationIssues(validationIssues, "排班基础数据不完整，不能保存：", "排班保存校验");
                     return;
                 }
 
@@ -581,6 +685,21 @@ namespace MyTools.ViewModels
                 AppLogService.Warning("SaveSchedule failed: {Msg}", ex.Message);
                 StatusMessage = "保存失败：" + ex.Message;
             }
+        }
+
+        private static void ShowSaveValidationIssues(IList<string> validationIssues, string messagePrefix, string title)
+        {
+            var detail = string.Join(Environment.NewLine, validationIssues.Take(12).Select(item => "· " + item));
+            if (validationIssues.Count > 12)
+            {
+                detail += Environment.NewLine + $"· 另有 {validationIssues.Count - 12} 项未显示";
+            }
+
+            MessageBox.Show(
+                messagePrefix + "\n\n" + detail,
+                title,
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
         }
 
         private async Task SaveAsAsync()

@@ -9,7 +9,7 @@ namespace MyTools.Services
     /// </summary>
     public class ShiftCell
     {
-        /// <summary>白/卡/副/感/大(界面显示为夜)/小/休/公/午；空字符串表示未指定。</summary>
+        /// <summary>白/卡/副/感/大/小/休/公/午；空字符串表示未指定。旧“夜”输入会归一化为“大”。</summary>
         public string Code { get; set; } = string.Empty;
 
         public bool IsManual { get; set; }
