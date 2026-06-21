@@ -492,6 +492,8 @@ namespace MyTools.Services
                     return ShiftCodes.Rest;
                 case "公休":
                     return ShiftCodes.Public;
+                case "产假":
+                    return ShiftCodes.Maternity;
                 case "下午休":
                 case "下午休0.5":
                     return ShiftCodes.Half;
@@ -503,7 +505,7 @@ namespace MyTools.Services
                 return normalized;
             }
 
-            throw new InvalidDataException($"第 {row} 行 {day} 日班次“{text}”不在支持范围：白、卡、副、感、大、小、休、公、午。");
+            throw new InvalidDataException($"第 {row} 行 {day} 日班次“{text}”不在支持范围：白、卡、副、感、大、小、休、公、产、午。");
         }
 
         private static string BuildVersionName(string requested, string filePath)

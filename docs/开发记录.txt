@@ -1,5 +1,50 @@
 # 开发记录
 
+## [2026-06-21] 修复排班单元格点击菜单
+- 修复排班单元格普通单击不弹出班次菜单的问题：`SchedulePage` 不再在 `MouseDown` 阶段抢占鼠标捕获，保留 WPF `Button.Click` 正常触发班次选择弹窗。
+- 拖拽多选仍在鼠标移入其它单元格后才捕获鼠标，避免普通点击和框选交互互相干扰。
+- `scripts/codex-eval.ps1 -Quick` 新增排班单元格鼠标事件回归，防止普通点击路径再次提前 `CaptureMouse()`。
+
+## [2026-06-21] 重新打包安装程序
+- 使用仓库内置 `.dotnet` 临时设置 `DOTNET_ROOT` 与 PATH 后执行完整验证和安装包流水线：`powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\codex-eval.ps1`。
+- 同步将 `scripts\Build-Installer.ps1` 默认版本更新为 `2026.6.21.1`，避免后续安装包验证使用旧默认版本覆盖新产物。
+- 主程序、卸载器和安装器构建均通过，0 warning / 0 error；安装器文件版本为 `2026.6.21.1`。
+- 本安装包已包含排班单元格点击弹出班次菜单修复、允许随时导出、多选填充、选区 Delete 清空、产假班次、导入导出和休息日统计逻辑。
+- Release 根目录未发现散落 `.dll`，主程序继续保持单 exe 托管依赖打包方式。
+- 输出安装包 `artifacts\installer\MyToolsSetup.exe`，大小 47,078,912 bytes，SHA256 = `B49DD94A7EC105194448146F68913F09E9618F8245457571DE22C964FB217ABD`。
+- Payload 压缩包 `artifacts\installer\MyToolsPayload.zip`，大小 46,880,627 bytes，SHA256 = `4240F45B0C689DB303EC63DEF8ABEEB5463065A58154E7ABBC393A6BD9B3AB52`。
+
+## [2026-06-21] 排班允许随时导出
+- `ScheduleViewModel.ExportExcelAsync()` 移除自动生成完成闸门，排班工具栏“导出”现在只要求当前已加载排班版本。
+- `GeneratedAt` 仅保留为自动设置休息日或 Excel 导入完成时间记录，不再作为 Excel 导出权限。
+- `scripts/codex-eval.ps1 -Quick` 新增排班导出源码闸门与命令可用性回归，覆盖 `GeneratedAt=null` 时仍可导出的入口状态。
+- 同步更新排班功能说明、程序逻辑说明、场景控件交互说明和日程测试说明。
+
+## [2026-06-21] 排班表多选填充与选区清空
+- `SchedulePage` 为排班班次单元格新增页面级选区：单击选中源格，拖拽或 `Shift` 点击选择矩形区域，`Ctrl` 点击追加或取消单格选择。
+- 排班工具栏新增“填充”按钮，可将绿色边框源单元格的班次批量写入当前选区；非空目标格标记为手动，空白源格填充会清空目标格。
+- 排班表支持选区内按 `Delete` 清空班次单元格，将 `Code` 置空、`IsManual=false`；焦点在姓名或总休输入框时保留文本框原有 Delete 行为。
+- `ScheduleViewModel` 新增 `FillCellsFromSource()` 与 `ClearCells()`，复用局部刷新和统计/冲突重算路径，不改变排班 JSON 结构。
+- `scripts/codex-eval.ps1 -Quick` 新增排班选区填充和选区清空回归，断言批量写入、手动标记、休息统计和未选中源格保持不变。
+- 同步更新排班功能说明、程序逻辑说明和场景控件交互说明。
+
+## [2026-06-21] 重新打包安装程序
+- 使用仓库内置 `.dotnet` 临时设置 `DOTNET_ROOT` 与 PATH 后执行完整安装包流水线：`powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Build-Installer.ps1 -Configuration Release -Version 2026.6.21.0`。
+- 同步将 `scripts\Build-Installer.ps1` 默认版本更新为 `2026.6.21.0`，避免后续安装包验证使用旧默认版本覆盖新产物。
+- 主程序、卸载器和安装器构建均通过，0 warning / 0 error；安装器文件版本为 `2026.6.21.0`。
+- 本安装包已包含排班“产假”班次、导入导出与休息日统计逻辑，以及 Loop Engineering review 阶段记录模块应用逻辑的规则更新。
+- Release 根目录未发现散落 `.dll`，主程序继续保持单 exe 托管依赖打包方式。
+- 输出安装包 `artifacts\installer\MyToolsSetup.exe`，大小 47,077,376 bytes，SHA256 = `0B8ADCF6D7DE0BF9AF94626DAD8007722D742D18263CF7210C5887E46C381611`。
+- Payload 压缩包 `artifacts\installer\MyToolsPayload.zip`，大小 46,879,157 bytes，SHA256 = `900552653711FD67343C1816CF0ED7FC57E4CAC3A3971DDA22F339742D8F1AF5`。
+
+## [2026-06-21] 排班产假班次与闭环审查规则
+- 排班班次弹出菜单新增“产假”选项，选择后当前单元格写入并显示“产”。
+- `ShiftCodes` 将“产”纳入班次白名单，按 1 天休息、0 天上班统计，参与每日实休、个人月休、连续上班和冲突检查。
+- `SchedulePage`、图例和 `ScheduleExcelExporter` 同步增加“产”浅橙色显示；`ScheduleExcelImporter` 支持导入“产 / 产假”。
+- `scripts/codex-eval.ps1 -Quick` 新增产假菜单、统计、界面填充色、Excel 导出填充色和导入保留回归。
+- 同步更新排班功能说明、程序逻辑说明和场景控件交互说明。
+- Loop Engineering review 规则和 `mytools-reviewer` 指令新增要求：审查时核对触达模块或功能的应用逻辑是否已实时记录到对应活文档。
+
 ## [2026-06-20] 排班 Excel 导入
 - 排班工具栏新增“导入排班”按钮，可选择 `.xlsx` 排班表并导入为当前表格。
 - 新增 `ScheduleExcelImporter`，按导出表结构读取日期列、每日总休、人员行和班次；支持文件名 `YYYY-MM` 年月识别、当前排班年月兜底、共享字符串、旧“夜 / 大夜”归一化为“大”，以及在识别到“上班”统计列表头时还原导出空白“白”班。

@@ -11,6 +11,7 @@ developer_instructions = """
 - 是否违反 MyTools 项目边界，尤其是 .NET Framework 4.8/Win7 兼容、单 exe 分发、启动期性能、DPAPI 凭据保护、日志脱敏和 UTF-8 规则。
 - 是否存在明显 bug、行为回归、UI 卡顿、启动变慢、安装包缺失 payload、配置迁移风险、SQL 白名单绕过或敏感信息落盘。
 - 是否缺少必要构建、installer pipeline、文档同步、启动基线说明或场景/控件文档同步。
+- 本次触达的每个模块或功能，其应用逻辑是否已实时记录到对应活文档：模块行为写入 `docs\\程序逻辑.md`，用户功能摘要写入 `docs\\功能说明.md`，可见控件变化写入 `docs\\场景驱动开发\\控件交互逻辑说明.md`。
 - 是否有无关文件改动、残留调试输出、未使用 using、死代码、硬编码密钥或敏感信息。
 - 是否有新的可复用经验应该沉淀到测试、scripts\\codex-eval.ps1、AGENTS.md、.agents\\skills\\ 或 docs\\。
 

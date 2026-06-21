@@ -81,10 +81,13 @@ if ($runAll -or $Quick) {
         $cellType = $appAssembly.GetType("MyTools.Services.ShiftCell", $true)
         $exporterType = $appAssembly.GetType("MyTools.Services.ScheduleExcelExporter", $true)
         $schedulePageType = $appAssembly.GetType("MyTools.Views.SchedulePage", $true)
+        $shiftCodesType = $appAssembly.GetType("MyTools.Services.ShiftCodes", $true)
         $bigShiftCode = [string][char]0x5927
         $legacyNightCode = [string][char]0x591C
         $smallShiftCode = [string][char]0x5C0F
         $publicShiftCode = [string][char]0x516C
+        $maternityShiftCode = [string][char]0x4EA7
+        $maternityPickerLabel = $maternityShiftCode + ([string][char]0x5047)
         $halfShiftCode = [string][char]0x5348
 
         $schedule = [Activator]::CreateInstance($scheduleType)
@@ -107,6 +110,8 @@ if ($runAll -or $Quick) {
                 $cell.Code = $publicShiftCode
             } elseif ($day -eq 3) {
                 $cell.Code = $halfShiftCode
+            } elseif ($day -eq 4) {
+                $cell.Code = $maternityShiftCode
             } else {
                 $cell.Code = ""
             }
@@ -144,19 +149,30 @@ if ($runAll -or $Quick) {
             throw "Exported worksheet did not contain the small-shift display text."
         }
 
+        if ($worksheetXml -notmatch [regex]::Escape($maternityShiftCode)) {
+            throw "Exported worksheet did not contain the maternity-leave display text."
+        }
+
         $resolveCellBg = $schedulePageType.GetMethod("ResolveCellBg", [Reflection.BindingFlags]"NonPublic,Static")
+        $restDaysMethod = $shiftCodesType.GetMethod("RestDays", [Reflection.BindingFlags]"Public,Static")
+        $workDaysMethod = $shiftCodesType.GetMethod("WorkDays", [Reflection.BindingFlags]"Public,Static")
         $smallCell = [Activator]::CreateInstance($cellType)
         $smallCell.Code = $smallShiftCode
         $bigCell = [Activator]::CreateInstance($cellType)
         $bigCell.Code = $bigShiftCode
         $publicCell = [Activator]::CreateInstance($cellType)
         $publicCell.Code = $publicShiftCode
+        $maternityCell = [Activator]::CreateInstance($cellType)
+        $maternityCell.Code = $maternityShiftCode
         $halfCell = [Activator]::CreateInstance($cellType)
         $halfCell.Code = $halfShiftCode
         $smallBrush = $resolveCellBg.Invoke($null, @($smallCell, $true))
         $bigBrush = $resolveCellBg.Invoke($null, @($bigCell, $true))
         $publicBrush = $resolveCellBg.Invoke($null, @($publicCell, $false))
+        $maternityBrush = $resolveCellBg.Invoke($null, @($maternityCell, $false))
         $halfBrush = $resolveCellBg.Invoke($null, @($halfCell, $false))
+        $maternityRestDays = [double]$restDaysMethod.Invoke($null, @($maternityShiftCode))
+        $maternityWorkDays = [double]$workDaysMethod.Invoke($null, @($maternityShiftCode))
         if ($smallBrush.Color.ToString() -ne "#FF475569") {
             throw "Holiday small-shift UI background should be #475569, got $($smallBrush.Color)."
         }
@@ -166,8 +182,14 @@ if ($runAll -or $Quick) {
         if ($publicBrush.Color.ToString() -ne "#FFFEF3C7") {
             throw "Public-shift UI background should be #FEF3C7, got $($publicBrush.Color)."
         }
+        if ($maternityBrush.Color.ToString() -ne "#FFFED7A8") {
+            throw "Maternity-leave UI background should be #FED7A8, got $($maternityBrush.Color)."
+        }
         if ($halfBrush.Color.ToString() -ne "#FFFEF3C7") {
             throw "Half-shift UI background should remain #FEF3C7, got $($halfBrush.Color)."
+        }
+        if ($maternityRestDays -ne 1.0 -or $maternityWorkDays -ne 0.0) {
+            throw "Maternity leave should count as 1 rest day and 0 work days, got rest=$maternityRestDays work=$maternityWorkDays."
         }
 
         $pickerLabelsMethod = $schedulePageType.GetMethod("GetShiftPickerVisibleLabels", [Reflection.BindingFlags]"NonPublic,Static")
@@ -177,6 +199,9 @@ if ($runAll -or $Quick) {
         }
         if ($pickerLabels -notcontains $publicShiftCode) {
             throw "Shift picker should still show the public-rest option."
+        }
+        if ($pickerLabels -notcontains $maternityPickerLabel) {
+            throw "Shift picker should show the maternity-leave option."
         }
 
         $stylesXml = $null
@@ -225,6 +250,7 @@ if ($runAll -or $Quick) {
         $bigFill = Get-FillColorForCell $sheetDoc $ns $stylesDoc $styleNs "C5"
         $publicFill = Get-FillColorForCell $sheetDoc $ns $stylesDoc $styleNs "D5"
         $halfFill = Get-FillColorForCell $sheetDoc $ns $stylesDoc $styleNs "E5"
+        $maternityFill = Get-FillColorForCell $sheetDoc $ns $stylesDoc $styleNs "F5"
         if ($smallFill -ne "FF475569") {
             throw "Holiday small-shift Excel fill should be FF475569, got $smallFill."
         }
@@ -233,6 +259,9 @@ if ($runAll -or $Quick) {
         }
         if ($publicFill -ne "FFFEF3C7") {
             throw "Public-shift Excel fill should be FFFEF3C7, got $publicFill."
+        }
+        if ($maternityFill -ne "FFFED7A8") {
+            throw "Maternity-leave Excel fill should be FFFED7A8, got $maternityFill."
         }
         if ($halfFill -ne "FFFEF3C7") {
             throw "Half-shift Excel fill should remain FFFEF3C7, got $halfFill."
@@ -264,6 +293,7 @@ if ($runAll -or $Quick) {
         $bigShiftCode = [string][char]0x5927
         $smallShiftCode = [string][char]0x5C0F
         $publicShiftCode = [string][char]0x516C
+        $maternityShiftCode = [string][char]0x4EA7
         $halfShiftCode = [string][char]0x5348
 
         $schedule = [Activator]::CreateInstance($scheduleType)
@@ -275,6 +305,7 @@ if ($runAll -or $Quick) {
         }
         $schedule.DailyRestQuotas[2] = 1.0
         $schedule.DailyRestQuotas[3] = 0.5
+        $schedule.DailyRestQuotas[4] = 1.0
 
         $employee = [Activator]::CreateInstance($employeeType)
         $employee.Name = "import-check"
@@ -289,6 +320,8 @@ if ($runAll -or $Quick) {
             } elseif ($day -eq 3) {
                 $cell.Code = $halfShiftCode
             } elseif ($day -eq 4) {
+                $cell.Code = $maternityShiftCode
+            } elseif ($day -eq 5) {
                 $cell.Code = $dayShiftCode
             } else {
                 $cell.Code = ""
@@ -326,8 +359,8 @@ if ($runAll -or $Quick) {
             throw "Imported schedule should contain 31 days and 31 rest quotas."
         }
 
-        if ($imported.DailyRestQuotas[2] -ne 1.0 -or $imported.DailyRestQuotas[3] -ne 0.5) {
-            throw "Imported rest quotas did not preserve full-day and half-day values."
+        if ($imported.DailyRestQuotas[2] -ne 1.0 -or $imported.DailyRestQuotas[3] -ne 0.5 -or $imported.DailyRestQuotas[4] -ne 1.0) {
+            throw "Imported rest quotas did not preserve full-day, half-day, and maternity-leave rest values."
         }
 
         if ($imported.Employees.Count -ne 1 -or $imported.Employees[0].Name -ne "import-check") {
@@ -351,10 +384,13 @@ if ($runAll -or $Quick) {
         if ($importedEmployee.Cells[3].Code -ne $halfShiftCode) {
             throw "Imported day 4 should preserve half-day rest."
         }
-        if ($importedEmployee.Cells[4].Code -ne $dayShiftCode) {
-            throw "Imported day 5 should restore exported blank white shift from work statistics."
+        if ($importedEmployee.Cells[4].Code -ne $maternityShiftCode) {
+            throw "Imported day 5 should preserve maternity leave."
         }
-        if (-not $importedEmployee.Cells[4].IsManual) {
+        if ($importedEmployee.Cells[5].Code -ne $dayShiftCode) {
+            throw "Imported day 6 should restore exported blank white shift from work statistics."
+        }
+        if (-not $importedEmployee.Cells[5].IsManual) {
             throw "Restored white shift should be marked manual after import."
         }
         if ($warningCount -lt 1) {
@@ -405,11 +441,182 @@ if ($runAll -or $Quick) {
             }
         }
 
-        if ($negativeImported.Employees[0].Cells[4].Code -eq $dayShiftCode) {
+        if ($negativeImported.Employees[0].Cells[5].Code -eq $dayShiftCode) {
             throw "Importer restored a blank white shift even though the work-stat header was not present."
         }
         if (-not $missingWorkHeaderWarning) {
             throw "Importer should warn when the work-stat header is not present."
+        }
+    }
+
+    Invoke-Step "schedule export command availability" $repoRoot {
+        $scheduleViewModelSource = Get-Content -Raw -Encoding UTF8 (Join-Path $repoRoot "src\MyTools\ViewModels\ScheduleViewModel.cs")
+        $exportRejectedText = ([string][char]0x5BFC) + ([string][char]0x51FA) + ([string][char]0x88AB) + ([string][char]0x62D2) + ([string][char]0x7EDD)
+        $incompleteAutoGenerateText = ([string][char]0x672A) + ([string][char]0x5B8C) + ([string][char]0x6210) + ([string][char]0x81EA) + ([string][char]0x52A8) + ([string][char]0x751F) + ([string][char]0x6210)
+        $cannotExportExcelText = ([string][char]0x4E0D) + ([string][char]0x80FD) + ([string][char]0x5BFC) + ([string][char]0x51FA) + " Excel"
+        $forbiddenExportGateTokens = @(
+            "Current.HasGenerated",
+            $exportRejectedText,
+            $incompleteAutoGenerateText,
+            $cannotExportExcelText
+        )
+        foreach ($token in $forbiddenExportGateTokens) {
+            if ($scheduleViewModelSource.Contains($token)) {
+                throw "Schedule export should not be gated by auto-generation state; found forbidden token '$token' in ScheduleViewModel.cs."
+            }
+        }
+
+        $newtonsoftPath = Join-Path $env:USERPROFILE ".nuget\packages\newtonsoft.json\13.0.3\lib\net45\Newtonsoft.Json.dll"
+        if (Test-Path -LiteralPath $newtonsoftPath) {
+            [Reflection.Assembly]::LoadFrom($newtonsoftPath) | Out-Null
+        }
+
+        $appAssembly = [Reflection.Assembly]::LoadFrom((Join-Path $repoRoot "src\MyTools\bin\Release\net48\MyTools.exe"))
+        $viewModelType = $appAssembly.GetType("MyTools.ViewModels.ScheduleViewModel", $true)
+        $scheduleType = $appAssembly.GetType("MyTools.Services.ScheduleVersion", $true)
+        $employeeType = $appAssembly.GetType("MyTools.Services.EmployeeRow", $true)
+        $cellType = $appAssembly.GetType("MyTools.Services.ShiftCell", $true)
+
+        $schedule = [Activator]::CreateInstance($scheduleType)
+        $schedule.Year = 2026
+        $schedule.Month = 8
+        $schedule.VersionName = "export-command-check"
+        for ($day = 0; $day -lt $schedule.DayCount; $day++) {
+            $schedule.DailyRestQuotas.Add(0.0)
+        }
+
+        $employee = [Activator]::CreateInstance($employeeType)
+        $employee.Name = "export-command-check"
+        for ($day = 0; $day -lt $schedule.DayCount; $day++) {
+            $employee.Cells.Add([Activator]::CreateInstance($cellType))
+        }
+        $schedule.Employees.Add($employee)
+
+        $hasGeneratedProperty = $scheduleType.GetProperty("HasGenerated", [Reflection.BindingFlags]"Public,Instance")
+        if ([bool]$hasGeneratedProperty.GetValue($schedule)) {
+            throw "Fresh schedule should have GeneratedAt=null and HasGenerated=false."
+        }
+
+        $viewModel = [Activator]::CreateInstance($viewModelType)
+        $exportCommand = $viewModelType.GetProperty("ExportExcelCommand", [Reflection.BindingFlags]"Public,Instance").GetValue($viewModel)
+        if ($exportCommand.CanExecute($null)) {
+            throw "Export command should be disabled before a current schedule is loaded."
+        }
+
+        $currentProperty = $viewModelType.GetProperty("Current", [Reflection.BindingFlags]"Public,Instance")
+        $currentProperty.GetSetMethod($true).Invoke($viewModel, @($schedule)) | Out-Null
+
+        if (-not $exportCommand.CanExecute($null)) {
+            throw "Export command should be enabled for a loaded schedule even when GeneratedAt is null."
+        }
+    }
+
+    Invoke-Step "schedule cell fill and delete" $repoRoot {
+        $schedulePageSource = Get-Content -Raw -Encoding UTF8 (Join-Path $repoRoot "src\MyTools\Views\SchedulePage.xaml.cs")
+        $mouseDownStart = $schedulePageSource.IndexOf("private void CellButton_PreviewMouseLeftButtonDown")
+        $mouseMoveStart = $schedulePageSource.IndexOf("private void CellButton_PreviewMouseMove")
+        if ($mouseDownStart -lt 0 -or $mouseMoveStart -le $mouseDownStart) {
+            throw "Could not locate schedule cell mouse handlers in SchedulePage.xaml.cs."
+        }
+
+        $mouseDownBody = $schedulePageSource.Substring($mouseDownStart, $mouseMoveStart - $mouseDownStart)
+        if ($mouseDownBody.Contains("CaptureMouse()")) {
+            throw "Schedule cell normal click path must not capture the mouse on MouseDown; it prevents Button.Click from opening the shift picker."
+        }
+
+        $mouseUpStart = $schedulePageSource.IndexOf("private void CellButton_PreviewMouseLeftButtonUp")
+        if ($mouseUpStart -lt 0) {
+            throw "Could not locate schedule cell mouse-up handler in SchedulePage.xaml.cs."
+        }
+
+        $mouseMoveBody = $schedulePageSource.Substring($mouseMoveStart, $mouseUpStart - $mouseMoveStart)
+        if (-not $mouseMoveBody.Contains("CaptureMouse()")) {
+            throw "Schedule cell drag-selection path should capture the mouse only after moving into another cell."
+        }
+
+        $newtonsoftPath = Join-Path $env:USERPROFILE ".nuget\packages\newtonsoft.json\13.0.3\lib\net45\Newtonsoft.Json.dll"
+        if (Test-Path -LiteralPath $newtonsoftPath) {
+            [Reflection.Assembly]::LoadFrom($newtonsoftPath) | Out-Null
+        }
+
+        $appAssembly = [Reflection.Assembly]::LoadFrom((Join-Path $repoRoot "src\MyTools\bin\Release\net48\MyTools.exe"))
+        $viewModelType = $appAssembly.GetType("MyTools.ViewModels.ScheduleViewModel", $true)
+        $scheduleType = $appAssembly.GetType("MyTools.Services.ScheduleVersion", $true)
+        $employeeType = $appAssembly.GetType("MyTools.Services.EmployeeRow", $true)
+        $cellType = $appAssembly.GetType("MyTools.Services.ShiftCell", $true)
+        $shiftCodesType = $appAssembly.GetType("MyTools.Services.ShiftCodes", $true)
+        $restShiftCode = [string][char]0x4F11
+
+        $schedule = [Activator]::CreateInstance($scheduleType)
+        $schedule.Year = 2026
+        $schedule.Month = 8
+        $schedule.VersionName = "fill-check"
+        for ($day = 0; $day -lt $schedule.DayCount; $day++) {
+            $schedule.DailyRestQuotas.Add(0.0)
+        }
+
+        for ($employeeIndex = 0; $employeeIndex -lt 2; $employeeIndex++) {
+            $employee = [Activator]::CreateInstance($employeeType)
+            $employee.Name = "fill-check-$employeeIndex"
+            for ($day = 0; $day -lt $schedule.DayCount; $day++) {
+                $employee.Cells.Add([Activator]::CreateInstance($cellType))
+            }
+            $schedule.Employees.Add($employee)
+        }
+
+        $schedule.Employees[0].Cells[0].Code = $restShiftCode
+        $schedule.Employees[0].Cells[0].IsManual = $true
+
+        $viewModel = [Activator]::CreateInstance($viewModelType)
+        $currentProperty = $viewModelType.GetProperty("Current", [Reflection.BindingFlags]"Public,Instance")
+        $currentProperty.GetSetMethod($true).Invoke($viewModel, @($schedule)) | Out-Null
+
+        $tupleType = [System.ValueTuple[int,int]]
+        $targets = [Array]::CreateInstance($tupleType, 3)
+        $targets.SetValue([System.ValueTuple[int,int]]::new(0, 1), 0)
+        $targets.SetValue([System.ValueTuple[int,int]]::new(1, 0), 1)
+        $targets.SetValue([System.ValueTuple[int,int]]::new(1, 1), 2)
+
+        $fillMethod = $viewModelType.GetMethod("FillCellsFromSource", [Reflection.BindingFlags]"Public,Instance")
+        $fillArguments = New-Object 'object[]' 3
+        $fillArguments[0] = [int]0
+        $fillArguments[1] = [int]0
+        $fillArguments[2] = $targets
+        $filled = [int]$fillMethod.Invoke($viewModel, $fillArguments)
+        if ($filled -ne 3) {
+            throw "Bulk fill should affect 3 selected cells, got $filled."
+        }
+
+        foreach ($target in $targets) {
+            $cell = $schedule.Employees[$target.Item1].Cells[$target.Item2]
+            if ($cell.Code -ne $restShiftCode -or -not $cell.IsManual) {
+                throw "Filled cell $($target.Item1),$($target.Item2) should contain rest shift and be marked manual."
+            }
+        }
+
+        $restDaysMethod = $shiftCodesType.GetMethod("RestDays", [Reflection.BindingFlags]"Public,Static")
+        $filledRestDays = [double]$restDaysMethod.Invoke($null, @($schedule.Employees[1].Cells[0].Code))
+        if ($filledRestDays -ne 1.0) {
+            throw "Filled rest shift should still count as 1 rest day, got $filledRestDays."
+        }
+
+        $clearMethod = $viewModelType.GetMethod("ClearCells", [Reflection.BindingFlags]"Public,Instance")
+        $clearArguments = New-Object 'object[]' 1
+        $clearArguments[0] = $targets
+        $cleared = [int]$clearMethod.Invoke($viewModel, $clearArguments)
+        if ($cleared -ne 3) {
+            throw "Bulk clear should affect 3 selected cells, got $cleared."
+        }
+
+        foreach ($target in $targets) {
+            $cell = $schedule.Employees[$target.Item1].Cells[$target.Item2]
+            if ($cell.Code -ne "" -or $cell.IsManual) {
+                throw "Cleared cell $($target.Item1),$($target.Item2) should be empty and not manual."
+            }
+        }
+
+        if ($schedule.Employees[0].Cells[0].Code -ne $restShiftCode -or -not $schedule.Employees[0].Cells[0].IsManual) {
+            throw "Bulk clear should not modify the unselected source cell."
         }
     }
 

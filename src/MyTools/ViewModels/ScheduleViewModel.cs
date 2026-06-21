@@ -246,13 +246,6 @@ namespace MyTools.ViewModels
             if (Current == null) return;
             try
             {
-                if (!Current.HasGenerated)
-                {
-                    StatusMessage = "导出被拒绝：本月排班尚未完成自动生成。";
-                    MessageBox.Show("本月排班尚未完成自动生成，不能导出 Excel。", "导出排班", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return;
-                }
-
                 var dlg = new Microsoft.Win32.SaveFileDialog
                 {
                     Filter = "Excel 文件 (*.xlsx)|*.xlsx",
@@ -1125,6 +1118,72 @@ namespace MyTools.ViewModels
             cell.Code = ShiftCodes.Normalize(code);
             cell.IsManual = !string.IsNullOrEmpty(cell.Code);
             NotifyScheduleDataChanged();
+        }
+
+        public int FillCellsFromSource(int sourceEmpIdx, int sourceDayIdx, IEnumerable<ValueTuple<int, int>> targets)
+        {
+            if (Current == null || targets == null) return 0;
+            if (sourceEmpIdx < 0 || sourceEmpIdx >= Current.Employees.Count) return 0;
+            if (sourceDayIdx < 0 || sourceDayIdx >= Current.DayCount) return 0;
+
+            var sourceEmployee = Current.Employees[sourceEmpIdx];
+            EnsureEmployeeCellCount(sourceEmployee, Current.DayCount);
+            var sourceCode = ShiftCodes.Normalize(sourceEmployee.Cells[sourceDayIdx].Code);
+            var affected = SetCells(targets, sourceCode);
+            if (affected > 0)
+            {
+                StatusMessage = string.IsNullOrEmpty(sourceCode)
+                    ? $"已用空白填充 {affected} 个选中单元格。"
+                    : $"已将“{sourceCode}”填充到 {affected} 个选中单元格。";
+            }
+
+            return affected;
+        }
+
+        public int ClearCells(IEnumerable<ValueTuple<int, int>> targets)
+        {
+            if (Current == null || targets == null) return 0;
+
+            var affected = SetCells(targets, string.Empty);
+            if (affected > 0)
+            {
+                StatusMessage = $"已清空 {affected} 个选中单元格。";
+            }
+
+            return affected;
+        }
+
+        private int SetCells(IEnumerable<ValueTuple<int, int>> targets, string code)
+        {
+            if (Current == null || targets == null) return 0;
+
+            var normalizedCode = ShiftCodes.Normalize(code);
+            var isManual = !string.IsNullOrEmpty(normalizedCode);
+            var visited = new HashSet<ValueTuple<int, int>>();
+            var affected = 0;
+
+            foreach (var target in targets)
+            {
+                var empIdx = target.Item1;
+                var dayIdx = target.Item2;
+                if (empIdx < 0 || empIdx >= Current.Employees.Count) continue;
+                if (dayIdx < 0 || dayIdx >= Current.DayCount) continue;
+                if (!visited.Add(target)) continue;
+
+                var employee = Current.Employees[empIdx];
+                EnsureEmployeeCellCount(employee, Current.DayCount);
+                var cell = employee.Cells[dayIdx];
+                cell.Code = normalizedCode;
+                cell.IsManual = isManual;
+                affected++;
+            }
+
+            if (affected > 0)
+            {
+                NotifyScheduleDataChanged();
+            }
+
+            return affected;
         }
 
         /// <summary>小1：从当前格开始设置 小→夜→休→休。</summary>

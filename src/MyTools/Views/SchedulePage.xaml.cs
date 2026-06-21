@@ -19,6 +19,12 @@ namespace MyTools.Views
         private readonly DispatcherTimer _refreshTimer;
         private int _focusedEmployeeIndex = -1;
         private int _focusedDayIndex = -1;
+        private readonly HashSet<ValueTuple<int, int>> _selectedCells = new HashSet<ValueTuple<int, int>>();
+        private ValueTuple<int, int>? _selectionAnchor;
+        private ValueTuple<int, int>? _fillSourceCell;
+        private bool _isSelectingCells;
+        private bool _dragSelectionMoved;
+        private bool _suppressNextCellClick;
         private double _scheduleZoom = 1.0;
         private int _renderedDayCount;
         private int _renderedEmployeeCount;
@@ -48,6 +54,8 @@ namespace MyTools.Views
         private static readonly Brush HolidayColumnBg = FrozenBrush(0xBF, 0xDB, 0xFE);
         private static readonly Brush QuotaMismatchBg = FrozenBrush(0xFE, 0xE2, 0xE2);
         private static readonly Brush BorderBg = FrozenBrush(0xE2, 0xE8, 0xF0);
+        private static readonly Brush SelectionBorderBg = FrozenBrush(0x25, 0x63, 0xEB);
+        private static readonly Brush FillSourceBorderBg = FrozenBrush(0x16, 0xA3, 0x4A);
         private static readonly Brush CellDayBg = FrozenBrush(0xFF, 0xFF, 0xFF);
         private static readonly Brush CellCardBg = FrozenBrush(0xA7, 0xF3, 0xD0);
         private static readonly Brush CellDeputyBg = FrozenBrush(0x99, 0x1B, 0x1B);
@@ -56,13 +64,15 @@ namespace MyTools.Views
         private static readonly Brush CellSmallBg = FrozenBrush(0x47, 0x55, 0x69);
         private static readonly Brush CellRestBg = FrozenBrush(0xFD, 0xEC, 0xC8);
         private static readonly Brush CellPublicBg = FrozenBrush(0xFE, 0xF3, 0xC7);
+        private static readonly Brush CellMaternityBg = FrozenBrush(0xFE, 0xD7, 0xA8);
         private static readonly Brush CellHalfBg = FrozenBrush(0xFE, 0xF3, 0xC7);
         private static readonly Brush SerialTextFg = FrozenBrush(0x64, 0x74, 0x8B);
-        private static readonly string[] ShiftPickerVisibleLabels = { "白", "卡", "副", "感", "大夜", "小", "休", "公", "小1", "清空" };
+        private static readonly string[] ShiftPickerVisibleLabels = { "白", "卡", "副", "感", "大夜", "小", "休", "公", "产假", "小1", "清空" };
 
         public SchedulePage()
         {
             InitializeComponent();
+            Focusable = true;
             ApplyScheduleZoom();
             _rebuildTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(45) };
             _rebuildTimer.Tick += (s, e) =>
@@ -76,6 +86,7 @@ namespace MyTools.Views
                 _refreshTimer.Stop();
                 RefreshDataOnly();
             };
+            PreviewKeyDown += SchedulePage_PreviewKeyDown;
             DataContextChanged += SchedulePage_DataContextChanged;
         }
 
@@ -93,11 +104,16 @@ namespace MyTools.Views
                 _vm.ScheduleStructureChanged += Vm_ScheduleStructureChanged;
                 _vm.ScheduleDataChanged += Vm_ScheduleDataChanged;
                 _vm.ScheduleCellFocusRequested += Vm_ScheduleCellFocusRequested;
+                ClearScheduleSelection();
                 Rebuild();
             }
         }
 
-        private void Vm_ScheduleStructureChanged(object sender, EventArgs e) => QueueRebuild();
+        private void Vm_ScheduleStructureChanged(object sender, EventArgs e)
+        {
+            ClearScheduleSelection();
+            QueueRebuild();
+        }
         private void Vm_ScheduleDataChanged(object sender, EventArgs e) => QueueDataRefresh();
         private void Vm_ScheduleCellFocusRequested(object sender, ScheduleCellFocusRequestedEventArgs e)
         {
@@ -235,6 +251,24 @@ namespace MyTools.Views
 
         private void ZoomReset_Click(object sender, RoutedEventArgs e) => SetScheduleZoom(1.0);
 
+        private void FillSelectedCells_Click(object sender, RoutedEventArgs e)
+        {
+            if (_vm == null || _selectedCells.Count == 0)
+            {
+                MessageBox.Show("请先在排班表中选择要填充的单元格。", "填充", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            var source = _fillSourceCell ?? _selectionAnchor ?? FirstSelectedCell();
+            if (source.Item1 < 0 || source.Item2 < 0)
+            {
+                MessageBox.Show("请先选择一个源单元格。", "填充", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            _vm.FillCellsFromSource(source.Item1, source.Item2, _selectedCells);
+        }
+
         private void ScheduleScroll_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
         {
             if ((Keyboard.Modifiers & ModifierKeys.Control) != ModifierKeys.Control)
@@ -274,6 +308,30 @@ namespace MyTools.Views
             if (ZoomText != null)
             {
                 ZoomText.Text = Math.Round(_scheduleZoom * 100).ToString(CultureInfo.InvariantCulture) + "%";
+            }
+        }
+
+        private void SchedulePage_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key != Key.Delete)
+            {
+                return;
+            }
+
+            if (FindAncestor<TextBox>(e.OriginalSource as DependencyObject) != null)
+            {
+                return;
+            }
+
+            if (_selectedCells.Count == 0 || _vm == null)
+            {
+                return;
+            }
+
+            var cleared = _vm.ClearCells(_selectedCells);
+            if (cleared > 0)
+            {
+                e.Handled = true;
             }
         }
 
@@ -552,6 +610,9 @@ namespace MyTools.Views
                     FontWeight = cell.IsManual ? FontWeights.Bold : FontWeights.Normal,
                     ToolTip = isFocusedCell ? "冲突定位" : null
                 };
+                btn.PreviewMouseLeftButtonDown += CellButton_PreviewMouseLeftButtonDown;
+                btn.PreviewMouseMove += CellButton_PreviewMouseMove;
+                btn.PreviewMouseLeftButtonUp += CellButton_PreviewMouseLeftButtonUp;
                 btn.Click += CellButton_Click;
                 Grid.SetRow(btn, row);
                 Grid.SetColumn(btn, 1 + day);
@@ -686,9 +747,7 @@ namespace MyTools.Views
                     button.Cursor = Cursors.Hand;
                     button.IsEnabled = true;
                     button.FontWeight = cell.IsManual ? FontWeights.Bold : FontWeights.Normal;
-                    button.BorderBrush = isFocusedCell ? Brushes.Crimson : BorderBg;
-                    button.BorderThickness = isFocusedCell ? new Thickness(2) : new Thickness(0.5);
-                    button.ToolTip = isFocusedCell ? "冲突定位" : null;
+                    ApplyCellButtonState(button, empIdx, day, isFocusedCell);
                 }
 
                 var stats = _vm.ComputeRowStats(empIdx);
@@ -718,6 +777,198 @@ namespace MyTools.Views
             textBlocks[index].Foreground = alert ? Brushes.Crimson : Brushes.Black;
         }
 
+        private void ApplyCellButtonState(Button button, int empIdx, int dayIdx, bool isFocusedCell)
+        {
+            if (button == null)
+            {
+                return;
+            }
+
+            var key = ValueTuple.Create(empIdx, dayIdx);
+            var isSelected = _selectedCells.Contains(key);
+            var isFillSource = _fillSourceCell.HasValue && _fillSourceCell.Value.Equals(key);
+
+            if (isFillSource)
+            {
+                button.BorderBrush = FillSourceBorderBg;
+                button.BorderThickness = new Thickness(2.5);
+            }
+            else if (isSelected)
+            {
+                button.BorderBrush = SelectionBorderBg;
+                button.BorderThickness = new Thickness(2);
+            }
+            else if (isFocusedCell)
+            {
+                button.BorderBrush = Brushes.Crimson;
+                button.BorderThickness = new Thickness(2);
+            }
+            else
+            {
+                button.BorderBrush = BorderBg;
+                button.BorderThickness = new Thickness(0.5);
+            }
+
+            if (isFillSource)
+            {
+                button.ToolTip = "填充源单元格";
+            }
+            else if (isSelected)
+            {
+                button.ToolTip = _selectedCells.Count > 1 ? $"已选择 {_selectedCells.Count} 个单元格" : "已选择单元格";
+            }
+            else
+            {
+                button.ToolTip = isFocusedCell ? "冲突定位" : null;
+            }
+        }
+
+        private void ClearScheduleSelection()
+        {
+            if (_selectedCells.Count == 0 && !_fillSourceCell.HasValue && !_selectionAnchor.HasValue)
+            {
+                return;
+            }
+
+            _selectedCells.Clear();
+            _selectionAnchor = null;
+            _fillSourceCell = null;
+            RefreshSelectionBorders();
+        }
+
+        private void SetSingleSelectedCell(int empIdx, int dayIdx)
+        {
+            var key = ValueTuple.Create(empIdx, dayIdx);
+            _selectedCells.Clear();
+            _selectedCells.Add(key);
+            _selectionAnchor = key;
+            _fillSourceCell = key;
+            RefreshSelectionBorders();
+        }
+
+        private void ToggleSelectedCell(int empIdx, int dayIdx)
+        {
+            var key = ValueTuple.Create(empIdx, dayIdx);
+            if (_selectedCells.Contains(key))
+            {
+                _selectedCells.Remove(key);
+                if (_fillSourceCell.HasValue && _fillSourceCell.Value.Equals(key))
+                {
+                    _fillSourceCell = _selectedCells.Count > 0 ? FirstSelectedCell() : (ValueTuple<int, int>?)null;
+                }
+            }
+            else
+            {
+                _selectedCells.Add(key);
+                _selectionAnchor = key;
+                _fillSourceCell = key;
+            }
+
+            if (_selectedCells.Count == 0)
+            {
+                _selectionAnchor = null;
+                _fillSourceCell = null;
+            }
+
+            RefreshSelectionBorders();
+        }
+
+        private void SelectCellRange(ValueTuple<int, int> start, ValueTuple<int, int> end, bool append)
+        {
+            if (_vm?.Current == null)
+            {
+                return;
+            }
+
+            if (!append)
+            {
+                _selectedCells.Clear();
+            }
+
+            var minEmployee = Math.Max(0, Math.Min(start.Item1, end.Item1));
+            var maxEmployee = Math.Min(_vm.Current.Employees.Count - 1, Math.Max(start.Item1, end.Item1));
+            var minDay = Math.Max(0, Math.Min(start.Item2, end.Item2));
+            var maxDay = Math.Min(_vm.Current.DayCount - 1, Math.Max(start.Item2, end.Item2));
+
+            for (var employee = minEmployee; employee <= maxEmployee; employee++)
+            {
+                for (var day = minDay; day <= maxDay; day++)
+                {
+                    _selectedCells.Add(ValueTuple.Create(employee, day));
+                }
+            }
+
+            _selectionAnchor = start;
+            _fillSourceCell = start;
+            RefreshSelectionBorders();
+        }
+
+        private void RefreshSelectionBorders()
+        {
+            if (_cellButtons == null || _vm?.Current == null)
+            {
+                return;
+            }
+
+            if (_cellButtons.GetLength(0) == 0 || _cellButtons.GetLength(1) == 0)
+            {
+                return;
+            }
+
+            var firstEmployee = _firstRenderedEmployeeIndex < 0 ? 0 : _firstRenderedEmployeeIndex;
+            var lastEmployee = _lastRenderedEmployeeIndex < firstEmployee
+                ? Math.Min(_vm.Current.Employees.Count - 1, firstEmployee)
+                : Math.Min(_vm.Current.Employees.Count - 1, _lastRenderedEmployeeIndex);
+            firstEmployee = Math.Min(firstEmployee, _cellButtons.GetLength(0) - 1);
+            lastEmployee = Math.Min(lastEmployee, _cellButtons.GetLength(0) - 1);
+            if (firstEmployee < 0 || lastEmployee < firstEmployee)
+            {
+                return;
+            }
+
+            var maxDay = Math.Min(_vm.Current.DayCount, _cellButtons.GetLength(1));
+
+            for (var empIdx = firstEmployee; empIdx <= lastEmployee; empIdx++)
+            {
+                for (var day = 0; day < maxDay; day++)
+                {
+                    var button = _cellButtons[empIdx, day];
+                    if (button == null)
+                    {
+                        continue;
+                    }
+
+                    var isFocusedCell = day == _focusedDayIndex &&
+                                        (_focusedEmployeeIndex < 0 || empIdx == _focusedEmployeeIndex);
+                    ApplyCellButtonState(button, empIdx, day, isFocusedCell);
+                }
+            }
+        }
+
+        private ValueTuple<int, int> FirstSelectedCell()
+        {
+            foreach (var cell in _selectedCells)
+            {
+                return cell;
+            }
+
+            return ValueTuple.Create(-1, -1);
+        }
+
+        private bool TryGetCellTag(object sender, out int empIdx, out int dayIdx)
+        {
+            empIdx = -1;
+            dayIdx = -1;
+            if (sender is Button button && button.Tag is ValueTuple<int, int> tag)
+            {
+                empIdx = tag.Item1;
+                dayIdx = tag.Item2;
+                return true;
+            }
+
+            return false;
+        }
+
         private static Brush ResolveCellBg(ShiftCell cell, bool isHoliday)
         {
             var code = ShiftCodes.Normalize(cell?.Code);
@@ -736,6 +987,7 @@ namespace MyTools.Views
                 case ShiftCodes.Small: return CellSmallBg;
                 case ShiftCodes.Rest: return CellRestBg;
                 case ShiftCodes.Public: return CellPublicBg;
+                case ShiftCodes.Maternity: return CellMaternityBg;
                 case ShiftCodes.Half: return CellHalfBg;
                 default: return isHoliday ? HolidayColumnBg : Brushes.White;
             }
@@ -886,9 +1138,128 @@ namespace MyTools.Views
         }
 
         // ===================== Cell click → popup picker =====================
+        private void CellButton_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (!TryGetCellTag(sender, out var empIdx, out var dayIdx))
+            {
+                return;
+            }
+
+            Focus();
+            var key = ValueTuple.Create(empIdx, dayIdx);
+            var modifiers = Keyboard.Modifiers;
+            if ((modifiers & ModifierKeys.Shift) == ModifierKeys.Shift && _selectionAnchor.HasValue)
+            {
+                SelectCellRange(_selectionAnchor.Value, key, (modifiers & ModifierKeys.Control) == ModifierKeys.Control);
+                _isSelectingCells = false;
+                _dragSelectionMoved = true;
+                SuppressNextCellClick();
+                e.Handled = true;
+                return;
+            }
+
+            if ((modifiers & ModifierKeys.Control) == ModifierKeys.Control)
+            {
+                ToggleSelectedCell(empIdx, dayIdx);
+                _isSelectingCells = false;
+                _dragSelectionMoved = true;
+                SuppressNextCellClick();
+                e.Handled = true;
+                return;
+            }
+
+            SetSingleSelectedCell(empIdx, dayIdx);
+            _isSelectingCells = true;
+            _dragSelectionMoved = false;
+        }
+
+        private void CellButton_PreviewMouseMove(object sender, MouseEventArgs e)
+        {
+            if (!_isSelectingCells || !_selectionAnchor.HasValue || e.LeftButton != MouseButtonState.Pressed)
+            {
+                return;
+            }
+
+            var hit = ScheduleHost == null
+                ? null
+                : VisualTreeHelper.HitTest(ScheduleHost, e.GetPosition(ScheduleHost));
+            var element = hit?.VisualHit ?? Mouse.DirectlyOver as DependencyObject;
+            var button = FindAncestor<Button>(element);
+            if (button == null || !TryGetCellTag(button, out var empIdx, out var dayIdx))
+            {
+                return;
+            }
+
+            var current = ValueTuple.Create(empIdx, dayIdx);
+            if (_selectedCells.Count == 1 && _selectedCells.Contains(current))
+            {
+                return;
+            }
+
+            _dragSelectionMoved = true;
+            if (sender is Button dragSource && !dragSource.IsMouseCaptured)
+            {
+                dragSource.CaptureMouse();
+            }
+            SelectCellRange(_selectionAnchor.Value, current, false);
+            e.Handled = true;
+        }
+
+        private void CellButton_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            var wasDragSelection = _isSelectingCells && _dragSelectionMoved;
+            if (wasDragSelection && sender is Button button && button.IsMouseCaptured)
+            {
+                button.ReleaseMouseCapture();
+            }
+
+            if (wasDragSelection)
+            {
+                SuppressNextCellClick();
+                e.Handled = true;
+            }
+
+            _isSelectingCells = false;
+            _dragSelectionMoved = false;
+        }
+
+        private void SuppressNextCellClick()
+        {
+            _suppressNextCellClick = true;
+            Dispatcher.BeginInvoke(new Action(() => _suppressNextCellClick = false), DispatcherPriority.Background);
+        }
+
+        private static T FindAncestor<T>(DependencyObject current) where T : DependencyObject
+        {
+            while (current != null)
+            {
+                if (current is T typed)
+                {
+                    return typed;
+                }
+
+                if (current is Visual || current is System.Windows.Media.Media3D.Visual3D)
+                {
+                    current = VisualTreeHelper.GetParent(current);
+                }
+                else
+                {
+                    current = (current as FrameworkElement)?.Parent ?? (current as FrameworkContentElement)?.Parent;
+                }
+            }
+
+            return null;
+        }
+
         private void CellButton_Click(object sender, RoutedEventArgs e)
         {
             if (_vm == null) return;
+            if (_suppressNextCellClick)
+            {
+                _suppressNextCellClick = false;
+                return;
+            }
+
             var btn = sender as Button;
             if (btn?.Tag is ValueTuple<int, int> tag)
             {
@@ -969,6 +1340,9 @@ namespace MyTools.Views
                         break;
                     case "公":
                         Add(label, () => _vm.SetCell(empIdx, dayIdx, ShiftCodes.Public), new SolidColorBrush(Color.FromRgb(0xFE, 0xF3, 0xC7)));
+                        break;
+                    case "产假":
+                        Add(label, () => _vm.SetCell(empIdx, dayIdx, ShiftCodes.Maternity), new SolidColorBrush(Color.FromRgb(0xFE, 0xD7, 0xA8)));
                         break;
                     case "小1":
                         Add(label, () => _vm.ApplySmallNight1(empIdx, dayIdx), new SolidColorBrush(Color.FromRgb(0xFF, 0xCC, 0x80)));

@@ -41,6 +41,7 @@ Use this skill to run C:\qgt tasks as a closed engineering loop instead of a one
 
 6. Review before finalizing.
    - Inspect the diff for unrelated changes, leftover debug code, unused imports, broken references, missing docs, startup-performance regressions, and packaging risks.
+   - Check whether each module or feature touched by the change has its current application logic recorded in the right living document (`docs\程序逻辑.md`, `docs\功能说明.md`, and `docs\场景驱动开发\控件交互逻辑说明.md` for visible controls). If behavior changed and the logic is not recorded, treat it as a review finding to fix before completion.
    - For security-sensitive, DPAPI/config, SQL, startup, installer, or large cross-module changes, do an explicit risk pass before calling the task done.
    - For any non-trivial code or rule change, spawn the project review agent `mytools-reviewer` from `.codex\agents\mytools-reviewer.toml`, wait for its result, and address every blocking finding before finalizing.
    - The review agent must be read-only: pass the task goal, relevant diff, validation commands/results, and known scope boundaries; ask it to report blocking issues, suggestions, confirmation needs, and deposit candidates.

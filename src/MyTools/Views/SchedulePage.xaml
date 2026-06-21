@@ -110,6 +110,8 @@
                                 Command="{Binding ClearAllCellsCommand}" ToolTip="清空所有班次单元格，恢复为空白初始状态" />
                         <Button Content="清空随机单元" Style="{StaticResource ToolbarButton}" MinWidth="92"
                                 Command="{Binding ClearRandomCellsCommand}" ToolTip="清空自动生成的随机单元格，保留用户手动设置的单元格" />
+                        <Button Content="填充" Style="{StaticResource ToolbarButton}" Click="FillSelectedCells_Click"
+                                ToolTip="用源单元格填充当前选区" />
                         <Button Content="-" Style="{StaticResource ToolbarButton}" MinWidth="34" Width="34" Padding="0" Click="ZoomOut_Click" ToolTip="缩小排班表" />
                         <TextBlock x:Name="ZoomText" Text="100%" Width="42" Height="28" TextAlignment="Center" VerticalAlignment="Center" FontSize="12" />
                         <Button Content="+" Style="{StaticResource ToolbarButton}" MinWidth="34" Width="34" Padding="0" Click="ZoomIn_Click" ToolTip="放大排班表" />
@@ -165,6 +167,7 @@
                     <Border Style="{StaticResource ShiftLegendChip}" Background="#475569"><TextBlock Text="小" Foreground="White" /></Border>
                     <Border Style="{StaticResource ShiftLegendChip}" Background="#FDECC8"><TextBlock Text="休" /></Border>
                     <Border Style="{StaticResource ShiftLegendChip}" Background="#FEF3C7"><TextBlock Text="公" /></Border>
+                    <Border Style="{StaticResource ShiftLegendChip}" Background="#FED7A8"><TextBlock Text="产" /></Border>
                     <Border Style="{StaticResource ShiftLegendChip}" Background="#FEF3C7"><TextBlock Text="午" /></Border>
                     <TextBlock FontSize="11" Opacity="0.78" TextWrapping="Wrap" Text="小1=小→夜→休→休。单击格子选班次。" Margin="4,0,0,0" />
                 </WrapPanel>

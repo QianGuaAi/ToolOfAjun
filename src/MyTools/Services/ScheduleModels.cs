@@ -9,7 +9,7 @@ namespace MyTools.Services
     /// </summary>
     public class ShiftCell
     {
-        /// <summary>白/卡/副/感/大/小/休/公/午；空字符串表示未指定。旧“夜”输入会归一化为“大”。</summary>
+        /// <summary>白/卡/副/感/大/小/休/公/产/午；空字符串表示未指定。旧“夜”输入会归一化为“大”。</summary>
         public string Code { get; set; } = string.Empty;
 
         public bool IsManual { get; set; }
@@ -39,9 +39,7 @@ namespace MyTools.Services
         public DateTime UpdatedAt { get; set; } = DateTime.Now;
 
         /// <summary>
-        /// 自动设置休息日成功后写入的时间戳。规范 §5/§8：
-        /// - 仅当 GeneratedAt 非空时允许 Excel 导出。
-        /// - 普通保存不会清除该值；新建/重新自动生成才会刷新。
+        /// 自动设置休息日或 Excel 导入成功后写入的时间戳，仅作完成时间记录；Excel 导出允许随时导出当前表格。
         /// </summary>
         public DateTime? GeneratedAt { get; set; }
 
@@ -84,9 +82,10 @@ namespace MyTools.Services
         public const string Small = "小";     // 小夜
         public const string Rest = "休";      // 休息
         public const string Public = "公";    // 公休
+        public const string Maternity = "产"; // 产假
         public const string Half = "午";      // 下午休 0.5
 
-        public static readonly string[] All = { Day, Card, Deputy, Infect, Big, Small, Rest, Public, Half };
+        public static readonly string[] All = { Day, Card, Deputy, Infect, Big, Small, Rest, Public, Maternity, Half };
 
         public static string Normalize(string code)
         {
@@ -105,7 +104,7 @@ namespace MyTools.Services
         public static double RestDays(string code)
         {
             code = Normalize(code);
-            if (code == Rest || code == Public) return 1.0;
+            if (code == Rest || code == Public || code == Maternity) return 1.0;
             if (code == Half) return 0.5;
             return 0.0;
         }
@@ -125,6 +124,7 @@ namespace MyTools.Services
                 case Small: return "小夜";
                 case Rest: return "休息";
                 case Public: return "公休";
+                case Maternity: return "产假";
                 case Half: return "下午休 0.5";
                 default: return "未指定";
             }
