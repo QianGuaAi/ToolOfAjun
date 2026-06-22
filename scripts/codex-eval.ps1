@@ -51,6 +51,49 @@ function Resolve-Dotnet {
     throw "dotnet not found. Use repo-local .dotnet or add dotnet to PATH."
 }
 
+function Assert-LoopMemoryDocs {
+    function Join-CodePointString {
+        param([int[]]$CodePoints)
+        return -join ($CodePoints | ForEach-Object { [string][char]$_ })
+    }
+
+    $memoryIndexName = (Join-CodePointString @(0x667A, 0x80FD, 0x52A9, 0x624B, 0x8BB0, 0x5FC6, 0x7D22, 0x5F15)) + ".md"
+    $memoryDepositName = "LoopEngineering" + (Join-CodePointString @(0x8BB0, 0x5FC6, 0x6C89, 0x6DC0)) + ".md"
+    $memoryIndexPath = Join-Path "docs" $memoryIndexName
+    $memoryDepositPath = Join-Path "docs" $memoryDepositName
+    $memoryCandidateText = Join-CodePointString @(0x8BB0, 0x5FC6, 0x5019, 0x9009)
+
+    $requiredPaths = @(
+        $memoryIndexPath,
+        $memoryDepositPath,
+        ".agents\skills\mytools-loop-engineering\SKILL.md",
+        ".codex\agents\mytools-reviewer.toml"
+    )
+
+    foreach ($relativePath in $requiredPaths) {
+        $path = Join-Path $repoRoot $relativePath
+        if (-not (Test-Path -LiteralPath $path)) {
+            throw "Loop Engineering memory document missing: $relativePath"
+        }
+    }
+
+    $skill = Get-Content -LiteralPath (Join-Path $repoRoot ".agents\skills\mytools-loop-engineering\SKILL.md") -Raw -Encoding UTF8
+    if (-not $skill.Contains($memoryIndexPath) -or -not $skill.Contains($memoryDepositName.Replace(".md", ""))) {
+        throw "MyTools Loop Engineering skill must route Inspect/Deposit through the memory index and deposit guide."
+    }
+
+    $reviewer = Get-Content -LiteralPath (Join-Path $repoRoot ".codex\agents\mytools-reviewer.toml") -Raw -Encoding UTF8
+    if (-not $reviewer.Contains($memoryCandidateText)) {
+        throw "mytools-reviewer must report a memory candidate line."
+    }
+}
+
+if ($runAll -or $Quick) {
+    Invoke-Step "loop memory docs" $repoRoot {
+        Assert-LoopMemoryDocs
+    }
+}
+
 $dotnetExe = Resolve-Dotnet
 
 if ($runAll -or $Quick -or $Build) {

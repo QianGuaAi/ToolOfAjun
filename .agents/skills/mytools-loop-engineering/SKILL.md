@@ -1,18 +1,18 @@
 ---
 name: mytools-loop-engineering
-description: Use for C:\qgt MyTools development, bugfix, review, release-prep, installer packaging, or refactor tasks that should follow a durable engineering loop: inspect, plan, implement, validate, repair up to 5 times, review, and deposit reusable lessons into the right project artifact.
+description: Use for C:\ToolOfAjun MyTools development, bugfix, review, release-prep, installer packaging, or refactor tasks that should follow a durable engineering loop: inspect, plan, implement, validate, repair up to 5 times, review, and deposit reusable lessons into the right project artifact.
 ---
 
 # MyTools Loop Engineering
 
 ## Purpose
 
-Use this skill to run C:\qgt tasks as a closed engineering loop instead of a one-pass edit. Keep the work grounded in the real repository, verify with project commands, and turn reusable lessons into future project assets.
+Use this skill to run C:\ToolOfAjun tasks as a closed engineering loop instead of a one-pass edit. Keep the work grounded in the real repository, verify with project commands, and turn reusable lessons into future project assets.
 
 ## Workflow
 
 1. Inspect the real state.
-   - Read `AGENTS.md` plus any directly relevant `docs\*.md`, `docs\规划\*.md`, `docs\场景驱动开发\*.md`, or nested `AGENTS.md`.
+   - Read `AGENTS.md`, then use `docs\智能助手记忆索引.md` to choose the smallest relevant set of `docs\*.md`, `docs\规划\*.md`, `docs\场景驱动开发\*.md`, or nested `AGENTS.md`.
    - Check `git status --short --branch` before editing.
    - Read the target source files before proposing or changing code.
    - Treat existing dirty files as user work unless proven otherwise; do not revert them.
@@ -48,11 +48,13 @@ Use this skill to run C:\qgt tasks as a closed engineering loop instead of a one
    - If the current Codex surface cannot spawn custom agents, run the same `mytools-reviewer` instructions as a separate read-only review pass and state that fallback in the completion report.
 
 7. Deposit reusable lessons.
+   - First apply the three deposit questions and routing table in `docs\LoopEngineering记忆沉淀.md`; if there is no reusable lesson, do not force a memory update.
    - Add or update tests when the lesson is executable behavior.
    - Add or update `scripts\codex-eval.ps1` when the lesson is a repeatable validation gate.
    - Add or update `AGENTS.md` only for stable project-wide rules, hard boundaries, validation expectations, or required doc-sync rules.
    - Add or update `.agents\skills\*` when the lesson is a reusable workflow.
    - Add or update `docs\*.md`, `docs\规划\*.md`, or `docs\场景驱动开发\*.md` when the lesson is project knowledge, module behavior, runbook detail, or user-facing control logic.
+   - For repeated failures, record the failure signature only in the routed durable location: symptom, root cause, minimal fix, validation command, and deposit location.
    - Do not create progress-summary Markdown files unless the root `AGENTS.md` explicitly requires a planning document for the task type or the user asks for one.
 
 ## Completion Report

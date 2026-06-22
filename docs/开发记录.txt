@@ -1,5 +1,10 @@
 # 开发记录
 
+## [2026-06-22] 升级 Loop Engineering 记忆机制
+- 新增 `docs\智能助手记忆索引.md` 和 `docs\LoopEngineering记忆沉淀.md`，用于区分可执行检查、项目硬规则、workflow、模块事实、控件事实和一次性进度。
+- `.agents\skills\mytools-loop-engineering\SKILL.md` 改为先通过记忆索引选择最少必要文档，Deposit 阶段按三问和路由表沉淀经验。
+- `.codex\agents\mytools-reviewer.toml` 要求审查输出 `记忆候选` 行，`scripts\codex-eval.ps1 -Quick` 新增 Loop 记忆入口存在性检查。
+
 ## [2026-06-21] 修复排班单元格点击菜单
 - 修复排班单元格普通单击不弹出班次菜单的问题：`SchedulePage` 不再在 `MouseDown` 阶段抢占鼠标捕获，保留 WPF `Button.Click` 正常触发班次选择弹窗。
 - 拖拽多选仍在鼠标移入其它单元格后才捕获鼠标，避免普通点击和框选交互互相干扰。

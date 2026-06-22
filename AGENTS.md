@@ -85,7 +85,8 @@
 - Bugfix 如能用自动化测试、构建脚本或可重复场景稳定复现，必须优先补充或更新回归测试；若暂不适合补测，交付说明中必须说明原因。
 - 非微小代码或规则改动在交付前必须使用独立审查 agent `.codex/agents/mytools-reviewer.toml`；该 agent 只读审查 diff、验证结果和项目规则，输出阻断问题、建议、待确认项和沉淀建议，阻断问题未处理前不得宣称完成。
 - Loop Engineering 的 Review 阶段必须核对本次触达的每个模块或功能是否已实时记录应用逻辑：模块行为写入 `docs/程序逻辑.md`，用户功能摘要写入 `docs/功能说明.md`，可见控件变化写入 `docs/场景驱动开发/控件交互逻辑说明.md`；缺漏视为交付前需修复的 review 问题。
-- 问题解决后必须判断经验沉淀位置：可执行约束优先沉淀为测试或 `scripts/codex-eval.ps1`；稳定项目规则沉淀到 `AGENTS.md`；重复流程沉淀到 `.agents/skills/`；模块知识、运行手册和业务事实沉淀到 `docs/`、`docs/规划/` 或 `docs/场景驱动开发/`。不得为了记录进度另建总结类 Markdown，除非用户明确要求。
+- Inspect 阶段使用 `docs/智能助手记忆索引.md` 作为规则与模块记忆索引；Deposit 阶段按 `docs/LoopEngineering记忆沉淀.md` 的三问和路由表判断是否沉淀，禁止为了凑数新增一次性进度总结。
+- 问题解决后必须判断经验沉淀位置：可执行约束优先沉淀为测试或 `scripts/codex-eval.ps1`；稳定项目规则沉淀到 `AGENTS.md`；重复流程沉淀到 `.agents/skills/`；模块知识、运行手册和业务事实沉淀到 `docs/`、`docs/规划/` 或 `docs/场景驱动开发/`；失败特征只记录错误现象、根因、最小修复、验证命令和沉淀位置。不得为了记录进度另建总结类 Markdown，除非用户明确要求。
 
 ## 七、现有功能模块
 - **WireGuard 连接**：`WireGuardService` 调用本地/系统 `wireguard.exe`，通过 `installtunnelservice` / `uninstalltunnelservice` 控制隧道，结合网卡状态判断连通性。
