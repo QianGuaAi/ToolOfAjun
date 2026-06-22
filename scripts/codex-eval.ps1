@@ -132,6 +132,7 @@ if ($runAll -or $Quick) {
         $restShiftCode = [string][char]0x4F11
         $maternityShiftCode = [string][char]0x4EA7
         $weekendRestHeader = ([string][char]0x672B) + ([string][char]0x4F11)
+        $availableWorkHeader = ([string][char]0x53EF) + ([string][char]0x4E0A)
         $maternityPickerLabel = $maternityShiftCode + ([string][char]0x5047)
         $halfShiftCode = [string][char]0x5348
 
@@ -328,6 +329,16 @@ if ($runAll -or $Quick) {
         $weekendRestValue = Get-CellText $sheetDoc $ns "AJ5"
         if ($weekendRestValue -ne "1.5") {
             throw "Schedule export should count one full and one half weekend rest day in AJ5, got '$weekendRestValue'."
+        }
+
+        $availableWorkHeaderCell = Get-CellText $sheetDoc $ns "AK1"
+        if ($availableWorkHeaderCell -ne $availableWorkHeader) {
+            throw "Schedule export should write available-work header to AK1, got '$availableWorkHeaderCell'."
+        }
+
+        $availableWorkValue = Get-CellText $sheetDoc $ns "AK5"
+        if ($availableWorkValue -ne "26") {
+            throw "Schedule export should count unset cells plus current work cells as available work in AK5, got '$availableWorkValue'."
         }
 
         $smallFill = Get-FillColorForCell $sheetDoc $ns $stylesDoc $styleNs "B5"
@@ -597,6 +608,19 @@ if ($runAll -or $Quick) {
 
     Invoke-Step "schedule cell fill and delete" $repoRoot {
         $schedulePageSource = Get-Content -Raw -Encoding UTF8 (Join-Path $repoRoot "src\MyTools\Views\SchedulePage.xaml.cs")
+        $availableWorkHeader = ([string][char]0x53EF) + ([string][char]0x4E0A)
+        $requiredScheduleGridTokens = @(
+            "MakeHeaderCell(`"$availableWorkHeader`", 0, 5 + days",
+            "FormatStat(stats.availableWork), row, 5 + days",
+            "Grid.SetColumn(delBtn, 6 + days)",
+            "SetStatText(_availableWorkStatTexts, empIdx, stats.availableWork)"
+        )
+        foreach ($token in $requiredScheduleGridTokens) {
+            if (-not $schedulePageSource.Contains($token)) {
+                throw "Schedule grid should place available-work after weekend-rest and move delete button after it; missing token '$token'."
+            }
+        }
+
         $mouseDownStart = $schedulePageSource.IndexOf("private void CellButton_PreviewMouseLeftButtonDown")
         $mouseMoveStart = $schedulePageSource.IndexOf("private void CellButton_PreviewMouseMove")
         if ($mouseDownStart -lt 0 -or $mouseMoveStart -le $mouseDownStart) {
@@ -690,6 +714,10 @@ if ($runAll -or $Quick) {
         if ($filledWeekendRest -ne 2.0) {
             throw "Filled Saturday/Sunday rest shifts should count as 2 weekend rest days, got $filledWeekendRest."
         }
+        $filledAvailableWork = [double]$filledStats.GetType().GetField("Item5").GetValue($filledStats)
+        if ($filledAvailableWork -ne 29.0) {
+            throw "Filled row available work should count unset cells plus work shifts only; expected 29, got $filledAvailableWork."
+        }
 
         $clearMethod = $viewModelType.GetMethod("ClearCells", [Reflection.BindingFlags]"Public,Instance")
         $clearArguments = New-Object 'object[]' 1
@@ -714,6 +742,10 @@ if ($runAll -or $Quick) {
         $clearedWeekendRest = [double]$clearedStats.GetType().GetField("Item4").GetValue($clearedStats)
         if ($clearedWeekendRest -ne 0.0) {
             throw "Cleared Saturday/Sunday rest shifts should reset weekend rest days, got $clearedWeekendRest."
+        }
+        $clearedAvailableWork = [double]$clearedStats.GetType().GetField("Item5").GetValue($clearedStats)
+        if ($clearedAvailableWork -ne 31.0) {
+            throw "Cleared row available work should treat unset cells as available work; expected 31, got $clearedAvailableWork."
         }
     }
 

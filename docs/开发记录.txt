@@ -1,6 +1,18 @@
 # 开发记录
 
 ## [2026-06-22] 重新打包安装程序
+- 使用完整验证和安装包流水线重新构建主程序、卸载器、payload zip 和安装器：`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\codex-eval.ps1`。
+- 本安装包已包含排班“可上”汇总列：界面与 Excel 导出均在“末休”后显示“可上”，按空白单元格 + 已设置上班单元格统计最多可上班天数。
+- 安装器文件版本为 `2026.6.22.1`；输出安装包 `artifacts\installer\MyToolsSetup.exe`，大小 47,078,912 bytes，SHA256 = `0460E9A91A1CD3995F342EC8EFE164E6058D2DD617516AB1665624B92A2FD622`。
+- Payload 压缩包 `artifacts\installer\MyToolsPayload.zip`，大小 46,880,938 bytes，SHA256 = `BBEB61E1B9B8833C67F53350BD701DC70FD29B5EC6D470EFB2ADC3F52E141A92`。
+- 已核验 payload 内含 `MyTools.exe`、配置文件、锁定脚本、ffmpeg 和 NativeBinaries 说明文件，未发现散落 DLL。
+
+## [2026-06-22] 排班新增可上统计列
+- 在排班表“末休”列后新增“可上”只读汇总列，统计当前人员行中空白单元格与已设置上班班次单元格的合计，用于展示该人员最多可设置为上班的天数。
+- Excel 导出同步追加“可上”统计列；导入仍按“上班”统计列还原导出文件中的空白白班，兼容新增列位置。
+- 更新 `scripts\codex-eval.ps1`，覆盖“可上”行统计与 Excel 导出列断言。
+
+## [2026-06-22] 重新打包安装程序
 - 使用完整验证和安装包流水线重新构建主程序、卸载器、payload zip 和安装器：`powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\codex-eval.ps1`。
 - 本安装包已包含排班“末休”汇总列：界面与 Excel 导出均在“连上”后显示“末休”，统计当前月份周六、周日休息天数。
 - 输出安装包 `artifacts\installer\MyToolsSetup.exe`，大小 47,078,912 bytes，SHA256 = `BE5B7950F212339267D9443E0E3BBF6D0EF5B0B46ECE50B97BF1B217033C3009`。

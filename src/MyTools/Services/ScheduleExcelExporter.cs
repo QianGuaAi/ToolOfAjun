@@ -82,8 +82,8 @@ namespace MyTools.Services
         private static async Task WriteWorksheetAsync(XmlWriter w, ScheduleVersion sched, StyleTable styles)
         {
             int days = sched.DayCount;
-            // 列：1=姓名 | 2..days+1=日 | days+2=上班 | days+3=休息 | days+4=连上 | days+5=末休
-            int totalCols = 1 + days + 4;
+            // 列：1=姓名 | 2..days+1=日 | days+2=上班 | days+3=休息 | days+4=连上 | days+5=末休 | days+6=可上
+            int totalCols = 1 + days + 5;
 
             w.WriteStartDocument(true);
             w.WriteStartElement("worksheet", "http://schemas.openxmlformats.org/spreadsheetml/2006/main");
@@ -132,6 +132,7 @@ namespace MyTools.Services
             WriteStr(w, Cell(3 + days, 1), "休息", styles.S("header"));
             WriteStr(w, Cell(4 + days, 1), "连上", styles.S("header"));
             WriteStr(w, Cell(5 + days, 1), "末休", styles.S("header"));
+            WriteStr(w, Cell(6 + days, 1), "可上", styles.S("header"));
             w.WriteEndElement();
 
             // ---------- 第2行：日期 ----------
@@ -150,6 +151,7 @@ namespace MyTools.Services
             WriteStr(w, Cell(3 + days, 2), "", styles.S("header"));
             WriteStr(w, Cell(4 + days, 2), "", styles.S("header"));
             WriteStr(w, Cell(5 + days, 2), "", styles.S("header"));
+            WriteStr(w, Cell(6 + days, 2), "", styles.S("header"));
             w.WriteEndElement();
 
             // ---------- 第3行：实休 ----------
@@ -166,6 +168,7 @@ namespace MyTools.Services
             WriteStr(w, Cell(3 + days, 3), "", styles.S("header"));
             WriteStr(w, Cell(4 + days, 3), "", styles.S("header"));
             WriteStr(w, Cell(5 + days, 3), "", styles.S("header"));
+            WriteStr(w, Cell(6 + days, 3), "", styles.S("header"));
             w.WriteEndElement();
 
             w.WriteStartElement("row");
@@ -181,6 +184,7 @@ namespace MyTools.Services
             WriteStr(w, Cell(3 + days, 4), "", styles.S("header"));
             WriteStr(w, Cell(4 + days, 4), "", styles.S("header"));
             WriteStr(w, Cell(5 + days, 4), "", styles.S("header"));
+            WriteStr(w, Cell(6 + days, 4), "", styles.S("header"));
             w.WriteEndElement();
 
             // ---------- 员工行 ----------
@@ -196,7 +200,7 @@ namespace MyTools.Services
                 WriteStr(w, Cell(1, rowIdx), emp.Name ?? string.Empty, styles.S("name"));
 
                 // 每日格
-                double work = 0, rest = 0;
+                double work = 0, rest = 0, availableWork = 0;
                 int maxRun = 0, run = 0;
                 for (int d = 0; d < days; d++)
                 {
@@ -224,10 +228,16 @@ namespace MyTools.Services
                     }
                     WriteStr(w, Cell(2 + d, rowIdx), displayText, styles.S(styleKey));
 
-                    work += ShiftCodes.WorkDays(code);
+                    var isWork = ShiftCodes.IsWork(code);
+                    work += isWork ? 1.0 : 0.0;
                     var restDays = ShiftCodes.RestDays(code);
                     rest += restDays;
-                    if (ShiftCodes.IsWork(code)) { run++; if (run > maxRun) maxRun = run; }
+                    if (isWork || string.IsNullOrEmpty(code))
+                    {
+                        availableWork += 1.0;
+                    }
+
+                    if (isWork) { run++; if (run > maxRun) maxRun = run; }
                     else run = 0;
                 }
 
@@ -237,6 +247,7 @@ namespace MyTools.Services
                 WriteNum(w, Cell(3 + days, rowIdx), FormatStat(rest), styles.S(rest < 9 ? "statBad" : "stat"));
                 WriteNum(w, Cell(4 + days, rowIdx), maxRun.ToString(CultureInfo.InvariantCulture), styles.S(maxRun > 5 ? "statBad" : "stat"));
                 WriteNum(w, Cell(5 + days, rowIdx), FormatStat(weekendRest), styles.S("stat"));
+                WriteNum(w, Cell(6 + days, rowIdx), FormatStat(availableWork), styles.S("stat"));
 
                 w.WriteEndElement();
             }

@@ -1276,21 +1276,28 @@ namespace MyTools.ViewModels
         }
 
         // ============================ Statistics ============================
-        public (double work, double rest, int maxRun, double weekendRest) ComputeRowStats(int empIdx)
+        public (double work, double rest, int maxRun, double weekendRest, double availableWork) ComputeRowStats(int empIdx)
         {
-            double work = 0, rest = 0;
+            double work = 0, rest = 0, availableWork = 0;
             int maxRun = 0, run = 0;
-            if (Current == null || empIdx < 0 || empIdx >= Current.Employees.Count) return (0, 0, 0, 0);
+            if (Current == null || empIdx < 0 || empIdx >= Current.Employees.Count) return (0, 0, 0, 0, 0);
             var employee = Current.Employees[empIdx];
-            if (string.IsNullOrWhiteSpace(employee.Name)) return (0, 0, 0, 0);
+            if (string.IsNullOrWhiteSpace(employee.Name)) return (0, 0, 0, 0, 0);
             foreach (var c in employee.Cells)
             {
-                work += ShiftCodes.WorkDays(c.Code);
-                rest += ShiftCodes.RestDays(c.Code);
-                if (ShiftCodes.IsWork(c.Code)) { run++; if (run > maxRun) maxRun = run; }
+                var code = ShiftCodes.Normalize(c?.Code);
+                var isWork = ShiftCodes.IsWork(code);
+                work += isWork ? 1.0 : 0.0;
+                rest += ShiftCodes.RestDays(code);
+                if (isWork || string.IsNullOrEmpty(code))
+                {
+                    availableWork += 1.0;
+                }
+
+                if (isWork) { run++; if (run > maxRun) maxRun = run; }
                 else run = 0;
             }
-            return (work, rest, maxRun, ScheduleStatistics.ComputeWeekendRestDays(Current, employee));
+            return (work, rest, maxRun, ScheduleStatistics.ComputeWeekendRestDays(Current, employee), availableWork);
         }
 
         public double ComputeColumnRestCount(int dayIdx)
