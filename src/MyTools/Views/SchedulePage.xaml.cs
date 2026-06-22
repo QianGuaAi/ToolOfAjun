@@ -38,6 +38,7 @@ namespace MyTools.Views
         private TextBlock[] _workStatTexts;
         private TextBlock[] _restStatTexts;
         private TextBlock[] _runStatTexts;
+        private TextBlock[] _weekendRestStatTexts;
         private Button[] _deleteButtons;
         private readonly List<UIElement> _employeeRowElements = new List<UIElement>();
         private int _firstRenderedEmployeeIndex = -1;
@@ -359,16 +360,18 @@ namespace MyTools.Views
             _workStatTexts = new TextBlock[employeeCount];
             _restStatTexts = new TextBlock[employeeCount];
             _runStatTexts = new TextBlock[employeeCount];
+            _weekendRestStatTexts = new TextBlock[employeeCount];
             _deleteButtons = new Button[employeeCount];
 
-            // Columns: 0=姓名, 1..days=日期, days+1=上班, days+2=休息, days+3=连上, days+4=操作
+            // Columns: 0=姓名, 1..days=日期, days+1=上班, days+2=休息, days+3=连上, days+4=末休, days+5=操作
             ScheduleHost.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(72) });
             for (int d = 0; d < days; d++) ScheduleHost.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(30) });
             ScheduleHost.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(42) });  // 上班
             ScheduleHost.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(42) });  // 休息
             ScheduleHost.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(42) });  // 最长连上
+            ScheduleHost.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(42) });  // 周末休息
             ScheduleHost.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(34) });  // 操作
-            ScheduleHost.MinWidth = 72 + days * 30 + 42 * 3 + 34;
+            ScheduleHost.MinWidth = 72 + days * 30 + 42 * 4 + 34;
 
             // Rows: 0=星期, 1=日期, 2=实休, 3=总休, 4..=员工
             ScheduleHost.RowDefinitions.Add(new RowDefinition { Height = new GridLength(24) });
@@ -390,7 +393,8 @@ namespace MyTools.Views
             ScheduleHost.Children.Add(MakeHeaderCell("上班", 0, 1 + days, HeaderBg, true));
             ScheduleHost.Children.Add(MakeHeaderCell("休息", 0, 2 + days, HeaderBg, true));
             ScheduleHost.Children.Add(MakeHeaderCell("连上", 0, 3 + days, HeaderBg, true));
-            ScheduleHost.Children.Add(MakeHeaderCell("", 0, 4 + days, HeaderBg, false));
+            ScheduleHost.Children.Add(MakeHeaderCell("末休", 0, 4 + days, HeaderBg, true));
+            ScheduleHost.Children.Add(MakeHeaderCell("", 0, 5 + days, HeaderBg, false));
 
             // Row 1 — 日期
             ScheduleHost.Children.Add(MakeHeaderCell("日期", 1, 0, HeaderBg, true));
@@ -403,6 +407,7 @@ namespace MyTools.Views
             ScheduleHost.Children.Add(MakeHeaderCell("", 1, 2 + days, HeaderBg, false));
             ScheduleHost.Children.Add(MakeHeaderCell("", 1, 3 + days, HeaderBg, false));
             ScheduleHost.Children.Add(MakeHeaderCell("", 1, 4 + days, HeaderBg, false));
+            ScheduleHost.Children.Add(MakeHeaderCell("", 1, 5 + days, HeaderBg, false));
 
             // Row 2 — 实休（实际休息人数，只读；不在 [总休-0.5, 总休] 时标红）
             ScheduleHost.Children.Add(MakeHeaderCell("实休", 2, 0, HeaderBg, true));
@@ -426,6 +431,7 @@ namespace MyTools.Views
             ScheduleHost.Children.Add(MakeHeaderCell("", 2, 2 + days, HeaderBg, false));
             ScheduleHost.Children.Add(MakeHeaderCell("", 2, 3 + days, HeaderBg, false));
             ScheduleHost.Children.Add(MakeHeaderCell("", 2, 4 + days, HeaderBg, false));
+            ScheduleHost.Children.Add(MakeHeaderCell("", 2, 5 + days, HeaderBg, false));
 
             // Row 3 — 当日总休目标（可编辑；不在 [总休-0.5, 总休] 时标红）
             ScheduleHost.Children.Add(MakeHeaderCell("总休", 3, 0, HeaderBg, true));
@@ -469,6 +475,7 @@ namespace MyTools.Views
             ScheduleHost.Children.Add(MakeHeaderCell("", 3, 2 + days, HeaderBg, false));
             ScheduleHost.Children.Add(MakeHeaderCell("", 3, 3 + days, HeaderBg, false));
             ScheduleHost.Children.Add(MakeHeaderCell("", 3, 4 + days, HeaderBg, false));
+            ScheduleHost.Children.Add(MakeHeaderCell("", 3, 5 + days, HeaderBg, false));
 
             RenderVisibleEmployeeRows(true);
         }
@@ -494,6 +501,7 @@ namespace MyTools.Views
                         _workStatTexts[employeeIndex] = null;
                         _restStatTexts[employeeIndex] = null;
                         _runStatTexts[employeeIndex] = null;
+                        _weekendRestStatTexts[employeeIndex] = null;
                         _deleteButtons[employeeIndex] = null;
                         if (_cellButtons != null)
                         {
@@ -632,6 +640,9 @@ namespace MyTools.Views
             _runStatTexts[employeeIndex] = GetBorderText(runTb);
             if (stats.maxRun > 5) _runStatTexts[employeeIndex].Foreground = Brushes.Crimson;
             AddEmployeeElement(runTb);
+            var weekendRestTb = MakeStatCell(FormatStat(stats.weekendRest), row, 4 + days);
+            _weekendRestStatTexts[employeeIndex] = GetBorderText(weekendRestTb);
+            AddEmployeeElement(weekendRestTb);
 
             var delBtn = new Button
             {
@@ -647,7 +658,7 @@ namespace MyTools.Views
             };
             delBtn.Click += DeleteEmployeeButton_Click;
             Grid.SetRow(delBtn, row);
-            Grid.SetColumn(delBtn, 4 + days);
+            Grid.SetColumn(delBtn, 5 + days);
             _deleteButtons[employeeIndex] = delBtn;
             AddEmployeeElement(delBtn);
         }
@@ -753,6 +764,7 @@ namespace MyTools.Views
                 var stats = _vm.ComputeRowStats(empIdx);
                 SetStatText(_workStatTexts, empIdx, stats.work);
                 SetStatText(_restStatTexts, empIdx, stats.rest, stats.rest < 9);
+                SetStatText(_weekendRestStatTexts, empIdx, stats.weekendRest);
                 if (_runStatTexts != null && _runStatTexts[empIdx] != null)
                 {
                     _runStatTexts[empIdx].Text = stats.maxRun.ToString(CultureInfo.InvariantCulture);

@@ -1,5 +1,18 @@
 # 开发记录
 
+## [2026-06-22] 重新打包安装程序
+- 使用完整验证和安装包流水线重新构建主程序、卸载器、payload zip 和安装器：`powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\codex-eval.ps1`。
+- 本安装包已包含排班“末休”汇总列：界面与 Excel 导出均在“连上”后显示“末休”，统计当前月份周六、周日休息天数。
+- 输出安装包 `artifacts\installer\MyToolsSetup.exe`，大小 47,078,912 bytes，SHA256 = `BE5B7950F212339267D9443E0E3BBF6D0EF5B0B46ECE50B97BF1B217033C3009`。
+- Payload 压缩包 `artifacts\installer\MyToolsPayload.zip`，大小 46,880,842 bytes，SHA256 = `9C8C712565D57AD9A0A089D75F8CE9557A825248F7F1755BB0E154CCC32177A5`。
+- 已核验安装器嵌入资源包含 `MyToolsPayload.zip` 和 `MyTools.Uninstaller.exe`，payload 内含 `MyTools.exe`、配置文件、锁定脚本、ffmpeg 和 NativeBinaries 说明文件。
+
+## [2026-06-22] 排班末休汇总列
+- 排班表人员行在“连上”后新增“末休”汇总列，统计该人员当前月份内周六、周日休息天数；统计口径复用 `ShiftCodes.RestDays()`，支持“午”按 0.5 天计入。
+- `ScheduleExcelExporter` 同步导出“末休”列，人员汇总列顺序为“上班 / 休息 / 连上 / 末休”。
+- `scripts/codex-eval.ps1 -Quick` 新增导出回归，检查 Excel 表头和周末休息统计值。
+- 同步更新排班功能说明、程序逻辑和场景控件交互说明。
+
 ## [2026-06-22] 升级 Loop Engineering 记忆机制
 - 新增 `docs\智能助手记忆索引.md` 和 `docs\LoopEngineering记忆沉淀.md`，用于区分可执行检查、项目硬规则、workflow、模块事实、控件事实和一次性进度。
 - `.agents\skills\mytools-loop-engineering\SKILL.md` 改为先通过记忆索引选择最少必要文档，Deposit 阶段按三问和路由表沉淀经验。

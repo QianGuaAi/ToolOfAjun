@@ -129,7 +129,9 @@ if ($runAll -or $Quick) {
         $legacyNightCode = [string][char]0x591C
         $smallShiftCode = [string][char]0x5C0F
         $publicShiftCode = [string][char]0x516C
+        $restShiftCode = [string][char]0x4F11
         $maternityShiftCode = [string][char]0x4EA7
+        $weekendRestHeader = ([string][char]0x672B) + ([string][char]0x4F11)
         $maternityPickerLabel = $maternityShiftCode + ([string][char]0x5047)
         $halfShiftCode = [string][char]0x5348
 
@@ -155,6 +157,10 @@ if ($runAll -or $Quick) {
                 $cell.Code = $halfShiftCode
             } elseif ($day -eq 4) {
                 $cell.Code = $maternityShiftCode
+            } elseif ($day -eq 7) {
+                $cell.Code = $restShiftCode
+            } elseif ($day -eq 8) {
+                $cell.Code = $halfShiftCode
             } else {
                 $cell.Code = ""
             }
@@ -268,6 +274,31 @@ if ($runAll -or $Quick) {
         $styleNs = New-Object Xml.XmlNamespaceManager($stylesDoc.NameTable)
         $styleNs.AddNamespace("x", "http://schemas.openxmlformats.org/spreadsheetml/2006/main")
 
+        function Get-CellText {
+            param(
+                [xml]$Sheet,
+                [Xml.XmlNamespaceManager]$SheetNs,
+                [string]$CellRef
+            )
+
+            $cellNode = $Sheet.SelectSingleNode("//x:c[@r='$CellRef']", $SheetNs)
+            if ($null -eq $cellNode) {
+                throw "Cell $CellRef was not found in worksheet."
+            }
+
+            $inlineTextNode = $cellNode.SelectSingleNode("x:is/x:t", $SheetNs)
+            if ($null -ne $inlineTextNode) {
+                return [string]$inlineTextNode.InnerText
+            }
+
+            $valueNode = $cellNode.SelectSingleNode("x:v", $SheetNs)
+            if ($null -ne $valueNode) {
+                return [string]$valueNode.InnerText
+            }
+
+            return ""
+        }
+
         function Get-FillColorForCell {
             param(
                 [xml]$Sheet,
@@ -287,6 +318,16 @@ if ($runAll -or $Quick) {
             $fillId = [int]$xfNode.fillId
             $fillNode = $Styles.SelectSingleNode("//x:fills/x:fill[$($fillId + 1)]/x:patternFill/x:fgColor", $StylesNs)
             return $fillNode.rgb
+        }
+
+        $weekendRestHeaderCell = Get-CellText $sheetDoc $ns "AJ1"
+        if ($weekendRestHeaderCell -ne $weekendRestHeader) {
+            throw "Schedule export should write weekend-rest header to AJ1, got '$weekendRestHeaderCell'."
+        }
+
+        $weekendRestValue = Get-CellText $sheetDoc $ns "AJ5"
+        if ($weekendRestValue -ne "1.5") {
+            throw "Schedule export should count one full and one half weekend rest day in AJ5, got '$weekendRestValue'."
         }
 
         $smallFill = Get-FillColorForCell $sheetDoc $ns $stylesDoc $styleNs "B5"
@@ -643,6 +684,13 @@ if ($runAll -or $Quick) {
             throw "Filled rest shift should still count as 1 rest day, got $filledRestDays."
         }
 
+        $computeRowStatsMethod = $viewModelType.GetMethod("ComputeRowStats", [Reflection.BindingFlags]"Public,Instance")
+        $filledStats = $computeRowStatsMethod.Invoke($viewModel, @([int]1))
+        $filledWeekendRest = [double]$filledStats.GetType().GetField("Item4").GetValue($filledStats)
+        if ($filledWeekendRest -ne 2.0) {
+            throw "Filled Saturday/Sunday rest shifts should count as 2 weekend rest days, got $filledWeekendRest."
+        }
+
         $clearMethod = $viewModelType.GetMethod("ClearCells", [Reflection.BindingFlags]"Public,Instance")
         $clearArguments = New-Object 'object[]' 1
         $clearArguments[0] = $targets
@@ -660,6 +708,12 @@ if ($runAll -or $Quick) {
 
         if ($schedule.Employees[0].Cells[0].Code -ne $restShiftCode -or -not $schedule.Employees[0].Cells[0].IsManual) {
             throw "Bulk clear should not modify the unselected source cell."
+        }
+
+        $clearedStats = $computeRowStatsMethod.Invoke($viewModel, @([int]1))
+        $clearedWeekendRest = [double]$clearedStats.GetType().GetField("Item4").GetValue($clearedStats)
+        if ($clearedWeekendRest -ne 0.0) {
+            throw "Cleared Saturday/Sunday rest shifts should reset weekend rest days, got $clearedWeekendRest."
         }
     }
 

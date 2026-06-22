@@ -130,4 +130,32 @@ namespace MyTools.Services
             }
         }
     }
+
+    public static class ScheduleStatistics
+    {
+        public static bool IsWeekend(DateTime date)
+        {
+            return date.DayOfWeek == DayOfWeek.Saturday || date.DayOfWeek == DayOfWeek.Sunday;
+        }
+
+        public static double ComputeWeekendRestDays(ScheduleVersion schedule, EmployeeRow employee)
+        {
+            if (schedule == null || employee == null || employee.Cells == null)
+            {
+                return 0;
+            }
+
+            var days = Math.Min(schedule.DayCount, employee.Cells.Count);
+            double total = 0;
+            for (var day = 0; day < days; day++)
+            {
+                if (IsWeekend(schedule.DateOf(day)))
+                {
+                    total += ShiftCodes.RestDays(employee.Cells[day].Code);
+                }
+            }
+
+            return total;
+        }
+    }
 }

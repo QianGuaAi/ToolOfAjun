@@ -1276,20 +1276,21 @@ namespace MyTools.ViewModels
         }
 
         // ============================ Statistics ============================
-        public (double work, double rest, int maxRun) ComputeRowStats(int empIdx)
+        public (double work, double rest, int maxRun, double weekendRest) ComputeRowStats(int empIdx)
         {
             double work = 0, rest = 0;
             int maxRun = 0, run = 0;
-            if (Current == null || empIdx < 0 || empIdx >= Current.Employees.Count) return (0, 0, 0);
-            if (string.IsNullOrWhiteSpace(Current.Employees[empIdx].Name)) return (0, 0, 0);
-            foreach (var c in Current.Employees[empIdx].Cells)
+            if (Current == null || empIdx < 0 || empIdx >= Current.Employees.Count) return (0, 0, 0, 0);
+            var employee = Current.Employees[empIdx];
+            if (string.IsNullOrWhiteSpace(employee.Name)) return (0, 0, 0, 0);
+            foreach (var c in employee.Cells)
             {
                 work += ShiftCodes.WorkDays(c.Code);
                 rest += ShiftCodes.RestDays(c.Code);
                 if (ShiftCodes.IsWork(c.Code)) { run++; if (run > maxRun) maxRun = run; }
                 else run = 0;
             }
-            return (work, rest, maxRun);
+            return (work, rest, maxRun, ScheduleStatistics.ComputeWeekendRestDays(Current, employee));
         }
 
         public double ComputeColumnRestCount(int dayIdx)
