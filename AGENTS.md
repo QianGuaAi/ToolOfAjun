@@ -80,6 +80,7 @@
 ### 6.2 Loop Engineering 闭环规则
 - 本项目使用 `.agents/skills/mytools-loop-engineering/SKILL.md` 作为 Codex 闭环执行流程：Inspect → Plan → Implement → Validate → Repair Loop → Review → Deposit。
 - 常规开发、修复、重构、发布准备、安装包重打和评审任务默认按该 skill 执行；一次性问答、只读解释、用户明确要求不改代码的任务除外。
+- Loop Engineering 的 Plan 阶段必须先判断多代理分工：一行文案、只读问答、简单配置检查等微小任务可单 agent；非微小代码、规则、发布、跨文件或跨模块任务默认多代理执行，至少包含一个只读的“检查/协调/验收”角色；执行 agent 数量以缩短交付时间、减少遗漏和写入范围可分离为依据，不以成本为限制；主 agent 负责最终整合、冲突处理和交付结论。
 - 默认验证入口为 `scripts/codex-eval.ps1`；普通小任务优先使用 `powershell -ExecutionPolicy Bypass -File scripts\codex-eval.ps1 -Quick`，发布准备或安装包相关改动使用不带范围参数的全量验证；也可按任务范围追加 `-Build` / `-Installer` 定向验证。
 - 验证失败后必须读取具体失败日志，做最小修复并重跑相关验证；同一问题最多进行 5 次修复验证循环。超过 5 次仍未解决时，停止继续试错，说明已执行命令、关键日志、已尝试修复、剩余缺口和需要用户或外部状态补充的内容。
 - Bugfix 如能用自动化测试、构建脚本或可重复场景稳定复现，必须优先补充或更新回归测试；若暂不适合补测，交付说明中必须说明原因。
@@ -159,5 +160,10 @@
 - 禁止在构造函数中调用 `Task.Run(...).Result` 或 `.Wait()`。
 - 禁止用 `Application.Current.Dispatcher.Invoke` 同步等待 UI 线程结果。
 - 禁止为了追求速度关闭全局异常处理、DPAPI 加密、SQL 白名单校验或日志脱敏。
+
+## 十、变更日志
+
+- 2026-06-23：对齐 Eif 项目的 Loop Engineering 最新模式，要求主流程合并 reviewer 的 `记忆候选` 后再沉淀，并由 `scripts/codex-eval.ps1 -Quick` 校验记忆索引中的长期路径真实存在。
+- 2026-06-23：同步 Loop Engineering 多代理分工规则：非微小任务默认多代理执行，至少设置只读检查/协调/验收角色，主 agent 负责最终整合和交付。
 
 ---

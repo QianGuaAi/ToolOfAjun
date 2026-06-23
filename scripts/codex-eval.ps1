@@ -81,10 +81,95 @@ function Assert-LoopMemoryDocs {
     if (-not $skill.Contains($memoryIndexPath) -or -not $skill.Contains($memoryDepositName.Replace(".md", ""))) {
         throw "MyTools Loop Engineering skill must route Inspect/Deposit through the memory index and deposit guide."
     }
+    Assert-LoopMultiAgentPolicy $skill (Get-Content -LiteralPath (Join-Path $repoRoot "AGENTS.md") -Raw -Encoding UTF8)
 
     $reviewer = Get-Content -LiteralPath (Join-Path $repoRoot ".codex\agents\mytools-reviewer.toml") -Raw -Encoding UTF8
     if (-not $reviewer.Contains($memoryCandidateText)) {
         throw "mytools-reviewer must report a memory candidate line."
+    }
+
+    Assert-MemoryIndexReferencesExist
+}
+
+function Assert-LoopMultiAgentPolicy {
+    param(
+        [string]$Skill,
+        [string]$Agents
+    )
+
+    function Join-CodePointString {
+        param([int[]]$CodePoints)
+        return -join ($CodePoints | ForEach-Object { [string][char]$_ })
+    }
+
+    $reviewRoleText = Join-CodePointString @(0x68C0, 0x67E5, 0x2F, 0x534F, 0x8C03, 0x2F, 0x9A8C, 0x6536)
+    $multiAgentSplitText = Join-CodePointString @(0x591A, 0x4EE3, 0x7406, 0x5206, 0x5DE5)
+    $microSingleText = (Join-CodePointString @(0x5FAE, 0x5C0F, 0x4EFB, 0x52A1, 0x53EF, 0x5355)) + " agent"
+    $nonTrivialMultiText = Join-CodePointString @(0x975E, 0x5FAE, 0x5C0F, 0x4EE3, 0x7801, 0x3001, 0x89C4, 0x5219, 0x3001, 0x53D1, 0x5E03, 0x3001, 0x8DE8, 0x6587, 0x4EF6, 0x6216, 0x8DE8, 0x6A21, 0x5757, 0x4EFB, 0x52A1, 0x9ED8, 0x8BA4, 0x591A, 0x4EE3, 0x7406, 0x6267, 0x884C)
+    $primaryIntegrationText = (Join-CodePointString @(0x4E3B)) + " agent " + (Join-CodePointString @(0x8D1F, 0x8D23, 0x6700, 0x7EC8, 0x6574, 0x5408))
+
+    $requiredSkillTokens = @(
+        "multi-agent role split",
+        "Micro tasks",
+        "Non-trivial code, rule, release, cross-file, or cross-module tasks default to multi-agent execution",
+        $reviewRoleText,
+        "primary agent owns final integration"
+    )
+    foreach ($token in $requiredSkillTokens) {
+        if (-not $Skill.Contains($token)) {
+            throw "MyTools Loop Engineering skill missing multi-agent policy token: $token"
+        }
+    }
+
+    $requiredAgentsTokens = @(
+        $multiAgentSplitText,
+        $microSingleText,
+        $nonTrivialMultiText,
+        $reviewRoleText,
+        $primaryIntegrationText
+    )
+    foreach ($token in $requiredAgentsTokens) {
+        if (-not $Agents.Contains($token)) {
+            throw "AGENTS.md missing multi-agent policy token: $token"
+        }
+    }
+}
+
+function Assert-MemoryIndexReferencesExist {
+    function Join-CodePointString {
+        param([int[]]$CodePoints)
+        return -join ($CodePoints | ForEach-Object { [string][char]$_ })
+    }
+
+    $memoryIndexName = (Join-CodePointString @(0x667A, 0x80FD, 0x52A9, 0x624B, 0x8BB0, 0x5FC6, 0x7D22, 0x5F15)) + ".md"
+    $memoryIndexPath = Join-Path $repoRoot (Join-Path "docs" $memoryIndexName)
+    $memoryIndex = Get-Content -LiteralPath $memoryIndexPath -Raw -Encoding UTF8
+
+    # 只校验记忆索引的长期路径引用：反引号包裹、且以 docs/、.agents/、.codex/、scripts/ 开头。
+    # 裸文件名、章节名、通配符和源码 glob 故意跳过，避免把说明文字误判为路径。
+    $matches = [regex]::Matches($memoryIndex, '`((?:docs[\\/]|\.agents[\\/]|\.codex[\\/]|scripts[\\/])[^`]+)`')
+    $missing = @()
+    $seen = @{}
+
+    foreach ($match in $matches) {
+        $reference = $match.Groups[1].Value.Trim()
+        if ($reference.Contains("*")) {
+            continue
+        }
+        $normalized = $reference.TrimEnd([char[]]@("/", "\")).Replace("/", "\")
+        if ($seen.ContainsKey($normalized)) {
+            continue
+        }
+        $seen[$normalized] = $true
+
+        $candidate = Join-Path $repoRoot $normalized
+        if (-not (Test-Path -LiteralPath $candidate)) {
+            $missing += $reference
+        }
+    }
+
+    if ($missing.Count -gt 0) {
+        throw "docs memory index references missing path(s): $($missing -join ', ')"
     }
 }
 
