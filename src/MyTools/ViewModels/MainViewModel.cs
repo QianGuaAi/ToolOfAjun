@@ -404,7 +404,7 @@ namespace MyTools.ViewModels
             ShowSystemSettingsCommand = new RelayCommand(() => SwitchModule("SystemSettings"));
             LoadSystemInfoCommand = new AsyncRelayCommand(LoadSystemInfoAsync, () => !_isSystemInfoBusy);
             ToggleHardwareSensorsCommand = new RelayCommand(ToggleHardwareSensors);
-            RefreshSensorsOnceCommand = new RelayCommand(() => SensorTimer_OnTick(this, EventArgs.Empty), () => _sensorService != null);
+            RefreshSensorsOnceCommand = new RelayCommand(() => SafeFireAndForget(RefreshSensorsAsync()), () => _sensorService != null);
             RestartAsAdminCommand = new RelayCommand(RestartAsAdmin);
             VerifyFileCommand = new AsyncRelayCommand(VerifyFileAsync, () => !_isFileHashBusy);
             ConvertImageCommand = new AsyncRelayCommand(ConvertImageAsync, () => !_isConvertBusy);
@@ -662,28 +662,51 @@ namespace MyTools.ViewModels
             dispatcher.BeginInvoke(
                 DispatcherPriority.ContextIdle,
                 new Action(() => SafeFireAndForget(LoadStartupShellStateAsync())));
-            dispatcher.BeginInvoke(
-                DispatcherPriority.ContextIdle,
-                new Action(() => StartSensorsBackground()));
+            // Hardware sensor startup can probe drivers and block for seconds on
+            // some machines, so it is started only when the SystemInfo module is opened.
         }
 
-        private void StartSensorsBackground()
+        private async Task StartSensorsBackgroundAsync()
         {
-            _sensorService = new HardwareSensorService();
-            if (!_sensorService.TryStart())
+            if (_isSensorStarting || _sensorService != null || _isSensorsRunning)
             {
-                SensorStatusMessage = "传感器启动失败：" + (_sensorService.LastError ?? "未知错误。请以管理员身份重新运行 MyTools。");
-                HomeSensorRiskText = "传感器启动失败，无法读取温度风险。";
-                _sensorService.Dispose();
-                _sensorService = null;
                 return;
             }
 
+            var service = new HardwareSensorService();
+            var started = false;
+            try
+            {
+                _isSensorStarting = true;
+                SensorStatusMessage = "正在启动传感器…";
+                HomeSensorRiskText = "正在启动传感器采集。";
+                started = await Task.Run(() => service.TryStart()).ConfigureAwait(true);
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Warning("HardwareSensorService async start failed: {Msg}", ex.Message);
+            }
+            finally
+            {
+                _isSensorStarting = false;
+            }
+
+            if (!started)
+            {
+                SensorStatusMessage = "传感器启动失败：" + (service.LastError ?? "未知错误。请以管理员身份重新运行 MyTools。");
+                HomeSensorRiskText = "传感器启动失败，无法读取温度风险。";
+                service.Dispose();
+                return;
+            }
+
+            _sensorService = service;
+            SensorTimer.Tick -= SensorTimer_OnTick;
             SensorTimer.Tick += SensorTimer_OnTick;
-            ApplySensorRefreshMode();
-            SensorTimer_OnTick(this, EventArgs.Empty);
             _isSensorsRunning = true;
             OnPropertyChanged(nameof(IsSensorsRunning));
+            TriggerCommandRequery();
+            ApplySensorRefreshMode();
+            await RefreshSensorsAsync().ConfigureAwait(true);
 
             if (SensorReadings.Count == 0)
             {
@@ -3376,6 +3399,7 @@ namespace MyTools.ViewModels
             {
                 EnsureSystemInfoSnapshotLoading();
                 SafeFireAndForget(LoadSystemInfoAsync());
+                SafeFireAndForget(StartSensorsBackgroundAsync());
             }
             else if (string.Equals(module, "Optimization", StringComparison.Ordinal))
             {
@@ -10791,6 +10815,8 @@ namespace MyTools.ViewModels
         private string _sensorStatusMessage = "正在启动传感器…";
         private DispatcherTimer _sensorTimer;
         private HardwareSensorService _sensorService;
+        private bool _isSensorStarting;
+        private bool _isSensorRefreshing;
         private string _sensorRefreshMode = "2 秒";
         private string _homeSensorRiskText = "传感器未启用，进入“系统信息”后可开启采集。";
         private string _cpuTemp = "—";
@@ -10932,12 +10958,19 @@ namespace MyTools.ViewModels
 
         private void ToggleHardwareSensors()
         {
+            if (!_isSensorsRunning && _sensorService == null)
+            {
+                SafeFireAndForget(StartSensorsBackgroundAsync());
+                return;
+            }
+
             SensorTimer.Stop();
             SensorTimer.Tick -= SensorTimer_OnTick;
             _sensorService?.Dispose();
             _sensorService = null;
             _isSensorsRunning = false;
             OnPropertyChanged(nameof(IsSensorsRunning));
+            TriggerCommandRequery();
             SensorReadings.Clear();
             SensorStatusMessage = "已停止采集。";
             HomeSensorRiskText = "传感器已停止，进入“系统信息”后可重新开启采集。";
@@ -10966,9 +10999,26 @@ namespace MyTools.ViewModels
 
         private void SensorTimer_OnTick(object sender, EventArgs e)
         {
+            SafeFireAndForget(RefreshSensorsAsync());
+        }
+
+        private async Task RefreshSensorsAsync()
+        {
+            if (_isSensorRefreshing)
+            {
+                return;
+            }
+
             try
             {
-                var readings = _sensorService?.ReadAll();
+                _isSensorRefreshing = true;
+                var service = _sensorService;
+                if (service == null)
+                {
+                    return;
+                }
+
+                var readings = await Task.Run(() => service.ReadAll()).ConfigureAwait(true);
                 if (readings == null) return;
                 SensorReadings.Clear();
                 foreach (var r in readings.OrderBy(r => r.HardwareKind).ThenBy(r => r.HardwareName).ThenBy(r => r.SensorKind))
@@ -11003,6 +11053,10 @@ namespace MyTools.ViewModels
             {
                 AppLogService.Warning("Sensor read failed: {Msg}", ex.Message);
                 HomeSensorRiskText = "传感器读取失败：" + ex.Message;
+            }
+            finally
+            {
+                _isSensorRefreshing = false;
             }
         }
 

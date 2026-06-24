@@ -1,7 +1,8 @@
 param(
     [switch]$Quick,
     [switch]$Build,
-    [switch]$Installer
+    [switch]$Installer,
+    [string]$InstallerVersion = "2026.6.24.2"
 )
 
 $ErrorActionPreference = "Stop"
@@ -51,6 +52,178 @@ function Resolve-Dotnet {
     throw "dotnet not found. Use repo-local .dotnet or add dotnet to PATH."
 }
 
+function Test-FileContainsAsciiText {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path,
+        [Parameter(Mandatory = $true)]
+        [string]$Text
+    )
+
+    $bytes = [IO.File]::ReadAllBytes($Path)
+    $needle = [Text.Encoding]::ASCII.GetBytes($Text)
+    if ($bytes.Length -lt $needle.Length) {
+        return $false
+    }
+
+    for ($i = 0; $i -le $bytes.Length - $needle.Length; $i++) {
+        $matched = $true
+        for ($j = 0; $j -lt $needle.Length; $j++) {
+            if ($bytes[$i + $j] -ne $needle[$j]) {
+                $matched = $false
+                break
+            }
+        }
+
+        if ($matched) {
+            return $true
+        }
+    }
+
+    return $false
+}
+
+function Assert-InstallerArtifact {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ExpectedVersion
+    )
+
+    Add-Type -AssemblyName System.IO.Compression
+
+    $setupPath = Join-Path $repoRoot "artifacts\installer\MyToolsSetup.exe"
+    $payloadZipPath = Join-Path $repoRoot "artifacts\installer\MyToolsPayload.zip"
+    if (-not (Test-Path -LiteralPath $setupPath)) {
+        throw "Installer artifact missing: $setupPath"
+    }
+    if (-not (Test-Path -LiteralPath $payloadZipPath)) {
+        throw "Payload zip missing: $payloadZipPath"
+    }
+
+    $setupItem = Get-Item -LiteralPath $setupPath
+    if ($setupItem.VersionInfo.FileVersion -ne $ExpectedVersion) {
+        throw "Installer version mismatch. Expected $ExpectedVersion, got $($setupItem.VersionInfo.FileVersion)."
+    }
+
+    $payloadZipItem = Get-Item -LiteralPath $payloadZipPath
+    if ($setupItem.Length -le 0 -or $payloadZipItem.Length -le 0) {
+        throw "Installer artifact or payload zip is empty."
+    }
+
+    $setupAssembly = [Reflection.Assembly]::LoadFrom($setupPath)
+    $resources = $setupAssembly.GetManifestResourceNames() | Sort-Object
+    $requiredResources = @(
+        "MyToolsPayload.zip",
+        "MyTools.Uninstaller.exe"
+    )
+    foreach ($resource in $requiredResources) {
+        if ($resources -notcontains $resource) {
+            throw "Installer missing embedded resource: $resource"
+        }
+
+        $resourceStream = $setupAssembly.GetManifestResourceStream($resource)
+        try {
+            if ($null -eq $resourceStream -or $resourceStream.Length -le 0) {
+                throw "Installer embedded resource is empty: $resource"
+            }
+        } finally {
+            if ($null -ne $resourceStream) {
+                $resourceStream.Dispose()
+            }
+        }
+    }
+
+    $embeddedPayloadStream = $setupAssembly.GetManifestResourceStream("MyToolsPayload.zip")
+    try {
+        $externalPayloadSha = (Get-FileHash -Algorithm SHA256 -LiteralPath $payloadZipPath).Hash
+        $embeddedPayloadSha = Get-StreamSha256Hex -Stream $embeddedPayloadStream
+        if ($externalPayloadSha -ne $embeddedPayloadSha) {
+            throw "Embedded payload hash mismatch. External=$externalPayloadSha Embedded=$embeddedPayloadSha."
+        }
+    } finally {
+        if ($null -ne $embeddedPayloadStream) {
+            $embeddedPayloadStream.Dispose()
+        }
+    }
+
+    $payloadStream = $setupAssembly.GetManifestResourceStream("MyToolsPayload.zip")
+    $payloadArchive = $null
+    $tempDir = Join-Path ([IO.Path]::GetTempPath()) ("MyToolsInstallerEval\" + [Guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
+    try {
+        $payloadArchive = [IO.Compression.ZipArchive]::new($payloadStream, [IO.Compression.ZipArchiveMode]::Read, $false)
+        $entries = $payloadArchive.Entries | ForEach-Object { $_.FullName.Replace("/", "\") } | Sort-Object
+        $requiredEntries = @(
+            "MyTools.exe",
+            "MyTools.exe.config",
+            "LockWin10_22H2.ps1",
+            "NativeBinaries\README.txt",
+            "NativeBinaries\ffmpeg\README.txt",
+            "NativeBinaries\ffmpeg\ffmpeg.exe"
+        )
+
+        foreach ($entry in $requiredEntries) {
+            if ($entries -notcontains $entry) {
+                throw "Embedded payload missing required file: $entry"
+            }
+        }
+
+        $mainEntry = $payloadArchive.GetEntry("MyTools.exe")
+        if ($null -eq $mainEntry -or $mainEntry.Length -le 0) {
+            throw "Embedded payload MyTools.exe is empty."
+        }
+
+        $mainExtractPath = Join-Path $tempDir "MyTools.exe"
+        $inputStream = $mainEntry.Open()
+        $outputStream = [IO.File]::Create($mainExtractPath)
+        try {
+            $inputStream.CopyTo($outputStream)
+        } finally {
+            $outputStream.Dispose()
+            $inputStream.Dispose()
+        }
+
+        $requiredTypeNames = @(
+            "CodexLocalRelayCompatibility",
+            "CodexLocalRelayService"
+        )
+        foreach ($typeName in $requiredTypeNames) {
+            if (-not (Test-FileContainsAsciiText -Path $mainExtractPath -Text $typeName)) {
+                throw "Embedded payload MyTools.exe does not contain expected type name: $typeName"
+            }
+        }
+    } finally {
+        if ($null -ne $payloadArchive) {
+            $payloadArchive.Dispose()
+        } elseif ($null -ne $payloadStream) {
+            $payloadStream.Dispose()
+        }
+
+        if (Test-Path -LiteralPath $tempDir) {
+            Remove-Item -LiteralPath $tempDir -Recurse -Force
+        }
+    }
+}
+
+function Get-StreamSha256Hex {
+    param(
+        [Parameter(Mandatory = $true)]
+        [IO.Stream]$Stream
+    )
+
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try {
+        if ($Stream.CanSeek) {
+            $Stream.Position = 0
+        }
+
+        $hashBytes = $sha.ComputeHash($Stream)
+        return ([BitConverter]::ToString($hashBytes)).Replace("-", "")
+    } finally {
+        $sha.Dispose()
+    }
+}
+
 function Assert-LoopMemoryDocs {
     function Join-CodePointString {
         param([int[]]$CodePoints)
@@ -89,6 +262,40 @@ function Assert-LoopMemoryDocs {
     }
 
     Assert-MemoryIndexReferencesExist
+}
+
+function Assert-StartupResponsivenessGuards {
+    $mainViewModelPath = Join-Path $repoRoot "src\MyTools\ViewModels\MainViewModel.cs"
+    $source = Get-Content -LiteralPath $mainViewModelPath -Raw -Encoding UTF8
+
+    $startupMethodMatch = [regex]::Match(
+        $source,
+        "private\s+void\s+ScheduleStartupBackgroundLoads\s*\(\s*\)\s*\{(?<body>.*?)^\s*\}",
+        [Text.RegularExpressions.RegexOptions]::Singleline -bor [Text.RegularExpressions.RegexOptions]::Multiline)
+    if (-not $startupMethodMatch.Success) {
+        throw "Could not locate ScheduleStartupBackgroundLoads in MainViewModel.cs."
+    }
+
+    $startupBody = $startupMethodMatch.Groups["body"].Value
+    if ($startupBody.Contains("StartSensorsBackground")) {
+        throw "Startup background loads must not start hardware sensors; sensors are loaded on SystemInfo entry only."
+    }
+
+    $switchModuleMatch = [regex]::Match(
+        $source,
+        "private\s+void\s+SwitchModule\s*\(\s*string\s+module\s*\)\s*\{(?<body>.*?)^\s*\}\s*public\s+void\s+SwitchToHomeFromMultimedia",
+        [Text.RegularExpressions.RegexOptions]::Singleline -bor [Text.RegularExpressions.RegexOptions]::Multiline)
+    if (-not $switchModuleMatch.Success -or -not $switchModuleMatch.Groups["body"].Value.Contains("StartSensorsBackgroundAsync")) {
+        throw "SystemInfo module entry must start sensors on demand."
+    }
+
+    $refreshMethodMatch = [regex]::Match(
+        $source,
+        "private\s+async\s+Task\s+RefreshSensorsAsync\s*\(\s*\)\s*\{(?<body>.*?)^\s*\}\s*private\s+static\s+readonly",
+        [Text.RegularExpressions.RegexOptions]::Singleline -bor [Text.RegularExpressions.RegexOptions]::Multiline)
+    if (-not $refreshMethodMatch.Success -or -not $refreshMethodMatch.Groups["body"].Value.Contains("Task.Run(() => service.ReadAll())")) {
+        throw "Sensor refresh must keep HardwareSensorService.ReadAll off the UI thread."
+    }
 }
 
 function Assert-LoopMultiAgentPolicy {
@@ -177,6 +384,10 @@ if ($runAll -or $Quick) {
     Invoke-Step "loop memory docs" $repoRoot {
         Assert-LoopMemoryDocs
     }
+
+    Invoke-Step "startup responsiveness guards" $repoRoot {
+        Assert-StartupResponsivenessGuards
+    }
 }
 
 $dotnetExe = Resolve-Dotnet
@@ -188,6 +399,91 @@ if ($runAll -or $Quick -or $Build) {
 }
 
 if ($runAll -or $Quick) {
+    Invoke-Step "codex local relay cursor compatibility" $repoRoot {
+        $newtonsoftPath = Join-Path $env:USERPROFILE ".nuget\packages\newtonsoft.json\13.0.3\lib\net45\Newtonsoft.Json.dll"
+        if (Test-Path -LiteralPath $newtonsoftPath) {
+            [Reflection.Assembly]::LoadFrom($newtonsoftPath) | Out-Null
+        }
+
+        $appAssembly = [Reflection.Assembly]::LoadFrom((Join-Path $repoRoot "src\MyTools\bin\Release\net48\MyTools.exe"))
+        $compatType = $appAssembly.GetType("MyTools.Services.CodexLocalRelayCompatibility", $true)
+
+        $modelsMethod = $compatType.GetMethod("BuildModelsResponseJson", [Reflection.BindingFlags]"Public,Static")
+        $modelsJson = [string]$modelsMethod.Invoke($null, @("gpt-5.5"))
+        if (-not $modelsJson.Contains('"object":"list"') -or -not $modelsJson.Contains('"id":"gpt-5.5"')) {
+            throw "Cursor-compatible models fallback did not return an OpenAI-style model list."
+        }
+
+        $contentTypeMethod = $compatType.GetMethod("IsOpenAiCompatibleContentType", [Reflection.BindingFlags]"Public,Static")
+        if ([bool]$contentTypeMethod.Invoke($null, @("text/html; charset=utf-8"))) {
+            throw "Cursor compatibility should reject HTML success responses from upstream."
+        }
+        if ([bool]$contentTypeMethod.Invoke($null, @(""))) {
+            throw "Cursor compatibility should reject empty upstream content-type."
+        }
+        if (-not [bool]$contentTypeMethod.Invoke($null, @("text/event-stream; charset=utf-8"))) {
+            throw "Cursor compatibility should accept SSE upstream responses."
+        }
+
+        $relayType = $appAssembly.GetType("MyTools.Services.CodexLocalRelayService", $true)
+        $responsesUrisMethod = $relayType.GetMethod("TryBuildResponsesCompatibilityUris", [Reflection.BindingFlags]"NonPublic,Static")
+        [object[]]$uriArguments = @([Uri]"https://c-api.cc", "/v1", $null, $null, $null, $null)
+        $urisBuilt = [bool]$responsesUrisMethod.Invoke($null, $uriArguments)
+        if (-not $urisBuilt) {
+            throw "Relay should build Responses compatibility URIs for root upstream base URL."
+        }
+        $primaryResponsesUri = [Uri]$uriArguments[3]
+        $fallbackResponsesUri = [Uri]$uriArguments[5]
+        if ($primaryResponsesUri.AbsolutePath -ne "/responses") {
+            throw "Primary Responses compatibility URI should preserve existing root-base mapping; got $($primaryResponsesUri.AbsolutePath)."
+        }
+        if ($fallbackResponsesUri.AbsolutePath -ne "/v1/responses") {
+            throw "Fallback Responses compatibility URI should add /v1 before /responses; got $($fallbackResponsesUri.AbsolutePath)."
+        }
+
+        $chatJson = '{"model":"gpt-5.5","messages":[{"role":"user","content":"ping"}],"tools":[{"type":"function","function":{"name":"lookup","description":"lookup data","parameters":{"type":"object","properties":{"q":{"type":"string"}}}}}],"tool_choice":"auto","max_tokens":7,"stream":true}'
+        $chatBytes = [Text.Encoding]::UTF8.GetBytes($chatJson)
+        $buildResponsesMethod = $compatType.GetMethod("TryBuildResponsesRequestBody", [Reflection.BindingFlags]"Public,Static")
+        [object[]]$buildArguments = @($chatBytes, "fallback-model", $null, $false)
+        $built = [bool]$buildResponsesMethod.Invoke($null, $buildArguments)
+        if (-not $built) {
+            throw "Cursor chat/completions request should convert to Responses API request body."
+        }
+
+        $responsesBody = [Text.Encoding]::UTF8.GetString([byte[]]$buildArguments[2])
+        if (-not [bool]$buildArguments[3]) {
+            throw "Cursor compatibility should preserve the client's streaming preference."
+        }
+        if (-not $responsesBody.Contains('"input"') -or -not $responsesBody.Contains('"tools"') -or -not $responsesBody.Contains('"max_output_tokens":7')) {
+            throw "Converted Responses API request body lost input, tools, or token limit fields."
+        }
+
+        $responsesJson = '{"id":"resp_123","model":"gpt-5.5","output":[{"type":"message","content":[{"type":"output_text","text":"pong"}]}],"usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}'
+        $chatCompletionMethod = $compatType.GetMethod("TryBuildChatCompletionJson", [Reflection.BindingFlags]"Public,Static")
+        [object[]]$completionArguments = @($responsesJson, $chatBytes, $null)
+        $converted = [bool]$chatCompletionMethod.Invoke($null, $completionArguments)
+        if (-not $converted) {
+            throw "Responses API output should convert to chat/completions JSON."
+        }
+
+        $completionJson = [string]$completionArguments[2]
+        if (-not $completionJson.Contains('"object":"chat.completion"') -or -not $completionJson.Contains('"content":"pong"') -or -not $completionJson.Contains('"total_tokens":2')) {
+            throw "Converted chat/completions JSON lost object type, content, or usage fields."
+        }
+
+        $sseMethod = $compatType.GetMethod("TryBuildChatCompletionSsePayload", [Reflection.BindingFlags]"Public,Static")
+        [object[]]$sseArguments = @($responsesJson, $chatBytes, $null)
+        $sseConverted = [bool]$sseMethod.Invoke($null, $sseArguments)
+        if (-not $sseConverted) {
+            throw "Responses API output should convert to chat/completions SSE."
+        }
+
+        $ssePayload = [string]$sseArguments[2]
+        if (-not $ssePayload.Contains('"object":"chat.completion.chunk"') -or -not $ssePayload.Contains('"content":"pong"') -or -not $ssePayload.Contains('data: [DONE]')) {
+            throw "Converted chat/completions SSE lost chunk content or DONE marker."
+        }
+    }
+
     Invoke-Step "schedule excel big shift export" $repoRoot {
         Add-Type -AssemblyName System.IO.Compression.FileSystem
 
@@ -928,7 +1224,8 @@ if ($runAll -or $Quick) {
 
 if ($runAll -or $Installer) {
     Invoke-Step "installer pipeline" $repoRoot {
-        & powershell -ExecutionPolicy Bypass -File scripts\Build-Installer.ps1
+        & powershell -ExecutionPolicy Bypass -File scripts\Build-Installer.ps1 -Version $InstallerVersion
+        Assert-InstallerArtifact -ExpectedVersion $InstallerVersion
     }
 }
 

@@ -1,6 +1,6 @@
 param(
     [string]$Configuration = "Release",
-    [string]$Version = "2026.6.22.1",
+    [string]$Version = "2026.6.24.2",
     [switch]$SkipFfmpeg
 )
 

@@ -783,6 +783,15 @@ namespace MyTools.Services
                             return;
                         }
 
+                        var endpoint = CodexLocalRelayCompatibility.ResolveEndpoint(state.LocalBasePath, request.Path);
+                        if (endpoint == CodexLocalRelayEndpoint.Models
+                            && string.Equals(request.Method, "GET", StringComparison.OrdinalIgnoreCase)
+                            && !string.IsNullOrWhiteSpace(state.Model))
+                        {
+                            await WriteLocalModelsResponseAsync(stream, request, state, ct).ConfigureAwait(false);
+                            return;
+                        }
+
                         var upstreamUri = BuildUpstreamUri(state.UpstreamBaseUri, state.LocalBasePath, request.Path, request.Query);
                         using (var upstreamRequest = BuildUpstreamRequest(request, upstreamUri, state.UpstreamToken))
                         using (var response = await UpstreamClient.SendAsync(upstreamRequest, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false))
@@ -792,9 +801,8 @@ namespace MyTools.Services
                                 && !SameUri(upstreamUri, fallbackUri))
                             {
                                 AppLogService.Warning(
-                                    "Codex local relay upstream returned HTTP {StatusCode} {ReasonPhrase} for {Method} {Host}{Path}; retrying {RetryPath}",
+                                    "Codex local relay upstream returned HTTP {StatusCode} for {Method} {Host}{Path}; retrying {RetryPath}",
                                     (int)response.StatusCode,
-                                    response.ReasonPhrase,
                                     request.Method,
                                     upstreamUri.Host,
                                     upstreamUri.AbsolutePath,
@@ -810,12 +818,23 @@ namespace MyTools.Services
                                     else
                                     {
                                         AppLogService.Warning(
-                                            "Codex local relay v1 retry returned HTTP {StatusCode} {ReasonPhrase} for {Method} {Host}{Path}",
+                                            "Codex local relay v1 retry returned HTTP {StatusCode} for {Method} {Host}{Path}",
                                             (int)fallbackResponse.StatusCode,
-                                            fallbackResponse.ReasonPhrase,
                                             request.Method,
                                             fallbackUri.Host,
                                             fallbackUri.AbsolutePath);
+                                    }
+
+                                    if (await TryWriteCompatibleFallbackResponseAsync(
+                                            stream,
+                                            request,
+                                            state,
+                                            endpoint,
+                                            fallbackResponse,
+                                            fallbackBaseUri ?? state.UpstreamBaseUri,
+                                            ct).ConfigureAwait(false))
+                                    {
+                                        return;
                                     }
 
                                     await WriteUpstreamResponseAsync(stream, fallbackResponse, ct).ConfigureAwait(false);
@@ -826,12 +845,23 @@ namespace MyTools.Services
                             if (!response.IsSuccessStatusCode)
                             {
                                 AppLogService.Warning(
-                                    "Codex local relay upstream returned HTTP {StatusCode} {ReasonPhrase} for {Method} {Host}{Path}",
+                                    "Codex local relay upstream returned HTTP {StatusCode} for {Method} {Host}{Path}",
                                     (int)response.StatusCode,
-                                    response.ReasonPhrase,
                                     request.Method,
                                     upstreamUri.Host,
                                     upstreamUri.AbsolutePath);
+                            }
+
+                            if (await TryWriteCompatibleFallbackResponseAsync(
+                                    stream,
+                                    request,
+                                    state,
+                                    endpoint,
+                                    response,
+                                    state.UpstreamBaseUri,
+                                    ct).ConfigureAwait(false))
+                            {
+                                return;
                             }
 
                             await WriteUpstreamResponseAsync(stream, response, ct).ConfigureAwait(false);
@@ -862,10 +892,15 @@ namespace MyTools.Services
 
         private static HttpRequestMessage BuildUpstreamRequest(CodexLocalRelayRequest request, Uri upstreamUri, string upstreamToken)
         {
+            return BuildUpstreamRequest(request, upstreamUri, upstreamToken, request.Body);
+        }
+
+        private static HttpRequestMessage BuildUpstreamRequest(CodexLocalRelayRequest request, Uri upstreamUri, string upstreamToken, byte[] body)
+        {
             var message = new HttpRequestMessage(new HttpMethod(request.Method), upstreamUri);
-            if (request.Body != null && request.Body.Length > 0)
+            if (body != null && body.Length > 0)
             {
-                message.Content = new ByteArrayContent(request.Body);
+                message.Content = new ByteArrayContent(body);
             }
 
             foreach (var header in request.Headers)
@@ -1082,6 +1117,238 @@ namespace MyTools.Services
             {
                 await responseStream.CopyToAsync(stream, 81920, ct).ConfigureAwait(false);
             }
+        }
+
+        private static async Task<bool> TryWriteCompatibleFallbackResponseAsync(
+            NetworkStream stream,
+            CodexLocalRelayRequest request,
+            CodexLocalRelayRuntimeState state,
+            CodexLocalRelayEndpoint endpoint,
+            HttpResponseMessage response,
+            Uri effectiveBaseUri,
+            CancellationToken ct)
+        {
+            if (response == null || response.IsSuccessStatusCode)
+            {
+                if (response == null
+                    || endpoint != CodexLocalRelayEndpoint.ChatCompletions
+                    || CodexLocalRelayCompatibility.IsOpenAiCompatibleContentType(GetResponseContentType(response)))
+                {
+                    return false;
+                }
+            }
+
+            if (endpoint == CodexLocalRelayEndpoint.Models
+                && CodexLocalRelayCompatibility.CanUseModelsFallback(response.StatusCode)
+                && !string.IsNullOrWhiteSpace(state.Model))
+            {
+                await WriteLocalModelsResponseAsync(stream, request, state, ct).ConfigureAwait(false);
+                return true;
+            }
+
+            if (endpoint != CodexLocalRelayEndpoint.ChatCompletions
+                || !string.Equals(request.Method, "POST", StringComparison.OrdinalIgnoreCase)
+                || (!response.IsSuccessStatusCode && !CodexLocalRelayCompatibility.CanRetryChatAsResponses(response.StatusCode)))
+            {
+                return false;
+            }
+
+            if (!CodexLocalRelayCompatibility.TryBuildResponsesRequestBody(
+                    request.Body,
+                    state.Model,
+                    out var responsesBody,
+                    out var clientRequestedStream))
+            {
+                return false;
+            }
+
+            if (!TryBuildResponsesCompatibilityUris(
+                    effectiveBaseUri ?? state.UpstreamBaseUri,
+                    state.LocalBasePath,
+                    out var primaryBaseUri,
+                    out var primaryResponsesUri,
+                    out var fallbackBaseUri,
+                    out var fallbackResponsesUri))
+            {
+                return false;
+            }
+
+            var responsesResult = await SendResponsesCompatibilityRequestAsync(
+                    request,
+                    state,
+                    responsesBody,
+                    primaryResponsesUri,
+                    primaryBaseUri,
+                    ct)
+                .ConfigureAwait(false);
+
+            if ((responsesResult == null || !responsesResult.Response.IsSuccessStatusCode)
+                && fallbackResponsesUri != null
+                && !SameUri(primaryResponsesUri, fallbackResponsesUri))
+            {
+                responsesResult?.Dispose();
+                responsesResult = await SendResponsesCompatibilityRequestAsync(
+                        request,
+                        state,
+                        responsesBody,
+                        fallbackResponsesUri,
+                        fallbackBaseUri,
+                        ct)
+                    .ConfigureAwait(false);
+            }
+
+            using (responsesResult)
+            {
+                if (responsesResult == null)
+                {
+                    return false;
+                }
+
+                var responses = responsesResult.Response;
+                if (!responses.IsSuccessStatusCode)
+                {
+                    AppLogService.Warning(
+                        "Codex local relay Cursor compatibility retry returned HTTP {StatusCode} for {Host}{Path}",
+                        (int)responses.StatusCode,
+                        responsesResult.RequestUri.Host,
+                        responsesResult.RequestUri.AbsolutePath);
+                    return false;
+                }
+
+                if (fallbackBaseUri != null && SameUri(responsesResult.BaseUri, fallbackBaseUri))
+                {
+                    await TryPersistEffectiveUpstreamBaseUrlAsync(state.UpstreamBaseUri, fallbackBaseUri, ct).ConfigureAwait(false);
+                }
+
+                var responsesJson = await responses.Content.ReadAsStringAsync().ConfigureAwait(false);
+                if (clientRequestedStream)
+                {
+                    if (!CodexLocalRelayCompatibility.TryBuildChatCompletionSsePayload(responsesJson, request.Body, out var ssePayload))
+                    {
+                        return false;
+                    }
+
+                    AppLogService.Information("Codex local relay converted Responses API output to chat/completions stream for OpenAI-compatible client on {Path}", request.Path);
+                    await WriteSseResponseAsync(stream, ssePayload, ct).ConfigureAwait(false);
+                    return true;
+                }
+
+                if (!CodexLocalRelayCompatibility.TryBuildChatCompletionJson(responsesJson, request.Body, out var chatJson))
+                {
+                    return false;
+                }
+
+                AppLogService.Information("Codex local relay converted Responses API output to chat/completions for OpenAI-compatible client on {Path}", request.Path);
+                await WriteJsonResponseAsync(stream, HttpStatusCode.OK, chatJson, ct).ConfigureAwait(false);
+                return true;
+            }
+        }
+
+        private static async Task<CodexLocalRelayResponsesResult> SendResponsesCompatibilityRequestAsync(
+            CodexLocalRelayRequest request,
+            CodexLocalRelayRuntimeState state,
+            byte[] responsesBody,
+            Uri responsesUri,
+            Uri baseUri,
+            CancellationToken ct)
+        {
+            if (responsesUri == null)
+            {
+                return null;
+            }
+
+            var responsesRequest = BuildUpstreamRequest(request, responsesUri, state.UpstreamToken, responsesBody);
+            try
+            {
+                var response = await UpstreamClient.SendAsync(responsesRequest, HttpCompletionOption.ResponseContentRead, ct).ConfigureAwait(false);
+                return new CodexLocalRelayResponsesResult
+                {
+                    BaseUri = baseUri,
+                    RequestUri = responsesUri,
+                    Response = response
+                };
+            }
+            catch
+            {
+                responsesRequest.Dispose();
+                throw;
+            }
+            finally
+            {
+                responsesRequest.Dispose();
+            }
+        }
+
+        private static bool TryBuildResponsesCompatibilityUris(
+            Uri upstreamBaseUri,
+            string localBasePath,
+            out Uri primaryBaseUri,
+            out Uri primaryResponsesUri,
+            out Uri fallbackBaseUri,
+            out Uri fallbackResponsesUri)
+        {
+            primaryBaseUri = upstreamBaseUri;
+            primaryResponsesUri = null;
+            fallbackBaseUri = null;
+            fallbackResponsesUri = null;
+            if (upstreamBaseUri == null)
+            {
+                return false;
+            }
+
+            primaryResponsesUri = BuildUpstreamUri(upstreamBaseUri, localBasePath, "/v1/responses", string.Empty);
+            TryBuildV1FallbackUpstreamUri(
+                upstreamBaseUri,
+                localBasePath,
+                "/v1/responses",
+                string.Empty,
+                out fallbackBaseUri,
+                out fallbackResponsesUri);
+            return true;
+        }
+
+        private static async Task WriteLocalModelsResponseAsync(
+            NetworkStream stream,
+            CodexLocalRelayRequest request,
+            CodexLocalRelayRuntimeState state,
+            CancellationToken ct)
+        {
+            AppLogService.Information("Codex local relay returned local model list for OpenAI-compatible client on {Path}", request.Path);
+            await WriteJsonResponseAsync(
+                stream,
+                HttpStatusCode.OK,
+                CodexLocalRelayCompatibility.BuildModelsResponseJson(state.Model),
+                ct).ConfigureAwait(false);
+        }
+
+        private static string GetResponseContentType(HttpResponseMessage response)
+        {
+            return response?.Content?.Headers?.ContentType?.ToString() ?? string.Empty;
+        }
+
+        private static async Task WriteJsonResponseAsync(NetworkStream stream, HttpStatusCode statusCode, string json, CancellationToken ct)
+        {
+            var body = Encoding.UTF8.GetBytes(json ?? "{}");
+            var header = "HTTP/1.1 " + (int)statusCode + " " + statusCode + "\r\n"
+                         + "Content-Type: application/json; charset=utf-8\r\n"
+                         + "Content-Length: " + body.Length.ToString(CultureInfo.InvariantCulture) + "\r\n"
+                         + "Connection: close\r\n\r\n";
+            var headerBytes = Encoding.ASCII.GetBytes(header);
+            await stream.WriteAsync(headerBytes, 0, headerBytes.Length, ct).ConfigureAwait(false);
+            await stream.WriteAsync(body, 0, body.Length, ct).ConfigureAwait(false);
+        }
+
+        private static async Task WriteSseResponseAsync(NetworkStream stream, string payload, CancellationToken ct)
+        {
+            var body = Encoding.UTF8.GetBytes(payload ?? "data: [DONE]\n\n");
+            var header = "HTTP/1.1 200 OK\r\n"
+                         + "Content-Type: text/event-stream; charset=utf-8\r\n"
+                         + "Cache-Control: no-cache\r\n"
+                         + "Content-Length: " + body.Length.ToString(CultureInfo.InvariantCulture) + "\r\n"
+                         + "Connection: close\r\n\r\n";
+            var headerBytes = Encoding.ASCII.GetBytes(header);
+            await stream.WriteAsync(headerBytes, 0, headerBytes.Length, ct).ConfigureAwait(false);
+            await stream.WriteAsync(body, 0, body.Length, ct).ConfigureAwait(false);
         }
 
         private static void AppendResponseHeader(StringBuilder builder, string key, IEnumerable<string> values)
@@ -1755,7 +2022,8 @@ namespace MyTools.Services
                 LocalBasePath = settings.LocalBasePath,
                 LocalApiToken = UnprotectString(settings.ProtectedLocalApiTokenBase64),
                 UpstreamBaseUri = upstreamBaseUri,
-                UpstreamToken = UnprotectString(settings.ProtectedUpstreamTokenBase64)
+                UpstreamToken = UnprotectString(settings.ProtectedUpstreamTokenBase64),
+                Model = settings.Model ?? string.Empty
             };
         }
 
@@ -2199,6 +2467,19 @@ $plainBytes = [System.Security.Cryptography.ProtectedData]::Unprotect(
             public string LocalApiToken { get; set; }
             public Uri UpstreamBaseUri { get; set; }
             public string UpstreamToken { get; set; }
+            public string Model { get; set; }
+        }
+
+        private sealed class CodexLocalRelayResponsesResult : IDisposable
+        {
+            public Uri BaseUri { get; set; }
+            public Uri RequestUri { get; set; }
+            public HttpResponseMessage Response { get; set; }
+
+            public void Dispose()
+            {
+                Response?.Dispose();
+            }
         }
 
         private sealed class PendingNetworkReader

@@ -1,5 +1,32 @@
 # 开发记录
 
+## [2026-06-24] 重新打包安装程序 2026.6.24.2
+- 使用完整发布验证与安装包流水线重新构建主程序、卸载器、payload zip 和安装器：`powershell -ExecutionPolicy Bypass -File scripts\codex-eval.ps1`。
+- `scripts\Build-Installer.ps1` 与 `scripts\codex-eval.ps1` 默认安装包版本同步更新为 `2026.6.24.2`，安装包静态验收继续断言 setup 版本、内嵌 `MyToolsPayload.zip` / `MyTools.Uninstaller.exe`、外部 payload 与内嵌 payload SHA256 一致、payload 必需文件和本地中转关键类型。
+- 最终安装包：`artifacts\installer\MyToolsSetup.exe`，版本 `2026.6.24.2`，大小 47,085,568 bytes，SHA256 = `2E912349AC05A206E99E0E39BAF54B4D6BDE3378D6E194A092B3AF9048FCA92B`。
+- Payload：`artifacts\installer\MyToolsPayload.zip`，大小 46,887,593 bytes，SHA256 = `B9D90DC62333108503A2407B2EC5DE88CA101ADA14A3A686D0411713D9856CD6`。
+- 按用户要求未停止、替换或接管当前正在使用的安装版 local relay 进程，未运行安装器做覆盖安装实测。
+
+## [2026-06-24] 修复启动后菜单响应变慢
+- 启动后的后台加载不再自动启动硬件传感器；`ScheduleStartupBackgroundLoads()` 只保留轻量 shell 状态读取，避免 LibreHardwareMonitor 硬件探测占住 UI 线程导致窗口出现后菜单点击长时间无响应。
+- 进入“系统信息”或点击“启用传感器”时才按需启动传感器；`HardwareSensorService.TryStart()` 与 `ReadAll()` 均改为后台线程执行，首次读数异步回填。
+- `scripts\codex-eval.ps1 -Quick` 新增启动响应守卫，防止后续把传感器启动放回启动后台加载队列，或把传感器刷新改回 UI 线程同步读取。
+- 同步更新 `docs/功能说明.md`、`docs/程序逻辑.md` 与 `docs/规划/启动基线-启动后菜单响应-2026-06-24.md`；按用户前置要求不替换当前安装版 relay 做覆盖安装实测。
+
+## [2026-06-24] Codex 本地中转兼容 Cursor
+- `CodexLocalRelayService` 在原样转发优先的基础上新增 OpenAI-compatible 兜底：`/v1/models` 直接返回当前本地中转模型清单，`/v1/chat/completions` 上游拒绝或返回网页型 200 时可临时转换为 `/v1/responses` 并把结果转回 Chat Completions JSON 或 SSE。
+- 新增 `CodexLocalRelayCompatibility` 封装 Chat Completions 与 Responses API 的轻量转换，不新增 NuGet 依赖，不记录请求体、响应正文、上游 key 或本地 relay token。
+- `scripts/codex-eval.ps1 -Quick` 新增 Cursor 兼容回归，覆盖模型列表兜底、网页型 200 识别、根路径上游补 `/v1/responses` 路由、chat 请求转换、JSON 响应转换和 SSE `[DONE]` 输出。
+- 验证：`powershell -ExecutionPolicy Bypass -File scripts\codex-eval.ps1 -Quick` 通过，Release build 0 warning / 0 error；按用户要求未切换当前正在使用的安装版 relay 做端到端接管实测。
+
+## [2026-06-24] 重新打包安装程序
+- 使用完整安装包流水线重新构建主程序、卸载器、payload zip 和安装器：`powershell -ExecutionPolicy Bypass -File scripts\Build-Installer.ps1 -Version 2026.6.24.1`。
+- 发布级验证已执行：`powershell -ExecutionPolicy Bypass -File scripts\codex-eval.ps1` 通过，覆盖 Release build、Codex 本地中转 Cursor 兼容回归、排班 Excel 导入导出、排班单元格填充/删除、音频检测样例扫描和 installer pipeline。
+- `scripts\codex-eval.ps1 -Installer` 新增安装包静态验收：按传入版本调用打包脚本，并断言 setup 版本、嵌入的 `MyToolsPayload.zip` / `MyTools.Uninstaller.exe`、payload 6 个必需文件及主程序中的本地中转关键类型；`scripts\Build-Installer.ps1` 默认版本同步为 `2026.6.24.1`。
+- 最终安装包：`artifacts\installer\MyToolsSetup.exe`，版本 `2026.6.24.1`，大小 47,085,056 bytes，SHA256 = `94300D40F7CE9528E28BBCBAE08D43FF3F36C61567A7CF7BCF42C55D2D91E812`。
+- Payload：`artifacts\installer\MyToolsPayload.zip`，大小 46,886,677 bytes，SHA256 = `1F77D992E2BA684F57E136A43FF86D4413116629995ABF376FDF8B5E40426650`；静态验收确认 setup 内嵌 `MyToolsPayload.zip` 与 `MyTools.Uninstaller.exe`，payload 包含 6 个必需文件。
+- 按用户要求未停止、替换或接管当前正在使用的安装版 local relay 进程，未运行安装器做覆盖安装实测。
+
 ## [2026-06-22] 重新打包安装程序
 - 使用完整验证和安装包流水线重新构建主程序、卸载器、payload zip 和安装器：`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\codex-eval.ps1`。
 - 本安装包已包含排班“可上”汇总列：界面与 Excel 导出均在“末休”后显示“可上”，按空白单元格 + 已设置上班单元格统计最多可上班天数。
