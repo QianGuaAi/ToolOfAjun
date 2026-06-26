@@ -302,15 +302,28 @@
                                       MinHeight="120"
                                       MaxHeight="180"
                                       VerticalScrollBarVisibility="Auto"
+                                      ScrollViewer.HorizontalScrollBarVisibility="Auto"
                                       GridLinesVisibility="Horizontal"
                                       HeadersVisibility="Column"
                                       Margin="0,0,0,8">
                                 <DataGrid.Columns>
-                                    <DataGridTextColumn Header="状态" Width="82" Binding="{Binding StatusDisplay}" />
+                                    <DataGridTemplateColumn Header="执行" Width="54">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                          IsEnabled="{Binding CanOptimize}"
+                                                          HorizontalAlignment="Center"
+                                                          VerticalAlignment="Center" />
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                    <DataGridTextColumn Header="状态" Width="72" Binding="{Binding StatusDisplay}" />
                                     <DataGridTextColumn Header="项目" Width="190" Binding="{Binding Name}" />
-                                    <DataGridTextColumn Header="类型" Width="90" Binding="{Binding Category}" />
-                                    <DataGridTextColumn Header="预计释放" Width="110" Binding="{Binding EstimatedBytesDisplay}" />
-                                    <DataGridTextColumn Header="提权" Width="68" Binding="{Binding RequiresAdminDisplay}" />
+                                    <DataGridTextColumn Header="风险" Width="58" Binding="{Binding RiskLevel}" />
+                                    <DataGridTextColumn Header="类型" Width="88" Binding="{Binding Category}" />
+                                    <DataGridTextColumn Header="预计释放" Width="100" Binding="{Binding EstimatedBytesDisplay}" />
+                                    <DataGridTextColumn Header="边界/提权" Width="190" Binding="{Binding SafetyBoundary}" />
+                                    <DataGridTextColumn Header="证据" Width="210" Binding="{Binding Evidence}" />
                                     <DataGridTextColumn Header="说明" Width="*" Binding="{Binding Detail}" />
                                 </DataGrid.Columns>
                             </DataGrid>
@@ -392,10 +405,6 @@
                                         Height="32"
                                         Margin="8,0,0,0"
                                         Command="{Binding RunJunkCleanupCommand}" />
-                                <Button Content="导出报告"
-                                        Height="32"
-                                        Margin="8,0,0,0"
-                                        Command="{Binding ExportJunkCleanupPlanCommand}" />
                                 <ProgressBar Width="22" Height="22"
                                              Margin="10,0,0,0"
                                              IsIndeterminate="True"
@@ -412,9 +421,15 @@
                                       Style="{StaticResource ModernDataGrid}"
                                       AutoGenerateColumns="False"
                                       CanUserAddRows="False"
+                                      EnableRowVirtualization="True"
+                                      EnableColumnVirtualization="True"
                                       MinHeight="110"
                                       MaxHeight="210"
                                       VerticalScrollBarVisibility="Auto"
+                                      ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                                      ScrollViewer.CanContentScroll="True"
+                                      VirtualizingPanel.IsVirtualizing="True"
+                                      VirtualizingPanel.VirtualizationMode="Recycling"
                                       GridLinesVisibility="Horizontal">
                                 <DataGrid.Columns>
                                     <DataGridTemplateColumn Header="选择" Width="58">
@@ -428,7 +443,9 @@
                                     <DataGridTextColumn Header="大小" Width="90" Binding="{Binding BytesDisplay}" />
                                     <DataGridTextColumn Header="风险" Width="70" Binding="{Binding RiskDisplay}" />
                                     <DataGridTextColumn Header="建议" Width="160" Binding="{Binding AdviceDisplay}" />
-                                    <DataGridTextColumn Header="路径" Width="*" Binding="{Binding Path}" />
+                                    <DataGridTextColumn Header="边界" Width="210" Binding="{Binding SafetyBoundary}" />
+                                    <DataGridTextColumn Header="证据" Width="220" Binding="{Binding Evidence}" />
+                                    <DataGridTextColumn Header="路径" Width="260" Binding="{Binding Path}" />
                                     <DataGridTextColumn Header="说明" Width="190" Binding="{Binding Reason}" />
                                 </DataGrid.Columns>
                             </DataGrid>

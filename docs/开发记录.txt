@@ -1,5 +1,25 @@
 # 开发记录
 
+## [2026-06-26] 加固自动优化扫描与执行确认
+- 系统优化“自动优化”扫描从基础可优化列表升级为 14 步审计计划，新增执行勾选、风险等级、安全边界、扫描证据列，并加入 Delivery Optimization 缓存、Windows 错误报告、旧崩溃转储和 DISM 组件存储清理等更深入项目。
+- 低风险且收益明确的项目可默认勾选；中高风险、会重启 Explorer、清理诊断证据、清空回收站、优化磁盘或执行 DISM 的项目默认不勾选，必须由用户手动选择。“优化”按钮只在存在已勾选可执行项时启用。
+- 执行确认弹窗新增 UAC 数量、中高风险数量和高风险项目名称；实际执行只传入已勾选白名单步骤键。递归扫描、本地删除和提权脚本删除均跳过 junction/symlink，并校验路径始终位于批准根目录内；提权清理脚本保持 PowerShell 2.0 兼容，不使用 `Get-ChildItem -File/-Directory`。
+- 提权 PowerShell 脚本新增 15 分钟超时和退出码检查，脚本超时、退出码非 0 或 UAC 取消均不能报告为成功；Windows Update 与 Delivery Optimization 缓存清理只在服务原本运行时尝试恢复服务。
+- 同步更新 `docs/功能说明.md`、`docs/程序逻辑.md` 与 `docs/场景驱动开发/控件交互逻辑说明.md`；`scripts/codex-eval.ps1 -Quick` 新增“auto optimize plan safety”门禁，检查 14 步、风险/证据列、勾选执行、高风险默认不勾选、reparse point 防护和提权脚本退出码/超时。
+- 验证：`.dotnet\dotnet.exe build src\MyTools\MyTools.csproj -c Release` 通过，0 warning / 0 error；`powershell -ExecutionPolicy Bypass -File scripts\codex-eval.ps1 -Quick` 通过，包含新增自动优化安全门禁。
+
+## [2026-06-26] 修复自动更新停止不彻底
+- 系统优化“自动更新”停止逻辑从只写策略并停止服务，升级为写入停止策略、禁用常见 Windows Update 计划任务，并停止、禁用 `wuauserv`、`UsoSvc`、`BITS`、`DoSvc`、`WaaSMedicSvc` 等更新相关服务；恢复和立即更新会重新移除停止策略，并把服务启动类型和计划任务恢复为 MyTools 默认更新配置。
+- 停止完成后新增读回校验：只有策略、核心服务禁用和计划任务禁用均生效时才提示“自动更新已停止”，否则提示检查系统策略或权限拦截，避免显示假成功。
+- 同步更新 `docs/功能说明.md`、`docs/程序逻辑.md` 与 `docs/场景驱动开发/控件交互逻辑说明.md`；`scripts/codex-eval.ps1 -Quick` 新增“auto update stop readback coverage”门禁，检查停止脚本声明处理的服务和计划任务均被读回校验覆盖。
+- 验证：`.dotnet\dotnet.exe build src\MyTools\MyTools.csproj -c Release` 通过，0 warning / 0 error；`powershell -ExecutionPolicy Bypass -File scripts\codex-eval.ps1 -Quick` 通过，包含新增自动更新读回覆盖门禁。
+
+## [2026-06-26] Codex 档案单条中转测试按钮
+- Codex 档案卡片新增“测试”按钮，可对单条档案执行现有 `CodexRelayTestService` 中转探测，并把该档案灯号、测试时间和 160 字以内摘要保存回档案库。
+- 单条测试优先读取该档案加密保存的 `config.toml` 与 `auth.json`，旧记录缺少内嵌内容时只读来源目录兜底；不切换账号、不备份、不覆盖当前 `~/.codex`；顶部“测试中转”批量按钮继续保留，批量测试期间行级“测试”按钮会禁用以避免状态互相覆盖。
+- 同步更新 `docs/功能说明.md`、`docs/程序逻辑.md`、`docs/场景驱动开发/控件交互逻辑说明.md` 与 `docs/规划/启动基线-Codex档案单条中转测试-2026-06-26.md`。
+- 验证：`powershell -ExecutionPolicy Bypass -File scripts\codex-eval.ps1 -Quick` 通过，Release build 0 warning / 0 error。
+
 ## [2026-06-24] 重新打包安装程序 2026.6.24.2
 - 使用完整发布验证与安装包流水线重新构建主程序、卸载器、payload zip 和安装器：`powershell -ExecutionPolicy Bypass -File scripts\codex-eval.ps1`。
 - `scripts\Build-Installer.ps1` 与 `scripts\codex-eval.ps1` 默认安装包版本同步更新为 `2026.6.24.2`，安装包静态验收继续断言 setup 版本、内嵌 `MyToolsPayload.zip` / `MyTools.Uninstaller.exe`、外部 payload 与内嵌 payload SHA256 一致、payload 必需文件和本地中转关键类型。
@@ -1990,3 +2010,10 @@
 - Ollama 档案写入 `model_provider = "mytools_local_ollama"`、`base_url = "http://127.0.0.1:11434/v1"`、`wire_api = "responses"`，`auth.json` 保存为空 JSON；重复导入时按 `model:<模型名>` 标签更新同一条档案。
 - Codex 中转测试和本地 relay 支持本机 loopback provider 无上游 API key；转发到 Ollama 时不再发送空 `Authorization`，远程上游仍要求 key。
 - 同步更新 `docs/功能说明.md`、`docs/程序逻辑.md` 与启动基线说明。
+
+## [2026-06-26] 规范垃圾清理扫描并取消报告导出
+- 系统优化“垃圾清理”页取消“导出报告”按钮，仅保留“开始扫描 / 立即清理”；历史清理结果仍从自动优化历史报告列表查看。
+- 垃圾扫描结果新增安全边界和扫描证据列，扫描范围扩展到 Edge/Chrome 多 Profile 缓存、当前用户 WER 错误报告和 CrashDumps，并对回收站、浏览器缓存、诊断证据类默认不勾选。
+- `JunkCleanupService` 的安全枚举跳过 junction/symlink；普通目录候选按安全枚举逐个回收文件，提权清理脚本新增根内路径校验、reparse point 跳过，并只处理本次已勾选候选路径。
+- 垃圾清理结果表显式启用行/列虚拟化，降低大量缓存候选项时的界面卡顿风险。
+- `scripts/codex-eval.ps1 -Quick` 新增 `junk cleanup scan safety` 门禁，防止报告导出入口、边界证据列、按已勾选 Targets 清理和脚本安全校验回退。

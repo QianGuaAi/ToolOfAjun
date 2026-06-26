@@ -178,6 +178,7 @@ namespace MyTools.ViewModels
         private DateTime? _codexLocalRelayCheckedAt;
         private bool _isCodexLocalRelayChecking;
         private bool _isCodexLocalRelaySwitchMode;
+        private bool _isCodexRelayBatchTesting;
         private CodexRotationSettings _codexRotationSettings = new CodexRotationSettings();
         private readonly DispatcherTimer _codexRateLimitMonitorTimer;
         private readonly CancellationTokenSource _codexRateLimitMonitorCts = new CancellationTokenSource();
@@ -273,6 +274,7 @@ namespace MyTools.ViewModels
         private readonly AsyncRelayCommand _restartCodexWithLocalRelayCommand;
         private readonly AsyncRelayParameterCommand _toggleCodexProfileRotationCommand;
         private readonly AsyncRelayCommand _testCodexRelaysCommand;
+        private readonly AsyncRelayParameterCommand _testCodexProfileRelayCommand;
         private readonly AsyncRelayCommand _selectAllCodexRotationCommand;
         private readonly AsyncRelayCommand _invertCodexRotationCommand;
         private readonly AsyncRelayCommand _openRecordRegionCommand;
@@ -289,7 +291,6 @@ namespace MyTools.ViewModels
         private readonly AsyncRelayCommand _startAutoOptimizeCommand;
         private readonly AsyncRelayCommand _startJunkScanCommand;
         private readonly AsyncRelayCommand _runJunkCleanupCommand;
-        private readonly RelayCommand _exportJunkCleanupPlanCommand;
         private readonly AsyncRelayCommand _scanWeChatCleanupCommand;
         private readonly AsyncRelayCommand _startWeChatCleanupCommand;
         private readonly AsyncRelayCommand _startWeChatBackupCommand;
@@ -472,7 +473,6 @@ namespace MyTools.ViewModels
             _startAutoOptimizeCommand = new AsyncRelayCommand(StartAutoOptimizeAsync, CanStartAutoOptimize);
             _startJunkScanCommand = new AsyncRelayCommand(StartJunkScanAsync, () => !IsJunkBusy);
             _runJunkCleanupCommand = new AsyncRelayCommand(RunJunkCleanupAsync, CanRunJunkCleanup);
-            _exportJunkCleanupPlanCommand = new RelayCommand(ExportJunkCleanupPlan, CanExportJunkCleanupPlan);
             _scanWeChatCleanupCommand = new AsyncRelayCommand(ScanWeChatCleanupAsync, () => !IsWeChatCleanupBusy);
             _startWeChatCleanupCommand = new AsyncRelayCommand(StartWeChatCleanupAsync, CanStartWeChatCleanup);
             _startWeChatBackupCommand = new AsyncRelayCommand(StartWeChatBackupAsync, CanStartWeChatBackup);
@@ -487,7 +487,6 @@ namespace MyTools.ViewModels
             StartAutoOptimizeCommand = _startAutoOptimizeCommand;
             StartJunkScanCommand = _startJunkScanCommand;
             RunJunkCleanupCommand = _runJunkCleanupCommand;
-            ExportJunkCleanupPlanCommand = _exportJunkCleanupPlanCommand;
             ScanWeChatCleanupCommand = _scanWeChatCleanupCommand;
             StartWeChatCleanupCommand = _startWeChatCleanupCommand;
             StartWeChatBackupCommand = _startWeChatBackupCommand;
@@ -643,8 +642,10 @@ namespace MyTools.ViewModels
             RestartCodexWithLocalRelayCommand = _restartCodexWithLocalRelayCommand;
             _toggleCodexProfileRotationCommand = new AsyncRelayParameterCommand(ToggleCodexProfileRotationAsync, parameter => parameter is CodexProfileItem);
             ToggleCodexProfileRotationCommand = _toggleCodexProfileRotationCommand;
-            _testCodexRelaysCommand = new AsyncRelayCommand(TestCodexRelaysAsync, () => CodexProfiles != null && CodexProfiles.Count > 0);
+            _testCodexRelaysCommand = new AsyncRelayCommand(TestCodexRelaysAsync, CanTestCodexRelays);
             TestCodexRelaysCommand = _testCodexRelaysCommand;
+            _testCodexProfileRelayCommand = new AsyncRelayParameterCommand(TestCodexProfileRelayAsync, CanTestCodexProfileRelay);
+            TestCodexProfileRelayCommand = _testCodexProfileRelayCommand;
             _selectAllCodexRotationCommand = new AsyncRelayCommand(SelectAllCodexRotationAsync, () => CodexProfiles != null && CodexProfiles.Count > 0);
             SelectAllCodexRotationCommand = _selectAllCodexRotationCommand;
             _invertCodexRotationCommand = new AsyncRelayCommand(InvertCodexRotationAsync, () => CodexProfiles != null && CodexProfiles.Count > 0);
@@ -926,10 +927,13 @@ namespace MyTools.ViewModels
             get => _autoOptimizePlanItems;
             set
             {
-                _autoOptimizePlanItems = value;
+                DetachAutoOptimizePlanItems();
+                _autoOptimizePlanItems = value ?? new ObservableCollection<OptimizationPlanItem>();
+                AttachAutoOptimizePlanItems();
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(HasAutoOptimizePlanItems));
                 OnPropertyChanged(nameof(HasRunnableAutoOptimizePlan));
+                TriggerCommandRequery();
             }
         }
 
@@ -1765,9 +1769,9 @@ namespace MyTools.ViewModels
             set { _weChatRestoreTargetRoot = value; OnPropertyChanged(); TriggerCommandRequery(); }
         }
 
-        public bool HasAutoOptimizePlanItems => AutoOptimizePlanItems.Any();
+        public bool HasAutoOptimizePlanItems => AutoOptimizePlanItems != null && AutoOptimizePlanItems.Any();
 
-        public bool HasRunnableAutoOptimizePlan => AutoOptimizePlanItems.Any(x => x.CanOptimize);
+        public bool HasRunnableAutoOptimizePlan => AutoOptimizePlanItems != null && AutoOptimizePlanItems.Any(x => x.CanOptimize && x.IsSelected);
 
         public bool HasSelectedOptimizationReports => OptimizationReports.Any(x => x.IsSelected);
 
@@ -2027,6 +2031,7 @@ namespace MyTools.ViewModels
         public ICommand RestartCodexWithLocalRelayCommand { get; }
         public ICommand ToggleCodexProfileRotationCommand { get; }
         public ICommand TestCodexRelaysCommand { get; }
+        public ICommand TestCodexProfileRelayCommand { get; }
         public ICommand SelectAllCodexRotationCommand { get; }
         public ICommand InvertCodexRotationCommand { get; }
 
@@ -3107,7 +3112,6 @@ namespace MyTools.ViewModels
         public ICommand StartAutoOptimizeCommand { get; }
         public ICommand StartJunkScanCommand { get; }
         public ICommand RunJunkCleanupCommand { get; }
-        public ICommand ExportJunkCleanupPlanCommand { get; }
         public ICommand ScanWeChatCleanupCommand { get; }
         public ICommand StartWeChatCleanupCommand { get; }
         public ICommand StartWeChatBackupCommand { get; }
@@ -4013,28 +4017,16 @@ namespace MyTools.ViewModels
             var passed = 0;
             var failed = 0;
             CodexProfilesStatusMessage = $"正在测试 {targets.Count} 个 Codex 中转...";
+            _isCodexRelayBatchTesting = true;
             _testCodexRelaysCommand?.RaiseCanExecuteChanged();
+            _testCodexProfileRelayCommand?.RaiseCanExecuteChanged();
 
-            foreach (var item in targets)
+            try
             {
-                try
+                foreach (var item in targets)
                 {
-                    item.IsRelayTesting = true;
-                    item.RelayTestStatus = CodexProfileItem.RelayStatusTesting;
-                    item.RelayTestMessage = "正在测试中转...";
-
-                    var configBytes = await ResolveCodexProfileFileBytesAsync(item, CodexConfigProfileService.ConfigFileName).ConfigureAwait(true);
-                    var authBytes = await ResolveCodexProfileFileBytesAsync(item, CodexConfigProfileService.AuthFileName).ConfigureAwait(true);
-                    if (configBytes == null || configBytes.Length == 0 || authBytes == null || authBytes.Length == 0)
-                    {
-                        throw new InvalidOperationException("缺少 config.toml 或 auth.json。");
-                    }
-
-                    var result = await CodexRelayTestService.TestAsync(configBytes, authBytes, CancellationToken.None).ConfigureAwait(true);
-                    item.RelayTestStatus = result.Success ? CodexProfileItem.RelayStatusOk : CodexProfileItem.RelayStatusFailed;
-                    item.RelayTestedAt = DateTime.Now;
-                    item.RelayTestMessage = LimitRelayTestMessage(result.Message);
-                    if (result.Success)
+                    var success = await RunCodexProfileRelayTestAsync(item, "正在测试中转...").ConfigureAwait(true);
+                    if (success)
                     {
                         passed++;
                     }
@@ -4042,26 +4034,94 @@ namespace MyTools.ViewModels
                     {
                         failed++;
                     }
-                }
-                catch (Exception ex)
-                {
-                    failed++;
-                    item.RelayTestStatus = CodexProfileItem.RelayStatusFailed;
-                    item.RelayTestedAt = DateTime.Now;
-                    item.RelayTestMessage = LimitRelayTestMessage(ex.Message);
-                    AppLogService.Warning("Testing Codex relay failed for {DisplayName}: {Msg}", SafeCodexLogName(item.DisplayName), ex.Message);
-                }
-                finally
-                {
-                    item.IsRelayTesting = false;
+
+                    CodexProfilesStatusMessage = $"中转测试中：通过 {passed}，不通过 {failed}，剩余 {targets.Count - passed - failed}。";
                 }
 
-                CodexProfilesStatusMessage = $"中转测试中：通过 {passed}，不通过 {failed}，剩余 {targets.Count - passed - failed}。";
+                await SaveCodexProfilesAsync().ConfigureAwait(true);
+                CodexProfilesStatusMessage = $"中转测试完成：通过 {passed}，不通过 {failed}。";
+            }
+            finally
+            {
+                _isCodexRelayBatchTesting = false;
+                _testCodexRelaysCommand?.RaiseCanExecuteChanged();
+                _testCodexProfileRelayCommand?.RaiseCanExecuteChanged();
+            }
+        }
+
+        private async Task TestCodexProfileRelayAsync(object parameter)
+        {
+            if (!(parameter is CodexProfileItem item))
+            {
+                return;
             }
 
+            CodexProfilesStatusMessage = $"正在测试“{item.DisplayName}”的中转...";
+            var success = await RunCodexProfileRelayTestAsync(item, "正在测试中转...").ConfigureAwait(true);
             await SaveCodexProfilesAsync().ConfigureAwait(true);
-            CodexProfilesStatusMessage = $"中转测试完成：通过 {passed}，不通过 {failed}。";
-            _testCodexRelaysCommand?.RaiseCanExecuteChanged();
+            CodexProfilesStatusMessage = success
+                ? $"“{item.DisplayName}”中转测试通过：{item.RelayTestMessage}"
+                : $"“{item.DisplayName}”中转测试未通过：{item.RelayTestMessage}";
+        }
+
+        private async Task<bool> RunCodexProfileRelayTestAsync(CodexProfileItem item, string testingMessage)
+        {
+            if (item == null || item.IsRelayTesting)
+            {
+                return false;
+            }
+
+            try
+            {
+                item.IsRelayTesting = true;
+                _testCodexRelaysCommand?.RaiseCanExecuteChanged();
+                _testCodexProfileRelayCommand?.RaiseCanExecuteChanged();
+                item.RelayTestStatus = CodexProfileItem.RelayStatusTesting;
+                item.RelayTestMessage = string.IsNullOrWhiteSpace(testingMessage) ? "正在测试中转..." : testingMessage;
+
+                var configBytes = await ResolveCodexProfileFileBytesAsync(item, CodexConfigProfileService.ConfigFileName).ConfigureAwait(true);
+                var authBytes = await ResolveCodexProfileFileBytesAsync(item, CodexConfigProfileService.AuthFileName).ConfigureAwait(true);
+                if (configBytes == null || configBytes.Length == 0 || authBytes == null || authBytes.Length == 0)
+                {
+                    throw new InvalidOperationException("缺少 config.toml 或 auth.json。");
+                }
+
+                var result = await CodexRelayTestService.TestAsync(configBytes, authBytes, CancellationToken.None).ConfigureAwait(true);
+                item.RelayTestStatus = result.Success ? CodexProfileItem.RelayStatusOk : CodexProfileItem.RelayStatusFailed;
+                item.RelayTestedAt = DateTime.Now;
+                item.RelayTestMessage = LimitRelayTestMessage(result.Message);
+                return result.Success;
+            }
+            catch (Exception ex)
+            {
+                item.RelayTestStatus = CodexProfileItem.RelayStatusFailed;
+                item.RelayTestedAt = DateTime.Now;
+                item.RelayTestMessage = LimitRelayTestMessage(ex.Message);
+                AppLogService.Warning("Testing Codex relay failed for {DisplayName}: {Msg}", SafeCodexLogName(item.DisplayName), ex.Message);
+                return false;
+            }
+            finally
+            {
+                item.IsRelayTesting = false;
+                _testCodexRelaysCommand?.RaiseCanExecuteChanged();
+                _testCodexProfileRelayCommand?.RaiseCanExecuteChanged();
+            }
+        }
+
+        private bool CanTestCodexProfileRelay(object parameter)
+        {
+            return !_isCodexRelayBatchTesting
+                && parameter is CodexProfileItem item
+                && !item.IsRelayTesting
+                && !item.IsApplying;
+        }
+
+        private bool CanTestCodexRelays()
+        {
+            return !_isCodexRelayBatchTesting
+                && CodexProfiles != null
+                && CodexProfiles.Count > 0
+                && !CodexProfiles.Any(item => item != null && item.IsRelayTesting);
         }
 
         private async Task ApplyCodexProfileAsync(object parameter)
@@ -13080,6 +13140,7 @@ namespace MyTools.ViewModels
             }
 
             _isDisposed = true;
+            DetachAutoOptimizePlanItems();
             CancelPendingTableLoad();
             _queryCts?.Cancel();
             _queryCts?.Dispose();
@@ -13193,15 +13254,28 @@ namespace MyTools.ViewModels
                 await WindowsSecurityService.SetAutoUpdateAsync(target);
                 await Task.Delay(1500);
                 RefreshSystemStatus();
-                if (IsAutoUpdateEnabled == target)
+                if (target)
                 {
-                    SystemStatusMessage = target ? "自动更新已恢复。" : "自动更新已停止。";
+                    if (WindowsSecurityService.IsAutoUpdateRestoreReady())
+                    {
+                        IsAutoUpdateEnabled = true;
+                        SystemStatusMessage = "自动更新已恢复为 MyTools 默认更新服务配置。";
+                    }
+                    else
+                    {
+                        IsAutoUpdateEnabled = false;
+                        SystemStatusMessage = "已提交恢复命令，但自动更新策略或服务仍处于停止状态，请检查组策略或系统服务状态。";
+                    }
+                }
+                else if (WindowsSecurityService.IsAutoUpdateStopEnforced())
+                {
+                    IsAutoUpdateEnabled = false;
+                    SystemStatusMessage = "自动更新已停止，Windows Update 相关服务和计划任务已禁用。";
                 }
                 else
                 {
-                    SystemStatusMessage = target
-                        ? "已提交恢复命令，但自动更新策略仍显示为停止，请检查组策略或系统服务状态。"
-                        : "已提交停止命令，但自动更新策略仍显示为开启，请检查组策略或系统服务状态。";
+                    IsAutoUpdateEnabled = true;
+                    SystemStatusMessage = "已提交停止命令，但未读回完整停止状态；请检查 Windows Update 服务是否被系统策略或权限拦截。";
                 }
             }
             catch (OperationCanceledException)
@@ -13510,6 +13584,48 @@ namespace MyTools.ViewModels
             }
         }
 
+        private void AttachAutoOptimizePlanItems()
+        {
+            if (_autoOptimizePlanItems == null)
+            {
+                return;
+            }
+
+            foreach (var item in _autoOptimizePlanItems)
+            {
+                if (item != null)
+                {
+                    item.PropertyChanged += AutoOptimizePlanItem_OnPropertyChanged;
+                }
+            }
+        }
+
+        private void DetachAutoOptimizePlanItems()
+        {
+            if (_autoOptimizePlanItems == null)
+            {
+                return;
+            }
+
+            foreach (var item in _autoOptimizePlanItems)
+            {
+                if (item != null)
+                {
+                    item.PropertyChanged -= AutoOptimizePlanItem_OnPropertyChanged;
+                }
+            }
+        }
+
+        private void AutoOptimizePlanItem_OnPropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(OptimizationPlanItem.IsSelected)
+                || e.PropertyName == nameof(OptimizationPlanItem.StatusDisplay))
+            {
+                OnPropertyChanged(nameof(HasRunnableAutoOptimizePlan));
+                _startAutoOptimizeCommand?.RaiseCanExecuteChanged();
+            }
+        }
+
         private async Task ScanAutoOptimizeAsync()
         {
             if (IsAutoOptimizeBusy)
@@ -13529,10 +13645,12 @@ namespace MyTools.ViewModels
                 });
 
                 var runnableCount = scanned.Count(x => x.CanOptimize);
+                var selectedCount = scanned.Count(x => x.CanOptimize && x.IsSelected);
+                var manualCount = runnableCount - selectedCount;
                 var totalBytes = scanned.Where(x => x.CanOptimize).Sum(x => x.EstimatedBytes);
                 AutoOptimizeStatusMessage = runnableCount == 0
                     ? "扫描完成：暂未发现需要执行的自动优化项目。"
-                    : $"扫描完成：{runnableCount} 项可优化，预计可释放 {FileSizeFormatter.Format(totalBytes)}。";
+                    : $"扫描完成：{runnableCount} 项可优化，默认勾选 {selectedCount} 项，{manualCount} 项需手动确认，预计可释放 {FileSizeFormatter.Format(totalBytes)}。";
             }
             catch (Exception ex)
             {
@@ -13552,6 +13670,49 @@ namespace MyTools.ViewModels
             return !IsAutoOptimizeBusy && HasRunnableAutoOptimizePlan;
         }
 
+        private static string BuildAutoOptimizeConfirmMessage(IReadOnlyCollection<OptimizationPlanItem> selectedItems)
+        {
+            var items = selectedItems ?? Array.Empty<OptimizationPlanItem>();
+            var adminCount = items.Count(x => x.RequiresAdmin);
+            var highRiskCount = items.Count(x => string.Equals(x.RiskLevel, "高", StringComparison.Ordinal));
+            var mediumRiskCount = items.Count(x => string.Equals(x.RiskLevel, "中", StringComparison.Ordinal));
+            var estimatedBytes = items.Sum(x => x.EstimatedBytes);
+
+            var builder = new StringBuilder()
+                .Append("将执行已勾选的 ")
+                .Append(items.Count)
+                .Append(" 项自动优化。")
+                .AppendLine()
+                .Append("预计可释放：")
+                .Append(FileSizeFormatter.Format(estimatedBytes))
+                .AppendLine()
+                .Append("需 UAC：")
+                .Append(adminCount)
+                .Append(" 项；中风险：")
+                .Append(mediumRiskCount)
+                .Append(" 项；高风险：")
+                .Append(highRiskCount)
+                .Append(" 项。");
+
+            if (highRiskCount > 0)
+            {
+                var highRiskNames = string.Join("、", items
+                    .Where(x => string.Equals(x.RiskLevel, "高", StringComparison.Ordinal))
+                    .Select(x => x.Name)
+                    .Where(x => !string.IsNullOrWhiteSpace(x)));
+                builder.AppendLine()
+                    .Append("高风险项：")
+                    .Append(highRiskNames)
+                    .AppendLine()
+                    .Append("高风险项可能影响故障追溯、回收站内容或耗时较长，请确认这些项确实需要执行。");
+            }
+
+            builder.AppendLine()
+                .Append("是否继续？");
+
+            return builder.ToString();
+        }
+
         private async Task StartAutoOptimizeAsync()
         {
             if (IsAutoOptimizeBusy)
@@ -13559,8 +13720,10 @@ namespace MyTools.ViewModels
                 return;
             }
 
-            var runnableKeys = AutoOptimizePlanItems
-                .Where(x => x.CanOptimize)
+            var selectedItems = AutoOptimizePlanItems
+                .Where(x => x.CanOptimize && x.IsSelected)
+                .ToList();
+            var runnableKeys = selectedItems
                 .Select(x => x.Key)
                 .Where(x => !string.IsNullOrWhiteSpace(x))
                 .ToList();
@@ -13572,9 +13735,19 @@ namespace MyTools.ViewModels
                 return;
             }
 
-            var requiresExplorerRestart = AutoOptimizePlanItems.Any(x =>
-                x.CanOptimize
-                && string.Equals(x.Key, "ThumbnailCache", StringComparison.OrdinalIgnoreCase));
+            var confirm = MessageBox.Show(
+                BuildAutoOptimizeConfirmMessage(selectedItems),
+                "自动优化确认",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+            if (confirm != MessageBoxResult.Yes)
+            {
+                AutoOptimizeStatusMessage = "已取消自动优化。";
+                return;
+            }
+
+            var requiresExplorerRestart = selectedItems.Any(x =>
+                string.Equals(x.Key, "ThumbnailCache", StringComparison.OrdinalIgnoreCase));
 
             var restartExplorerResult = MessageBoxResult.No;
             if (requiresExplorerRestart)
@@ -13584,19 +13757,6 @@ namespace MyTools.ViewModels
                     "自动优化确认",
                     MessageBoxButton.YesNo,
                     MessageBoxImage.Question);
-            }
-            else
-            {
-                var confirm = MessageBox.Show(
-                    $"将执行扫描列表中的 {runnableKeys.Count} 项优化，是否继续？",
-                    "自动优化确认",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Question);
-                if (confirm != MessageBoxResult.Yes)
-                {
-                    AutoOptimizeStatusMessage = "已取消自动优化。";
-                    return;
-                }
             }
 
             IsAutoOptimizeBusy = true;
@@ -13658,9 +13818,11 @@ namespace MyTools.ViewModels
                 });
 
                 var totalBytes = scanned.Sum(x => x.Bytes);
+                var selectedCount = scanned.Count(x => x.IsSelected);
+                var manualCount = scanned.Count - selectedCount;
                 JunkStatusMessage = scanned.Count == 0
                     ? "未发现可清理项目。"
-                    : $"扫描完成：{scanned.Count} 项，预计可释放 {FileSizeFormatter.Format(totalBytes)}。";
+                    : $"扫描完成：{scanned.Count} 项，默认勾选 {selectedCount} 项，{manualCount} 项需手动确认，预计可释放 {FileSizeFormatter.Format(totalBytes)}。";
             }
             catch (Exception ex)
             {
@@ -13677,77 +13839,6 @@ namespace MyTools.ViewModels
         private bool CanRunJunkCleanup()
         {
             return !IsJunkBusy && JunkCandidates.Any(x => x.IsSelected);
-        }
-
-        private bool CanExportJunkCleanupPlan()
-        {
-            return !IsJunkBusy && JunkCandidates.Any(x => x.IsSelected);
-        }
-
-        private void ExportJunkCleanupPlan()
-        {
-            var selected = JunkCandidates.Where(x => x.IsSelected).ToList();
-            if (selected.Count == 0)
-            {
-                JunkStatusMessage = "请先扫描并选择要导出的清理项目。";
-                return;
-            }
-
-            var dialog = new SaveFileDialog
-            {
-                Title = "导出清理前报告",
-                FileName = $"垃圾清理预检报告_{DateTime.Now:yyyyMMdd_HHmmss}.txt",
-                Filter = "文本文件 (*.txt)|*.txt|所有文件 (*.*)|*.*",
-                DefaultExt = ".txt",
-                AddExtension = true,
-                OverwritePrompt = true
-            };
-            if (dialog.ShowDialog() != true)
-            {
-                return;
-            }
-
-            try
-            {
-                File.WriteAllText(dialog.FileName, BuildJunkCleanupPlanText(selected), new UTF8Encoding(false));
-                JunkStatusMessage = $"清理前报告已导出：{selected.Count} 项。";
-            }
-            catch (Exception ex)
-            {
-                AppLogService.Error(ex, "Export junk cleanup plan failed.");
-                JunkStatusMessage = "导出清理前报告失败：" + ex.Message;
-            }
-        }
-
-        private static string BuildJunkCleanupPlanText(IList<JunkCandidate> candidates)
-        {
-            var items = candidates ?? new List<JunkCandidate>();
-            var builder = new StringBuilder();
-            builder.AppendLine("MyTools 垃圾清理预检报告");
-            builder.AppendLine("生成时间：" + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
-            builder.AppendLine("项目数量：" + items.Count);
-            builder.AppendLine("预计释放：" + FileSizeFormatter.Format(items.Sum(x => x.Bytes)));
-            builder.AppendLine();
-            builder.AppendLine("风险分布：");
-            foreach (var group in items.GroupBy(x => x.RiskDisplay).OrderByDescending(x => x.Sum(item => item.Bytes)))
-            {
-                builder.AppendLine($"- {group.Key}：{group.Count()} 项，{FileSizeFormatter.Format(group.Sum(x => x.Bytes))}");
-            }
-
-            builder.AppendLine();
-            builder.AppendLine("清理项目：");
-            foreach (var item in items.OrderBy(x => x.CategoryDisplay).ThenByDescending(x => x.Bytes))
-            {
-                builder.AppendLine("类别：" + item.CategoryDisplay);
-                builder.AppendLine("大小：" + item.BytesDisplay);
-                builder.AppendLine("风险：" + item.RiskDisplay);
-                builder.AppendLine("建议：" + item.AdviceDisplay);
-                builder.AppendLine("说明：" + (item.Reason ?? string.Empty));
-                builder.AppendLine("路径：" + (item.Path ?? string.Empty));
-                builder.AppendLine();
-            }
-
-            return builder.ToString().TrimEnd();
         }
 
         private async Task RunJunkCleanupAsync()
@@ -14490,7 +14581,6 @@ namespace MyTools.ViewModels
             _startAutoOptimizeCommand?.RaiseCanExecuteChanged();
             _startJunkScanCommand?.RaiseCanExecuteChanged();
             _runJunkCleanupCommand?.RaiseCanExecuteChanged();
-            _exportJunkCleanupPlanCommand?.RaiseCanExecuteChanged();
             _scanWeChatCleanupCommand?.RaiseCanExecuteChanged();
             _startWeChatCleanupCommand?.RaiseCanExecuteChanged();
             _startWeChatBackupCommand?.RaiseCanExecuteChanged();

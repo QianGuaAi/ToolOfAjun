@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -20,10 +22,18 @@ namespace MyTools.Services
         private const string StepKeyDnsCache = "DnsCache";
         private const string StepKeyFontCache = "FontCache";
         private const string StepKeyWindowsUpdateCache = "WindowsUpdateCache";
+        private const string StepKeyDeliveryOptimizationCache = "DeliveryOptimizationCache";
+        private const string StepKeyWindowsErrorReports = "WindowsErrorReports";
+        private const string StepKeyCrashDumps = "CrashDumps";
         private const string StepKeySystemDrive = "SystemDrive";
+        private const string StepKeyComponentStoreCleanup = "ComponentStoreCleanup";
         private const string StepKeyRecycleBin = "RecycleBin";
         private const string StepKeyEventLogs = "EventLogs";
         private const string StepKeyWorkingSet = "WorkingSet";
+
+        private const string RiskLow = "低";
+        private const string RiskMedium = "中";
+        private const string RiskHigh = "高";
 
         public bool AllowExplorerRestartForThumbnailCleanup { get; set; }
 
@@ -112,54 +122,81 @@ namespace MyTools.Services
         public async Task<IReadOnlyList<OptimizationPlanItem>> ScanAsync(IProgress<string> progress, CancellationToken ct)
         {
             var items = new List<OptimizationPlanItem>();
+            const int totalSteps = 14;
+            var step = 0;
 
-            progress?.Report("[1/10] 扫描当前用户 Temp...");
+            progress?.Report($"[{++step}/{totalSteps}] 扫描当前用户 Temp...");
             var userTempPath = Path.GetTempPath();
-            var userTemp = CountDeletableFiles(userTempPath, DateTime.Now.AddHours(-24));
+            var userTempSafe = IsSafeCleanupRoot(userTempPath, userTempPath);
+            var userTemp = userTempSafe
+                ? CountDeletableFiles(userTempPath, DateTime.Now.AddHours(-24))
+                : (count: 0, bytes: 0L);
             items.Add(CreatePlanItem(
                 StepKeyUserTemp,
                 "清空当前用户 Temp（24 小时前）",
                 "磁盘清理",
                 false,
                 userTemp.bytes,
-                userTemp.count > 0,
-                userTemp.count > 0
+                userTempSafe && userTemp.count > 0,
+                userTempSafe
+                    ? (userTemp.count > 0
                     ? $"发现 {userTemp.count} 个超过 24 小时的临时文件。"
-                    : "未发现超过 24 小时的用户临时文件。"));
+                    : "未发现超过 24 小时的用户临时文件。")
+                    : "当前用户 Temp 路径未通过白名单校验，已禁止执行。",
+                RiskLow,
+                "仅限当前用户 Temp；跳过 24 小时内文件。",
+                BuildCountEvidence(userTempPath, userTemp.count, userTemp.bytes, "24 小时前"),
+                true));
 
-            progress?.Report("[2/10] 扫描 Windows Temp...");
+            progress?.Report($"[{++step}/{totalSteps}] 扫描 Windows Temp...");
             var windowsTempPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Temp");
-            var windowsTemp = CountDeletableFiles(windowsTempPath, DateTime.Now.AddDays(-7));
+            var windowsTempSafe = IsSafeCleanupRoot(windowsTempPath, windowsTempPath);
+            var windowsTemp = windowsTempSafe
+                ? CountDeletableFiles(windowsTempPath, DateTime.Now.AddDays(-7))
+                : (count: 0, bytes: 0L);
             items.Add(CreatePlanItem(
                 StepKeyWindowsTemp,
                 "清空 Windows Temp（7 天前）",
                 "磁盘清理",
                 true,
                 windowsTemp.bytes,
-                windowsTemp.count > 0,
-                windowsTemp.count > 0
+                windowsTempSafe && windowsTemp.count > 0,
+                windowsTempSafe
+                    ? (windowsTemp.count > 0
                     ? $"发现 {windowsTemp.count} 个超过 7 天的系统临时文件。"
-                    : "未发现超过 7 天的系统临时文件。"));
+                    : "未发现超过 7 天的系统临时文件。")
+                    : "Windows Temp 路径未通过白名单校验，已禁止执行。",
+                RiskLow,
+                "需 UAC；仅限 Windows\\Temp；跳过 7 天内文件。",
+                BuildCountEvidence(windowsTempPath, windowsTemp.count, windowsTemp.bytes, "7 天前"),
+                true));
 
-            progress?.Report("[3/10] 扫描缩略图缓存...");
+            progress?.Report($"[{++step}/{totalSteps}] 扫描缩略图缓存...");
             var explorerCacheRoot = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "Microsoft",
                 "Windows",
                 "Explorer");
-            var thumbnailFiles = CountFiles(explorerCacheRoot, "thumbcache_*.db");
+            var explorerCacheSafe = IsSafeCleanupRoot(explorerCacheRoot, explorerCacheRoot);
+            var thumbnailFiles = explorerCacheSafe ? CountFiles(explorerCacheRoot, "thumbcache_*.db") : (count: 0, bytes: 0L);
             items.Add(CreatePlanItem(
                 StepKeyThumbnailCache,
                 "清理缩略图缓存",
                 "缓存清理",
                 false,
                 thumbnailFiles.bytes,
-                thumbnailFiles.count > 0,
-                thumbnailFiles.count > 0
+                explorerCacheSafe && thumbnailFiles.count > 0,
+                explorerCacheSafe
+                    ? (thumbnailFiles.count > 0
                     ? $"发现 {thumbnailFiles.count} 个缩略图缓存文件，优化时需要临时重启资源管理器。"
-                    : "未发现可清理的缩略图缓存文件。"));
+                    : "未发现可清理的缩略图缓存文件。")
+                    : "缩略图缓存路径未通过白名单校验，已禁止执行。",
+                RiskMedium,
+                "需用户确认重启 Explorer；仅限 thumbcache_*.db。",
+                BuildCountEvidence(explorerCacheRoot, thumbnailFiles.count, thumbnailFiles.bytes, "thumbcache_*.db"),
+                false));
 
-            progress?.Report("[4/10] 检查 DNS 缓存刷新项...");
+            progress?.Report($"[{++step}/{totalSteps}] 检查 DNS 缓存刷新项...");
             items.Add(CreatePlanItem(
                 StepKeyDnsCache,
                 "刷新 DNS 缓存",
@@ -167,9 +204,13 @@ namespace MyTools.Services
                 false,
                 0,
                 true,
-                "可刷新 DNS 解析缓存，不释放磁盘空间。"));
+                "可刷新 DNS 解析缓存，不释放磁盘空间。",
+                RiskLow,
+                "只调用 ipconfig /flushdns，不删除文件。",
+                "无文件扫描；执行命令为 ipconfig /flushdns。",
+                false));
 
-            progress?.Report("[5/10] 扫描字体缓存...");
+            progress?.Report($"[{++step}/{totalSteps}] 扫描字体缓存...");
             var fontCachePath = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.Windows),
                 "ServiceProfiles",
@@ -177,36 +218,114 @@ namespace MyTools.Services
                 "AppData",
                 "Local",
                 "FontCache");
-            var fontCacheFiles = CountFiles(fontCachePath, "*.dat");
+            var fontCacheSafe = IsSafeCleanupRoot(fontCachePath, fontCachePath);
+            var fontCacheFiles = fontCacheSafe ? CountFiles(fontCachePath, "*.dat") : (count: 0, bytes: 0L);
             items.Add(CreatePlanItem(
                 StepKeyFontCache,
                 "重置字体缓存",
                 "缓存清理",
                 true,
                 fontCacheFiles.bytes,
-                fontCacheFiles.count > 0,
-                fontCacheFiles.count > 0
+                fontCacheSafe && fontCacheFiles.count > 0,
+                fontCacheSafe
+                    ? (fontCacheFiles.count > 0
                     ? $"发现 {fontCacheFiles.count} 个字体缓存文件。"
-                    : "未发现可清理的字体缓存文件。"));
+                    : "未发现可清理的字体缓存文件。")
+                    : "字体缓存路径未通过白名单校验，已禁止执行。",
+                RiskMedium,
+                "需 UAC；会临时停止 FontCache 服务。",
+                BuildCountEvidence(fontCachePath, fontCacheFiles.count, fontCacheFiles.bytes, "*.dat"),
+                false));
 
-            progress?.Report("[6/10] 扫描 Windows 更新缓存...");
+            progress?.Report($"[{++step}/{totalSteps}] 扫描 Windows 更新缓存...");
             var updateCacheRoot = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.Windows),
                 "SoftwareDistribution",
                 "Download");
-            var updateCacheBytes = CalculateDirectorySize(updateCacheRoot);
+            var updateCacheSafe = IsSafeCleanupRoot(updateCacheRoot, updateCacheRoot);
+            var updateCacheBytes = updateCacheSafe ? CalculateDirectorySize(updateCacheRoot) : 0L;
             items.Add(CreatePlanItem(
                 StepKeyWindowsUpdateCache,
                 "清理 Windows 更新缓存",
                 "更新缓存",
                 true,
                 updateCacheBytes,
-                updateCacheBytes > 0,
-                updateCacheBytes > 0
+                updateCacheSafe && updateCacheBytes > 0,
+                updateCacheSafe
+                    ? (updateCacheBytes > 0
                     ? "发现 Windows Update 下载缓存。"
-                    : "未发现 Windows Update 下载缓存。"));
+                    : "未发现 Windows Update 下载缓存。")
+                    : "Windows Update 下载缓存路径未通过白名单校验，已禁止执行。",
+                RiskMedium,
+                "需 UAC；仅限 SoftwareDistribution\\Download。",
+                BuildCountEvidence(updateCacheRoot, 0, updateCacheBytes, "全部缓存项"),
+                updateCacheBytes >= 100L * 1024L * 1024L));
 
-            progress?.Report("[7/10] 检查系统盘优化项...");
+            progress?.Report($"[{++step}/{totalSteps}] 扫描 Delivery Optimization 缓存...");
+            var deliveryCacheRoot = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.Windows),
+                "ServiceProfiles",
+                "NetworkService",
+                "AppData",
+                "Local",
+                "Microsoft",
+                "Windows",
+                "DeliveryOptimization",
+                "Cache");
+            var deliveryCacheSafe = IsSafeCleanupRoot(deliveryCacheRoot, deliveryCacheRoot);
+            var deliveryCacheBytes = deliveryCacheSafe ? CalculateDirectorySize(deliveryCacheRoot) : 0L;
+            items.Add(CreatePlanItem(
+                StepKeyDeliveryOptimizationCache,
+                "清理传递优化缓存",
+                "更新缓存",
+                true,
+                deliveryCacheBytes,
+                deliveryCacheSafe && deliveryCacheBytes > 0,
+                deliveryCacheSafe
+                    ? (deliveryCacheBytes > 0
+                        ? "发现 Delivery Optimization 下载缓存。"
+                        : "未发现 Delivery Optimization 下载缓存。")
+                    : "Delivery Optimization 缓存路径未通过白名单校验，已禁止执行。",
+                RiskMedium,
+                "需 UAC；仅限 DeliveryOptimization\\Cache。",
+                BuildCountEvidence(deliveryCacheRoot, 0, deliveryCacheBytes, "全部缓存项"),
+                deliveryCacheBytes >= 100L * 1024L * 1024L));
+
+            progress?.Report($"[{++step}/{totalSteps}] 扫描 Windows 错误报告...");
+            var wer = CountWindowsErrorReports(DateTime.Now.AddDays(-14));
+            items.Add(CreatePlanItem(
+                StepKeyWindowsErrorReports,
+                "清理 Windows 错误报告（14 天前）",
+                "诊断清理",
+                true,
+                wer.bytes,
+                wer.count > 0,
+                wer.count > 0
+                    ? $"发现 {wer.count} 个 14 天前的 Windows 错误报告文件。"
+                    : "未发现 14 天前的 Windows 错误报告文件。",
+                RiskMedium,
+                "需 UAC；仅限 WER ReportArchive/ReportQueue。",
+                $"白名单路径 {wer.roots} 个；文件 {wer.count} 个；阈值 14 天前。",
+                false));
+
+            progress?.Report($"[{++step}/{totalSteps}] 扫描崩溃转储文件...");
+            var crashDumps = CountCrashDumps(DateTime.Now.AddDays(-30));
+            items.Add(CreatePlanItem(
+                StepKeyCrashDumps,
+                "清理崩溃转储（30 天前）",
+                "诊断清理",
+                true,
+                crashDumps.bytes,
+                crashDumps.count > 0,
+                crashDumps.count > 0
+                    ? $"发现 {crashDumps.count} 个 30 天前的崩溃转储文件。"
+                    : "未发现 30 天前的崩溃转储文件。",
+                RiskHigh,
+                "需 UAC；会删除旧 .dmp，可能影响故障追溯。",
+                $"白名单路径 {crashDumps.roots} 个；文件 {crashDumps.count} 个；阈值 30 天前。",
+                false));
+
+            progress?.Report($"[{++step}/{totalSteps}] 检查系统盘优化项...");
             var systemDrive = Environment.GetEnvironmentVariable("SystemDrive");
             var driveLetter = string.IsNullOrWhiteSpace(systemDrive)
                 ? string.Empty
@@ -227,9 +346,30 @@ namespace MyTools.Services
                     ? (mediaType.Equals("SSD", StringComparison.OrdinalIgnoreCase)
                         ? "系统盘识别为 SSD，可执行 TRIM。"
                         : "系统盘识别为 HDD，可执行碎片整理。")
-                    : $"无法识别系统盘类型（{mediaType ?? "Unspecified"}）。"));
+                    : $"无法识别系统盘类型（{mediaType ?? "Unspecified"}）。",
+                mediaType.Equals("HDD", StringComparison.OrdinalIgnoreCase) ? RiskHigh : RiskMedium,
+                "需 UAC；仅对系统盘执行 Optimize-Volume。",
+                $"系统盘 {driveLetter}:；MediaType={mediaType ?? "Unspecified"}。",
+                false));
 
-            progress?.Report("[8/10] 检查回收站...");
+            progress?.Report($"[{++step}/{totalSteps}] 检查组件存储清理项...");
+            var componentCleanupAvailable = IsComponentStoreCleanupAvailable();
+            items.Add(CreatePlanItem(
+                StepKeyComponentStoreCleanup,
+                "组件存储清理（WinSxS）",
+                "系统维护",
+                true,
+                0,
+                componentCleanupAvailable,
+                componentCleanupAvailable
+                    ? "可执行 DISM 组件存储清理，耗时可能较长。"
+                    : "当前系统不支持或未找到 DISM 组件存储清理。",
+                RiskHigh,
+                "需 UAC；执行 DISM StartComponentCleanup，不删除用户文件。",
+                componentCleanupAvailable ? "检测到 DISM 和受支持的 Windows 版本。" : "DISM 或系统版本检查未通过。",
+                false));
+
+            progress?.Report($"[{++step}/{totalSteps}] 检查回收站...");
             var recycleBin = QueryRecycleBin();
             items.Add(CreatePlanItem(
                 StepKeyRecycleBin,
@@ -240,9 +380,13 @@ namespace MyTools.Services
                 recycleBin.count > 0 || recycleBin.bytes > 0,
                 recycleBin.count > 0 || recycleBin.bytes > 0
                     ? $"回收站约 {recycleBin.count} 项。"
-                    : "回收站为空。"));
+                    : "回收站为空。",
+                RiskHigh,
+                "会永久清空回收站；默认不勾选。",
+                $"SHQueryRecycleBin：{recycleBin.count} 项，{FileSizeFormatter.Format(recycleBin.bytes)}。",
+                false));
 
-            progress?.Report("[9/10] 检查事件日志大小...");
+            progress?.Report($"[{++step}/{totalSteps}] 检查事件日志大小...");
             var largeLogs = await QueryLargeEventLogsAsync(ct).ConfigureAwait(false);
             items.Add(CreatePlanItem(
                 StepKeyEventLogs,
@@ -253,9 +397,13 @@ namespace MyTools.Services
                 largeLogs.count > 0,
                 largeLogs.count > 0
                     ? $"发现 {largeLogs.count} 个超过 500 MB 的事件日志。"
-                    : "Application/System/Security 事件日志未超过 500 MB。"));
+                    : "Application/System/Security 事件日志未超过 500 MB。",
+                RiskHigh,
+                "需 UAC；仅清理超过 500MB 的 Application/System/Security。",
+                $"超过阈值日志 {largeLogs.count} 个；阈值 500MB。",
+                false));
 
-            progress?.Report("[10/10] 检查当前进程工作集...");
+            progress?.Report($"[{++step}/{totalSteps}] 检查当前进程工作集...");
             var workingSet = GetCurrentWorkingSetBytes();
             items.Add(CreatePlanItem(
                 StepKeyWorkingSet,
@@ -266,7 +414,11 @@ namespace MyTools.Services
                 workingSet > 150L * 1024L * 1024L,
                 workingSet > 150L * 1024L * 1024L
                     ? $"当前进程工作集约 {FileSizeFormatter.Format(workingSet)}，可尝试压缩。"
-                    : $"当前进程工作集约 {FileSizeFormatter.Format(workingSet)}，无需压缩。"));
+                    : $"当前进程工作集约 {FileSizeFormatter.Format(workingSet)}，无需压缩。",
+                RiskLow,
+                "只调用 EmptyWorkingSet 作用于 MyTools 当前进程。",
+                $"当前工作集 {FileSizeFormatter.Format(workingSet)}；阈值 150MB。",
+                false));
 
             return items;
         }
@@ -281,7 +433,11 @@ namespace MyTools.Services
                 new OptimizationStepDefinition(StepKeyDnsCache, "刷新 DNS 缓存", StepFlushDnsAsync),
                 new OptimizationStepDefinition(StepKeyFontCache, "重置字体缓存", StepResetFontCacheAsync),
                 new OptimizationStepDefinition(StepKeyWindowsUpdateCache, "清理 Windows 更新缓存", StepCleanWindowsUpdateCacheAsync),
+                new OptimizationStepDefinition(StepKeyDeliveryOptimizationCache, "清理传递优化缓存", StepCleanDeliveryOptimizationCacheAsync),
+                new OptimizationStepDefinition(StepKeyWindowsErrorReports, "清理 Windows 错误报告（14 天前）", StepCleanWindowsErrorReportsAsync),
+                new OptimizationStepDefinition(StepKeyCrashDumps, "清理崩溃转储（30 天前）", StepCleanCrashDumpsAsync),
                 new OptimizationStepDefinition(StepKeySystemDrive, "系统盘 TRIM/碎片整理", StepOptimizeSystemDriveAsync),
+                new OptimizationStepDefinition(StepKeyComponentStoreCleanup, "组件存储清理（WinSxS）", StepComponentStoreCleanupAsync),
                 new OptimizationStepDefinition(StepKeyRecycleBin, "清空回收站", StepEmptyRecycleBinAsync),
                 new OptimizationStepDefinition(StepKeyEventLogs, "清理事件日志（大于 500MB）", StepCleanEventLogsAsync),
                 new OptimizationStepDefinition(StepKeyWorkingSet, "压缩当前进程工作集", StepTrimWorkingSetAsync)
@@ -295,7 +451,11 @@ namespace MyTools.Services
             bool requiresAdmin,
             long estimatedBytes,
             bool canOptimize,
-            string detail)
+            string detail,
+            string riskLevel = RiskLow,
+            string safetyBoundary = "",
+            string evidence = "",
+            bool defaultSelected = false)
         {
             return new OptimizationPlanItem
             {
@@ -305,13 +465,18 @@ namespace MyTools.Services
                 RequiresAdmin = requiresAdmin,
                 EstimatedBytes = estimatedBytes,
                 CanOptimize = canOptimize,
-                Detail = detail ?? string.Empty
+                Detail = detail ?? string.Empty,
+                RiskLevel = riskLevel ?? RiskLow,
+                SafetyBoundary = safetyBoundary ?? string.Empty,
+                Evidence = evidence ?? string.Empty,
+                IsSelected = canOptimize && defaultSelected
             };
         }
 
         private async Task<OptimizationStep> StepClearUserTempAsync(CancellationToken ct)
         {
             var tempPath = Path.GetTempPath();
+            EnsureSafeCleanupRoot(tempPath, "当前用户 Temp", tempPath);
             var threshold = DateTime.Now.AddHours(-24);
             var planned = CountDeletableFiles(tempPath, threshold);
             AppLogService.Information("Auto optimize plan: clear user temp path {Path}, files {Count}, bytes {Bytes}",
@@ -338,23 +503,11 @@ namespace MyTools.Services
             AppLogService.Information("Auto optimize plan: clear windows temp path {Path}, files {Count}, bytes {Bytes}",
                 windowsTemp, planned.count, planned.bytes);
 
-            var script = @"
+            var script = BuildSafeDeleteScriptPrelude() + @"
 $target = Join-Path $env:windir 'Temp'
 $threshold = (Get-Date).AddDays(-7)
-Get-ChildItem -LiteralPath $target -Force -Recurse -ErrorAction SilentlyContinue |
-Where-Object { -not $_.PSIsContainer -and $_.LastWriteTime -lt $threshold } |
-ForEach-Object {
-    try { Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue } catch { }
-}
-Get-ChildItem -LiteralPath $target -Force -Directory -Recurse -ErrorAction SilentlyContinue |
-Sort-Object FullName -Descending |
-ForEach-Object {
-    try {
-        if ((Get-ChildItem -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue | Measure-Object).Count -eq 0) {
-            Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue
-        }
-    } catch { }
-}";
+Remove-FilesOlderThanSafely $target $threshold '*'
+Remove-EmptyDirectoriesSafely $target";
 
             try
             {
@@ -400,6 +553,7 @@ ForEach-Object {
                 "Microsoft",
                 "Windows",
                 "Explorer");
+            EnsureSafeCleanupRoot(explorerCacheRoot, "缩略图缓存", explorerCacheRoot);
 
             var files = SafeDirectoryEnumerateFiles(explorerCacheRoot, "thumbcache_*.db").ToList();
             var bytes = files.Sum(file =>
@@ -510,15 +664,13 @@ Start-Service -Name FontCache3.0.0.0 -ErrorAction SilentlyContinue";
             var estimatedBytes = CalculateDirectorySize(root);
             AppLogService.Information("Auto optimize plan: clear windows update cache path {Path}, bytes {Bytes}", root, estimatedBytes);
 
-            var script = @"
+            var script = BuildSafeDeleteScriptPrelude() + @"
 $target = Join-Path $env:windir 'SoftwareDistribution\Download'
+$service = Get-Service -Name wuauserv -ErrorAction SilentlyContinue
+$wasRunning = $null -ne $service -and $service.Status -eq 'Running'
 Stop-Service -Name wuauserv -Force -ErrorAction SilentlyContinue
-if (Test-Path $target) {
-    Get-ChildItem -LiteralPath $target -Force -ErrorAction SilentlyContinue | ForEach-Object {
-        try { Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction SilentlyContinue } catch { }
-    }
-}
-Start-Service -Name wuauserv -ErrorAction SilentlyContinue";
+Remove-DirectoryChildrenSafely $target
+if ($wasRunning) { Start-Service -Name wuauserv -ErrorAction SilentlyContinue }";
 
             try
             {
@@ -542,6 +694,143 @@ Start-Service -Name wuauserv -ErrorAction SilentlyContinue";
                 Status = "OK",
                 Detail = "Windows Update 缓存目录已清理。",
                 BytesFreed = estimatedBytes
+            };
+        }
+
+        private async Task<OptimizationStep> StepCleanDeliveryOptimizationCacheAsync(CancellationToken ct)
+        {
+            var root = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.Windows),
+                "ServiceProfiles",
+                "NetworkService",
+                "AppData",
+                "Local",
+                "Microsoft",
+                "Windows",
+                "DeliveryOptimization",
+                "Cache");
+            var estimatedBytes = CalculateDirectorySize(root);
+            AppLogService.Information("Auto optimize plan: clear delivery optimization cache path {Path}, bytes {Bytes}", root, estimatedBytes);
+
+            var script = BuildSafeDeleteScriptPrelude() + @"
+$target = Join-Path $env:windir 'ServiceProfiles\NetworkService\AppData\Local\Microsoft\Windows\DeliveryOptimization\Cache'
+$service = Get-Service -Name DoSvc -ErrorAction SilentlyContinue
+$wasRunning = $null -ne $service -and $service.Status -eq 'Running'
+Stop-Service -Name DoSvc -Force -ErrorAction SilentlyContinue
+Remove-DirectoryChildrenSafely $target
+if ($wasRunning) { Start-Service -Name DoSvc -ErrorAction SilentlyContinue }";
+
+            try
+            {
+                await ElevatedScriptRunner.RunElevatedScriptAsync(script, true, ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                return new OptimizationStep
+                {
+                    Name = "清理传递优化缓存",
+                    Status = "Failed",
+                    Detail = "用户取消了 UAC 授权",
+                    BytesFreed = 0
+                };
+            }
+
+            return new OptimizationStep
+            {
+                Name = "清理传递优化缓存",
+                Status = "OK",
+                Detail = "Delivery Optimization 缓存目录已清理。",
+                BytesFreed = estimatedBytes
+            };
+        }
+
+        private async Task<OptimizationStep> StepCleanWindowsErrorReportsAsync(CancellationToken ct)
+        {
+            var threshold = DateTime.Now.AddDays(-14);
+            var planned = CountWindowsErrorReports(threshold);
+            AppLogService.Information("Auto optimize plan: clear WER files {Count}, bytes {Bytes}", planned.count, planned.bytes);
+
+            var script = BuildSafeDeleteScriptPrelude() + @"
+$roots = @(
+    (Join-Path $env:LOCALAPPDATA 'Microsoft\Windows\WER\ReportArchive'),
+    (Join-Path $env:LOCALAPPDATA 'Microsoft\Windows\WER\ReportQueue'),
+    (Join-Path $env:ProgramData 'Microsoft\Windows\WER\ReportArchive'),
+    (Join-Path $env:ProgramData 'Microsoft\Windows\WER\ReportQueue')
+)
+$threshold = (Get-Date).AddDays(-14)
+foreach ($root in $roots) {
+    Remove-FilesOlderThanSafely $root $threshold '*'
+    Remove-EmptyDirectoriesSafely $root
+}";
+
+            try
+            {
+                await ElevatedScriptRunner.RunElevatedScriptAsync(script, true, ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                return new OptimizationStep
+                {
+                    Name = "清理 Windows 错误报告（14 天前）",
+                    Status = "Failed",
+                    Detail = "用户取消了 UAC 授权",
+                    BytesFreed = 0
+                };
+            }
+
+            return new OptimizationStep
+            {
+                Name = "清理 Windows 错误报告（14 天前）",
+                Status = "OK",
+                Detail = $"已清理 14 天前的 Windows 错误报告（估算 {planned.count} 项）。",
+                BytesFreed = planned.bytes
+            };
+        }
+
+        private async Task<OptimizationStep> StepCleanCrashDumpsAsync(CancellationToken ct)
+        {
+            var threshold = DateTime.Now.AddDays(-30);
+            var planned = CountCrashDumps(threshold);
+            AppLogService.Information("Auto optimize plan: clear crash dumps {Count}, bytes {Bytes}", planned.count, planned.bytes);
+
+            var script = BuildSafeDeleteScriptPrelude() + @"
+$roots = @(
+    (Join-Path $env:windir 'Minidump'),
+    (Join-Path $env:LOCALAPPDATA 'CrashDumps')
+)
+$threshold = (Get-Date).AddDays(-30)
+foreach ($root in $roots) {
+    Remove-FilesOlderThanSafely $root $threshold '*.dmp'
+}
+$memoryDump = Join-Path $env:windir 'MEMORY.DMP'
+if (Test-Path $memoryDump) {
+    $info = Get-Item -LiteralPath $memoryDump -Force -ErrorAction SilentlyContinue
+    if ($null -ne $info -and $info.LastWriteTime -lt $threshold -and -not (Test-ReparsePoint $info)) {
+        try { Remove-Item -LiteralPath $memoryDump -Force -ErrorAction SilentlyContinue } catch { }
+    }
+}";
+
+            try
+            {
+                await ElevatedScriptRunner.RunElevatedScriptAsync(script, true, ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                return new OptimizationStep
+                {
+                    Name = "清理崩溃转储（30 天前）",
+                    Status = "Failed",
+                    Detail = "用户取消了 UAC 授权",
+                    BytesFreed = 0
+                };
+            }
+
+            return new OptimizationStep
+            {
+                Name = "清理崩溃转储（30 天前）",
+                Status = "OK",
+                Detail = $"已清理 30 天前的崩溃转储（估算 {planned.count} 项）。",
+                BytesFreed = planned.bytes
             };
         }
 
@@ -617,10 +906,145 @@ Start-Service -Name wuauserv -ErrorAction SilentlyContinue";
             };
         }
 
+        private async Task<OptimizationStep> StepComponentStoreCleanupAsync(CancellationToken ct)
+        {
+            if (!IsComponentStoreCleanupAvailable())
+            {
+                return new OptimizationStep
+                {
+                    Name = "组件存储清理（WinSxS）",
+                    Status = "Skipped",
+                    Detail = "当前系统不支持或未找到 DISM 组件存储清理。",
+                    BytesFreed = 0
+                };
+            }
+
+            AppLogService.Information("Auto optimize plan: run DISM component store cleanup");
+            var script = @"
+$dism = Join-Path $env:windir 'System32\dism.exe'
+if (-not (Test-Path $dism)) { exit 2 }
+& $dism /Online /Cleanup-Image /StartComponentCleanup /NoRestart
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }";
+
+            try
+            {
+                await ElevatedScriptRunner.RunElevatedScriptAsync(script, true, ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                return new OptimizationStep
+                {
+                    Name = "组件存储清理（WinSxS）",
+                    Status = "Failed",
+                    Detail = "用户取消了 UAC 授权",
+                    BytesFreed = 0
+                };
+            }
+
+            return new OptimizationStep
+            {
+                Name = "组件存储清理（WinSxS）",
+                Status = "OK",
+                Detail = "已执行 DISM 组件存储清理。",
+                BytesFreed = 0
+            };
+        }
+
+        private static string BuildSafeDeleteScriptPrelude()
+        {
+            return @"
+function Normalize-PathSafe([string]$path) {
+    if ([string]::IsNullOrWhiteSpace($path)) { return '' }
+    try {
+        return [System.IO.Path]::GetFullPath($path).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+    } catch {
+        return ''
+    }
+}
+
+function Test-ReparsePoint($item) {
+    if ($null -eq $item) { return $true }
+    try {
+        return (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq [System.IO.FileAttributes]::ReparsePoint)
+    } catch {
+        return $true
+    }
+}
+
+function Test-PathInsideRoot([string]$path, [string]$root) {
+    $fullPath = Normalize-PathSafe $path
+    $fullRoot = Normalize-PathSafe $root
+    if ([string]::IsNullOrWhiteSpace($fullPath) -or [string]::IsNullOrWhiteSpace($fullRoot)) { return $false }
+    if ([string]::Equals($fullPath, $fullRoot, [System.StringComparison]::OrdinalIgnoreCase)) { return $true }
+    return $fullPath.StartsWith($fullRoot + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)
+}
+
+function Get-SafeChildItems([string]$root) {
+    $safeRoot = Normalize-PathSafe $root
+    if ([string]::IsNullOrWhiteSpace($safeRoot) -or -not (Test-Path $safeRoot)) { return @() }
+    $pending = New-Object System.Collections.Stack
+    $pending.Push($safeRoot)
+    $results = New-Object System.Collections.ArrayList
+    while ($pending.Count -gt 0) {
+        $current = [string]$pending.Pop()
+        if (-not (Test-PathInsideRoot $current $safeRoot)) { continue }
+        $currentItem = Get-Item -LiteralPath $current -Force -ErrorAction SilentlyContinue
+        if (Test-ReparsePoint $currentItem) { continue }
+        $children = @(Get-ChildItem -LiteralPath $current -Force -ErrorAction SilentlyContinue)
+        foreach ($child in $children) {
+            if ($null -eq $child) { continue }
+            if (-not (Test-PathInsideRoot $child.FullName $safeRoot)) { continue }
+            if (Test-ReparsePoint $child) { continue }
+            [void]$results.Add($child)
+            if ($child.PSIsContainer) { $pending.Push($child.FullName) }
+        }
+    }
+    return $results
+}
+
+function Remove-SafeItem($item, [string]$root) {
+    if ($null -eq $item) { return }
+    if (-not (Test-PathInsideRoot $item.FullName $root)) { return }
+    if (Test-ReparsePoint $item) { return }
+    try { Remove-Item -LiteralPath $item.FullName -Force -ErrorAction SilentlyContinue } catch { }
+}
+
+function Remove-FilesOlderThanSafely([string]$root, [datetime]$threshold, [string]$filter) {
+    foreach ($item in (Get-SafeChildItems $root)) {
+        if ($item.PSIsContainer) { continue }
+        if (-not [string]::IsNullOrWhiteSpace($filter) -and $filter -ne '*' -and $item.Name -notlike $filter) { continue }
+        if ($item.LastWriteTime -lt $threshold) { Remove-SafeItem $item $root }
+    }
+}
+
+function Remove-EmptyDirectoriesSafely([string]$root) {
+    $dirs = @(Get-SafeChildItems $root | Where-Object { $_.PSIsContainer } | Sort-Object FullName -Descending)
+    foreach ($dir in $dirs) {
+        if (-not (Test-PathInsideRoot $dir.FullName $root)) { continue }
+        if (Test-ReparsePoint $dir) { continue }
+        try {
+            if ((Get-ChildItem -LiteralPath $dir.FullName -Force -ErrorAction SilentlyContinue | Measure-Object).Count -eq 0) {
+                Remove-Item -LiteralPath $dir.FullName -Force -ErrorAction SilentlyContinue
+            }
+        } catch { }
+    }
+}
+
+function Remove-DirectoryChildrenSafely([string]$root) {
+    $items = @(Get-SafeChildItems $root | Sort-Object { $_.FullName.Length } -Descending)
+    foreach ($item in $items) {
+        Remove-SafeItem $item $root
+    }
+}
+
+";
+        }
+
         private Task<OptimizationStep> StepEmptyRecycleBinAsync(CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
             AppLogService.Information("Auto optimize plan: empty recycle bin");
+            var planned = QueryRecycleBin();
             var result = NativeMethods.SHEmptyRecycleBin(IntPtr.Zero, null,
                 NativeMethods.SHERB_NOCONFIRMATION
                 | NativeMethods.SHERB_NOPROGRESSUI
@@ -634,7 +1058,7 @@ Start-Service -Name wuauserv -ErrorAction SilentlyContinue";
                     Name = "清空回收站",
                     Status = "OK",
                     Detail = "回收站已清空。",
-                    BytesFreed = 0
+                    BytesFreed = planned.bytes
                 });
             }
 
@@ -650,6 +1074,7 @@ Start-Service -Name wuauserv -ErrorAction SilentlyContinue";
         private async Task<OptimizationStep> StepCleanEventLogsAsync(CancellationToken ct)
         {
             AppLogService.Information("Auto optimize plan: clear event logs if size > 500MB for Application/System/Security");
+            var planned = await QueryLargeEventLogsAsync(ct).ConfigureAwait(false);
             var script = @"
 $logs = @('Application', 'System', 'Security')
 $threshold = 500MB
@@ -681,7 +1106,7 @@ foreach($name in $logs) {
                 Name = "清理事件日志（大于 500MB）",
                 Status = "OK",
                 Detail = "已按阈值检查并清理事件日志。",
-                BytesFreed = 0
+                BytesFreed = planned.bytes
             };
         }
 
@@ -802,6 +1227,277 @@ Write-Output $media";
             return (count, bytes);
         }
 
+        private static (int count, long bytes, int roots) CountWindowsErrorReports(DateTime threshold)
+        {
+            var count = 0;
+            long bytes = 0;
+            var roots = 0;
+            foreach (var root in GetWindowsErrorReportRoots())
+            {
+                if (!IsSafeCleanupRoot(root, root))
+                {
+                    continue;
+                }
+
+                roots++;
+                var result = CountDeletableFiles(root, threshold);
+                count += result.count;
+                bytes += result.bytes;
+            }
+
+            return (count, bytes, roots);
+        }
+
+        private static IEnumerable<string> GetWindowsErrorReportRoots()
+        {
+            var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            var programData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+            if (!string.IsNullOrWhiteSpace(local))
+            {
+                yield return Path.Combine(local, "Microsoft", "Windows", "WER", "ReportArchive");
+                yield return Path.Combine(local, "Microsoft", "Windows", "WER", "ReportQueue");
+            }
+
+            if (!string.IsNullOrWhiteSpace(programData))
+            {
+                yield return Path.Combine(programData, "Microsoft", "Windows", "WER", "ReportArchive");
+                yield return Path.Combine(programData, "Microsoft", "Windows", "WER", "ReportQueue");
+            }
+        }
+
+        private static (int count, long bytes, int roots) CountCrashDumps(DateTime threshold)
+        {
+            var count = 0;
+            long bytes = 0;
+            var roots = 0;
+            foreach (var root in GetCrashDumpRoots())
+            {
+                if (!IsSafeCleanupRoot(root, root))
+                {
+                    continue;
+                }
+
+                roots++;
+                foreach (var file in SafeDirectoryEnumerateFiles(root, "*.dmp"))
+                {
+                    AddFileIfOlder(file, threshold, ref count, ref bytes);
+                }
+            }
+
+            var memoryDump = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "MEMORY.DMP");
+            if (File.Exists(memoryDump))
+            {
+                AddFileIfOlder(memoryDump, threshold, ref count, ref bytes);
+            }
+
+            return (count, bytes, roots);
+        }
+
+        private static IEnumerable<string> GetCrashDumpRoots()
+        {
+            var windows = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+            var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            if (!string.IsNullOrWhiteSpace(windows))
+            {
+                yield return Path.Combine(windows, "Minidump");
+            }
+
+            if (!string.IsNullOrWhiteSpace(local))
+            {
+                yield return Path.Combine(local, "CrashDumps");
+            }
+        }
+
+        private static void AddFileIfOlder(string file, DateTime threshold, ref int count, ref long bytes)
+        {
+            try
+            {
+                var info = new FileInfo(file);
+                if (info.Exists && info.LastWriteTime < threshold)
+                {
+                    count++;
+                    bytes += info.Length;
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        private static string BuildCountEvidence(string root, int count, long bytes, string scope)
+        {
+            var path = string.IsNullOrWhiteSpace(root) ? "未知路径" : root;
+            return $"{scope}；路径：{path}；文件 {count} 项；估算 {FileSizeFormatter.Format(bytes)}。";
+        }
+
+        private static bool IsComponentStoreCleanupAvailable()
+        {
+            try
+            {
+                var version = Environment.OSVersion.Version;
+                if (version.Major < 6 || (version.Major == 6 && version.Minor < 2))
+                {
+                    return false;
+                }
+
+                var dismPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32", "dism.exe");
+                return File.Exists(dismPath);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static void EnsureSafeCleanupRoot(string root, string operationName, params string[] approvedRoots)
+        {
+            if (!IsSafeCleanupRoot(root, approvedRoots))
+            {
+                throw new InvalidOperationException($"{operationName} 路径未通过白名单校验，已停止执行。");
+            }
+        }
+
+        private static bool IsSafeCleanupRoot(string root, params string[] approvedRoots)
+        {
+            var fullRoot = NormalizeDirectoryPath(root);
+            if (string.IsNullOrWhiteSpace(fullRoot) || IsUnsafeCleanupRoot(fullRoot))
+            {
+                return false;
+            }
+
+            if (approvedRoots == null || approvedRoots.Length == 0)
+            {
+                return false;
+            }
+
+            foreach (var approvedRoot in approvedRoots)
+            {
+                var approved = NormalizeDirectoryPath(approvedRoot);
+                if (string.IsNullOrWhiteSpace(approved) || IsUnsafeCleanupRoot(approved))
+                {
+                    continue;
+                }
+
+                if (PathsEqual(fullRoot, approved) || IsSubPathOf(fullRoot, approved))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool IsUnsafeCleanupRoot(string fullRoot)
+        {
+            var driveRoot = NormalizeDirectoryPath(Path.GetPathRoot(fullRoot));
+            if (!string.IsNullOrWhiteSpace(driveRoot) && PathsEqual(fullRoot, driveRoot))
+            {
+                return true;
+            }
+
+            foreach (var criticalRoot in GetCriticalCleanupRoots())
+            {
+                if (PathsEqual(fullRoot, criticalRoot))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static IEnumerable<string> GetCriticalCleanupRoots()
+        {
+            var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            var roots = new[]
+            {
+                Environment.GetFolderPath(Environment.SpecialFolder.Windows),
+                Environment.GetFolderPath(Environment.SpecialFolder.System),
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
+                Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                userProfile,
+                Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
+                Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                string.IsNullOrWhiteSpace(userProfile) ? string.Empty : Path.Combine(userProfile, "Downloads")
+            };
+
+            return roots
+                .Select(NormalizeDirectoryPath)
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct(StringComparer.OrdinalIgnoreCase);
+        }
+
+        private static string NormalizeDirectoryPath(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return string.Empty;
+            }
+
+            try
+            {
+                var full = Path.GetFullPath(path.Trim());
+                return full.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            }
+            catch
+            {
+                return string.Empty;
+            }
+        }
+
+        private static bool PathsEqual(string left, string right)
+        {
+            return string.Equals(
+                NormalizeDirectoryPath(left),
+                NormalizeDirectoryPath(right),
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsSubPathOf(string child, string parent)
+        {
+            var normalizedChild = NormalizeDirectoryPath(child);
+            var normalizedParent = NormalizeDirectoryPath(parent);
+            if (string.IsNullOrWhiteSpace(normalizedChild) || string.IsNullOrWhiteSpace(normalizedParent))
+            {
+                return false;
+            }
+
+            return normalizedChild.StartsWith(
+                normalizedParent + Path.DirectorySeparatorChar,
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsPathInsideRoot(string path, string root)
+        {
+            return PathsEqual(path, root) || IsSubPathOf(path, root);
+        }
+
+        private static bool IsReparsePointDirectory(string path)
+        {
+            try
+            {
+                return (new DirectoryInfo(path).Attributes & FileAttributes.ReparsePoint) == FileAttributes.ReparsePoint;
+            }
+            catch
+            {
+                return true;
+            }
+        }
+
+        private static bool IsReparsePointFile(string path)
+        {
+            try
+            {
+                return (new FileInfo(path).Attributes & FileAttributes.ReparsePoint) == FileAttributes.ReparsePoint;
+            }
+            catch
+            {
+                return true;
+            }
+        }
+
         private static (int count, long bytes) CountFiles(string root, string pattern = "*")
         {
             if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
@@ -873,12 +1569,28 @@ Write-Output $media";
                 yield break;
             }
 
+            var safeRoot = NormalizeDirectoryPath(root);
+            if (string.IsNullOrWhiteSpace(safeRoot))
+            {
+                yield break;
+            }
+
             var pending = new Stack<string>();
-            pending.Push(root);
+            pending.Push(safeRoot);
 
             while (pending.Count > 0)
             {
                 var current = pending.Pop();
+                if (!PathsEqual(current, safeRoot) && !IsSubPathOf(current, safeRoot))
+                {
+                    continue;
+                }
+
+                if (IsReparsePointDirectory(current))
+                {
+                    continue;
+                }
+
                 string[] subDirs;
                 try
                 {
@@ -891,7 +1603,10 @@ Write-Output $media";
 
                 foreach (var dir in subDirs)
                 {
-                    pending.Push(dir);
+                    if (!IsReparsePointDirectory(dir))
+                    {
+                        pending.Push(dir);
+                    }
                 }
 
                 string[] files;
@@ -906,7 +1621,10 @@ Write-Output $media";
 
                 foreach (var file in files)
                 {
-                    yield return file;
+                    if (IsPathInsideRoot(file, safeRoot) && !IsReparsePointFile(file))
+                    {
+                        yield return file;
+                    }
                 }
             }
         }
@@ -941,11 +1659,32 @@ Write-Output $media";
 
         private static IEnumerable<string> SafeDirectoryEnumerateDirectories(string root)
         {
+            if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
+            {
+                yield break;
+            }
+
+            var safeRoot = NormalizeDirectoryPath(root);
+            if (string.IsNullOrWhiteSpace(safeRoot))
+            {
+                yield break;
+            }
+
             var pending = new Stack<string>();
-            pending.Push(root);
+            pending.Push(safeRoot);
             while (pending.Count > 0)
             {
                 var current = pending.Pop();
+                if (!PathsEqual(current, safeRoot) && !IsSubPathOf(current, safeRoot))
+                {
+                    continue;
+                }
+
+                if (IsReparsePointDirectory(current))
+                {
+                    continue;
+                }
+
                 string[] subDirs;
                 try
                 {
@@ -958,8 +1697,11 @@ Write-Output $media";
 
                 foreach (var dir in subDirs)
                 {
-                    yield return dir;
-                    pending.Push(dir);
+                    if (IsPathInsideRoot(dir, safeRoot) && !IsReparsePointDirectory(dir))
+                    {
+                        yield return dir;
+                        pending.Push(dir);
+                    }
                 }
             }
         }
@@ -1108,8 +1850,12 @@ foreach($name in $logs) {
         }
     }
 
-    public sealed class OptimizationPlanItem
+    public sealed class OptimizationPlanItem : INotifyPropertyChanged
     {
+        private bool _isSelected;
+
+        public event PropertyChangedEventHandler PropertyChanged;
+
         public string Key { get; set; }
         public string Name { get; set; }
         public string Category { get; set; }
@@ -1117,14 +1863,52 @@ foreach($name in $logs) {
         public long EstimatedBytes { get; set; }
         public bool CanOptimize { get; set; }
         public string Detail { get; set; }
+        public string RiskLevel { get; set; }
+        public string SafetyBoundary { get; set; }
+        public string Evidence { get; set; }
 
-        public string StatusDisplay => CanOptimize ? "可优化" : "无需处理";
+        public bool IsSelected
+        {
+            get => _isSelected;
+            set
+            {
+                if (_isSelected == value)
+                {
+                    return;
+                }
+
+                _isSelected = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(StatusDisplay));
+            }
+        }
+
+        public string StatusDisplay
+        {
+            get
+            {
+                if (!CanOptimize)
+                {
+                    return "无需处理";
+                }
+
+                return IsSelected ? "已选择" : "可选择";
+            }
+        }
+
         public string RequiresAdminDisplay => RequiresAdmin ? "需要" : "否";
         public string EstimatedBytesDisplay => FileSizeFormatter.Format(EstimatedBytes);
+
+        private void OnPropertyChanged([CallerMemberName] string propertyName = null)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
     }
 
     internal static class ElevatedScriptRunner
     {
+        private const int ElevatedScriptTimeoutMs = 900000;
+
         public static async Task RunElevatedScriptAsync(string script, bool waitForExit, CancellationToken ct)
         {
             if (string.IsNullOrWhiteSpace(script))
@@ -1155,7 +1939,11 @@ foreach($name in $logs) {
                     return;
                 }
 
-                await WaitForExitAsync(process, ct).ConfigureAwait(false);
+                await WaitForExitAsync(process, ct, ElevatedScriptTimeoutMs).ConfigureAwait(false);
+                if (process.ExitCode != 0)
+                {
+                    throw new InvalidOperationException($"提权脚本执行失败（ExitCode={process.ExitCode}）。");
+                }
             }
             catch (System.ComponentModel.Win32Exception)
             {
@@ -1207,11 +1995,18 @@ foreach($name in $logs) {
                 .Replace("\"", "`\"");
         }
 
-        private static async Task WaitForExitAsync(Process process, CancellationToken ct)
+        private static async Task WaitForExitAsync(Process process, CancellationToken ct, int timeoutMs = 120000)
         {
+            var started = DateTime.UtcNow;
             while (!process.HasExited)
             {
                 ct.ThrowIfCancellationRequested();
+                if ((DateTime.UtcNow - started).TotalMilliseconds > timeoutMs)
+                {
+                    try { process.Kill(); } catch { }
+                    throw new TimeoutException("PowerShell 脚本执行超时。");
+                }
+
                 await Task.Delay(150, ct).ConfigureAwait(false);
             }
         }

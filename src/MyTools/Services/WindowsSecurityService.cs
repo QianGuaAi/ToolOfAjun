@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 using Microsoft.Win32;
@@ -17,6 +18,32 @@ namespace MyTools.Services
 
         private const string WuPolicyAuKey =
             @"SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU";
+
+        private static readonly string[] AutoUpdateBlockingServices =
+        {
+            "wuauserv",
+            "UsoSvc",
+            "BITS",
+            "DoSvc",
+            "WaaSMedicSvc"
+        };
+
+        private static readonly string[] AutoUpdateScheduledTasks =
+        {
+            @"\Microsoft\Windows\WindowsUpdate\Scheduled Start",
+            @"\Microsoft\Windows\WindowsUpdate\sih",
+            @"\Microsoft\Windows\WindowsUpdate\sihboot",
+            @"\Microsoft\Windows\UpdateOrchestrator\Schedule Scan",
+            @"\Microsoft\Windows\UpdateOrchestrator\Schedule Scan Static Task",
+            @"\Microsoft\Windows\UpdateOrchestrator\USO_UxBroker",
+            @"\Microsoft\Windows\UpdateOrchestrator\Maintenance Install",
+            @"\Microsoft\Windows\UpdateOrchestrator\Reboot",
+            @"\Microsoft\Windows\UpdateOrchestrator\Reboot_AC",
+            @"\Microsoft\Windows\UpdateOrchestrator\Reboot_Battery",
+            @"\Microsoft\Windows\UpdateOrchestrator\Refresh Settings"
+        };
+
+        private const int ServiceStartDisabled = 4;
 
         public static bool GetDefenderRealtimeStatus()
         {
@@ -60,62 +87,227 @@ namespace MyTools.Services
 
         public static bool GetAutoUpdateStatus()
         {
+            return IsAutoUpdateRestoreReady();
+        }
+
+        public static bool IsAutoUpdateStopEnforced()
+        {
+            return IsAutoUpdatePolicyDisabled()
+                && AreExistingServicesDisabled(AutoUpdateBlockingServices)
+                && AreExistingScheduledTasksDisabled(AutoUpdateScheduledTasks);
+        }
+
+        public static bool IsAutoUpdateRestoreReady()
+        {
+            return !IsAutoUpdatePolicyDisabled()
+                && !AnyExistingServiceDisabled(AutoUpdateBlockingServices)
+                && AreExistingScheduledTasksEnabled(AutoUpdateScheduledTasks);
+        }
+
+        private static bool IsAutoUpdatePolicyDisabled()
+        {
             try
             {
                 using (var key = Registry.LocalMachine.OpenSubKey(WuPolicyAuKey))
                 {
                     if (key?.GetValue("NoAutoUpdate") is int v && v == 1)
-                        return false;
+                        return true;
                 }
             }
             catch { }
 
-            return true;
+            return false;
+        }
+
+        private static bool AreExistingServicesDisabled(string[] serviceNames)
+        {
+            var foundAny = false;
+            foreach (var serviceName in serviceNames)
+            {
+                var startValue = GetServiceStartValue(serviceName);
+                if (!startValue.HasValue)
+                {
+                    continue;
+                }
+
+                foundAny = true;
+                if (startValue.Value != ServiceStartDisabled)
+                {
+                    return false;
+                }
+            }
+
+            return foundAny;
+        }
+
+        private static bool AnyExistingServiceDisabled(string[] serviceNames)
+        {
+            foreach (var serviceName in serviceNames)
+            {
+                var startValue = GetServiceStartValue(serviceName);
+                if (startValue.HasValue && startValue.Value == ServiceStartDisabled)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static int? GetServiceStartValue(string serviceName)
+        {
+            try
+            {
+                using (var key = Registry.LocalMachine.OpenSubKey(
+                    @"SYSTEM\CurrentControlSet\Services\" + serviceName))
+                {
+                    if (key?.GetValue("Start") is int value)
+                    {
+                        return value;
+                    }
+                }
+            }
+            catch { }
+
+            return null;
+        }
+
+        private static bool AreExistingScheduledTasksDisabled(string[] taskPaths)
+        {
+            return CheckExistingScheduledTasks(taskPaths, expectedEnabled: false);
+        }
+
+        private static bool AreExistingScheduledTasksEnabled(string[] taskPaths)
+        {
+            return CheckExistingScheduledTasks(taskPaths, expectedEnabled: true);
+        }
+
+        private static bool CheckExistingScheduledTasks(string[] taskPaths, bool expectedEnabled)
+        {
+            object scheduler = null;
+            try
+            {
+                var schedulerType = Type.GetTypeFromProgID("Schedule.Service");
+                if (schedulerType == null)
+                {
+                    return false;
+                }
+
+                scheduler = Activator.CreateInstance(schedulerType);
+                ((dynamic)scheduler).Connect();
+
+                foreach (var taskPath in taskPaths)
+                {
+                    var state = GetScheduledTaskState(scheduler, taskPath);
+                    if (state == ScheduledTaskState.Missing)
+                    {
+                        continue;
+                    }
+
+                    if (state == ScheduledTaskState.Unknown)
+                    {
+                        return false;
+                    }
+
+                    if (expectedEnabled && state != ScheduledTaskState.Enabled)
+                    {
+                        return false;
+                    }
+
+                    if (!expectedEnabled && state != ScheduledTaskState.Disabled)
+                    {
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+            finally
+            {
+                ReleaseComObject(scheduler);
+            }
+        }
+
+        private static ScheduledTaskState GetScheduledTaskState(object scheduler, string taskPath)
+        {
+            object folder = null;
+            object task = null;
+            try
+            {
+                var lastSlash = taskPath.LastIndexOf('\\');
+                if (lastSlash <= 0 || lastSlash >= taskPath.Length - 1)
+                {
+                    return ScheduledTaskState.Unknown;
+                }
+
+                var folderPath = taskPath.Substring(0, lastSlash);
+                var taskName = taskPath.Substring(lastSlash + 1);
+                folder = ((dynamic)scheduler).GetFolder(folderPath);
+                task = ((dynamic)folder).GetTask(taskName);
+
+                return ((dynamic)task).Enabled
+                    ? ScheduledTaskState.Enabled
+                    : ScheduledTaskState.Disabled;
+            }
+            catch (COMException ex)
+            {
+                return IsTaskSchedulerNotFound(ex)
+                    ? ScheduledTaskState.Missing
+                    : ScheduledTaskState.Unknown;
+            }
+            catch
+            {
+                return ScheduledTaskState.Unknown;
+            }
+            finally
+            {
+                ReleaseComObject(task);
+                ReleaseComObject(folder);
+            }
+        }
+
+        private static bool IsTaskSchedulerNotFound(COMException ex)
+        {
+            return ex.ErrorCode == unchecked((int)0x80070002)
+                || ex.ErrorCode == unchecked((int)0x80070003);
+        }
+
+        private static void ReleaseComObject(object instance)
+        {
+            try
+            {
+                if (instance != null && Marshal.IsComObject(instance))
+                {
+                    Marshal.FinalReleaseComObject(instance);
+                }
+            }
+            catch { }
+        }
+
+        private enum ScheduledTaskState
+        {
+            Missing,
+            Enabled,
+            Disabled,
+            Unknown
         }
 
         public static async Task SetAutoUpdateAsync(bool enable)
         {
             string script = enable
-                ? @"$p='HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU'
-if (Test-Path $p) {
-    Remove-ItemProperty -Path $p -Name 'NoAutoUpdate' -ErrorAction SilentlyContinue
-    Remove-ItemProperty -Path $p -Name 'AUOptions' -ErrorAction SilentlyContinue
-}
-foreach ($svc in 'wuauserv','UsoSvc','BITS','DoSvc') {
-    if (Get-Service -Name $svc -ErrorAction SilentlyContinue) {
-        Set-Service -Name $svc -StartupType Manual -ErrorAction SilentlyContinue
-        Start-Service -Name $svc -ErrorAction SilentlyContinue
-    }
-}"
-                : @"$p='HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU'
-if (!(Test-Path $p)) { New-Item -Path $p -Force | Out-Null }
-Set-ItemProperty -Path $p -Name 'NoAutoUpdate' -Value 1 -Type DWord
-Set-ItemProperty -Path $p -Name 'AUOptions'    -Value 1 -Type DWord
-foreach ($svc in 'UsoSvc','wuauserv','BITS','DoSvc') {
-    if (Get-Service -Name $svc -ErrorAction SilentlyContinue) {
-        Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
-    }
-}";
+                ? BuildRestoreAutoUpdateScript()
+                : BuildStopAutoUpdateScript();
 
             await RunElevatedScriptAsync(script, waitForExit: true);
         }
 
         public static async Task TriggerImmediateUpdateAsync()
         {
-            string script = @"# Ensure auto-update policy not blocking
-$p='HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU'
-if (Test-Path $p) {
-    Remove-ItemProperty -Path $p -Name 'NoAutoUpdate' -ErrorAction SilentlyContinue
-    Remove-ItemProperty -Path $p -Name 'AUOptions'    -ErrorAction SilentlyContinue
-}
-
-# Start required services
-foreach ($svc in 'wuauserv','UsoSvc','BITS','DoSvc') {
-    if (Get-Service -Name $svc -ErrorAction SilentlyContinue) {
-        Set-Service -Name $svc -StartupType Manual -ErrorAction SilentlyContinue
-        Start-Service -Name $svc -ErrorAction SilentlyContinue
-    }
-}
+            string script = BuildRestoreAutoUpdateScript() + @"
 Start-Sleep   -Seconds 2
 
 # Trigger Windows 10/11 foreground scan first, then keep older command fallback.
@@ -139,6 +331,103 @@ if (Get-Command wuauclt.exe -ErrorAction SilentlyContinue) {
 Start-Process 'ms-settings:windowsupdate' -ErrorAction SilentlyContinue";
 
             await RunElevatedScriptAsync(script, waitForExit: true);
+        }
+
+        private static string BuildStopAutoUpdateScript()
+        {
+            return @"$wu='HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate'
+if (!(Test-Path $wu)) { New-Item -Path $wu -Force | Out-Null }
+$p=Join-Path $wu 'AU'
+if (!(Test-Path $p)) { New-Item -Path $p -Force | Out-Null }
+New-ItemProperty -Path $p -Name 'NoAutoUpdate' -Value 1 -PropertyType DWord -Force | Out-Null
+New-ItemProperty -Path $p -Name 'AUOptions' -Value 1 -PropertyType DWord -Force | Out-Null
+
+$tasks = @(
+    '\Microsoft\Windows\WindowsUpdate\Scheduled Start',
+    '\Microsoft\Windows\WindowsUpdate\sih',
+    '\Microsoft\Windows\WindowsUpdate\sihboot',
+    '\Microsoft\Windows\UpdateOrchestrator\Schedule Scan',
+    '\Microsoft\Windows\UpdateOrchestrator\Schedule Scan Static Task',
+    '\Microsoft\Windows\UpdateOrchestrator\USO_UxBroker',
+    '\Microsoft\Windows\UpdateOrchestrator\Maintenance Install',
+    '\Microsoft\Windows\UpdateOrchestrator\Reboot',
+    '\Microsoft\Windows\UpdateOrchestrator\Reboot_AC',
+    '\Microsoft\Windows\UpdateOrchestrator\Reboot_Battery',
+    '\Microsoft\Windows\UpdateOrchestrator\Refresh Settings'
+)
+foreach ($task in $tasks) {
+    & schtasks.exe /Change /TN $task /Disable 2>$null | Out-Null
+}
+
+foreach ($svc in 'WaaSMedicSvc','UsoSvc','wuauserv','BITS','DoSvc') {
+    if (Get-Service -Name $svc -ErrorAction SilentlyContinue) {
+        Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
+        Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue
+    }
+
+    $svcPath = ""HKLM:\SYSTEM\CurrentControlSet\Services\$svc""
+    if (Test-Path $svcPath) {
+        Set-ItemProperty -Path $svcPath -Name 'Start' -Value 4 -ErrorAction SilentlyContinue
+    }
+}";
+        }
+
+        private static string BuildRestoreAutoUpdateScript()
+        {
+            return @"$p='HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU'
+if (Test-Path $p) {
+    Remove-ItemProperty -Path $p -Name 'NoAutoUpdate' -ErrorAction SilentlyContinue
+    Remove-ItemProperty -Path $p -Name 'AUOptions' -ErrorAction SilentlyContinue
+}
+
+$tasks = @(
+    '\Microsoft\Windows\WindowsUpdate\Scheduled Start',
+    '\Microsoft\Windows\WindowsUpdate\sih',
+    '\Microsoft\Windows\WindowsUpdate\sihboot',
+    '\Microsoft\Windows\UpdateOrchestrator\Schedule Scan',
+    '\Microsoft\Windows\UpdateOrchestrator\Schedule Scan Static Task',
+    '\Microsoft\Windows\UpdateOrchestrator\USO_UxBroker',
+    '\Microsoft\Windows\UpdateOrchestrator\Maintenance Install',
+    '\Microsoft\Windows\UpdateOrchestrator\Reboot',
+    '\Microsoft\Windows\UpdateOrchestrator\Reboot_AC',
+    '\Microsoft\Windows\UpdateOrchestrator\Reboot_Battery',
+    '\Microsoft\Windows\UpdateOrchestrator\Refresh Settings'
+)
+foreach ($task in $tasks) {
+    & schtasks.exe /Change /TN $task /Enable 2>$null | Out-Null
+}
+
+$serviceStartupTypes = @{
+    wuauserv = 'Manual'
+    UsoSvc = 'Automatic'
+    BITS = 'Manual'
+    DoSvc = 'Automatic'
+    WaaSMedicSvc = 'Manual'
+}
+$serviceStartValues = @{
+    wuauserv = 3
+    UsoSvc = 2
+    BITS = 3
+    DoSvc = 2
+    WaaSMedicSvc = 3
+}
+foreach ($entry in $serviceStartupTypes.GetEnumerator()) {
+    $svc = $entry.Key
+    if (Get-Service -Name $svc -ErrorAction SilentlyContinue) {
+        Set-Service -Name $svc -StartupType $entry.Value -ErrorAction SilentlyContinue
+    }
+
+    $svcPath = ""HKLM:\SYSTEM\CurrentControlSet\Services\$svc""
+    if (Test-Path $svcPath) {
+        Set-ItemProperty -Path $svcPath -Name 'Start' -Value $serviceStartValues[$svc] -ErrorAction SilentlyContinue
+    }
+}
+
+foreach ($svc in 'BITS','DoSvc','wuauserv','UsoSvc') {
+    if (Get-Service -Name $svc -ErrorAction SilentlyContinue) {
+        Start-Service -Name $svc -ErrorAction SilentlyContinue
+    }
+}";
         }
 
         private static bool? TryGetDefenderRealtimeStatusFromPowerShell()

@@ -2052,6 +2052,14 @@
                                                         Height="28"
                                                         Padding="7,0"
                                                         Margin="0,0,4,0"
+                                                        Content="测试"
+                                                        ToolTip="测试此档案的中转是否可达"
+                                                        Command="{Binding DataContext.TestCodexProfileRelayCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                        CommandParameter="{Binding}" />
+                                                <Button Style="{StaticResource CodexCompactGhostButton}"
+                                                        Height="28"
+                                                        Padding="7,0"
+                                                        Margin="0,0,4,0"
                                                         Content="刷新"
                                                         Command="{Binding DataContext.RefreshCodexProfileCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                         CommandParameter="{Binding}" />

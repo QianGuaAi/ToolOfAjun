@@ -354,7 +354,9 @@ function Assert-MemoryIndexReferencesExist {
 
     # 只校验记忆索引的长期路径引用：反引号包裹、且以 docs/、.agents/、.codex/、scripts/ 开头。
     # 裸文件名、章节名、通配符和源码 glob 故意跳过，避免把说明文字误判为路径。
-    $matches = [regex]::Matches($memoryIndex, '`((?:docs[\\/]|\.agents[\\/]|\.codex[\\/]|scripts[\\/])[^`]+)`')
+    $backtick = [string][char]96
+    $referencePattern = $backtick + "((?:docs[\\/]|\.agents[\\/]|\.codex[\\/]|scripts[\\/])[^" + $backtick + "]+)" + $backtick
+    $matches = [regex]::Matches($memoryIndex, $referencePattern)
     $missing = @()
     $seen = @{}
 
@@ -376,7 +378,98 @@ function Assert-MemoryIndexReferencesExist {
     }
 
     if ($missing.Count -gt 0) {
-        throw "docs memory index references missing path(s): $($missing -join ', ')"
+        throw ("docs memory index references missing path(s): " + ($missing -join ", "))
+    }
+}
+
+function Assert-AutoUpdateStopReadbackCoverage {
+    $sourcePath = Join-Path $repoRoot "src\MyTools\Services\WindowsSecurityService.cs"
+    $source = Get-Content -LiteralPath $sourcePath -Raw -Encoding UTF8
+
+    $requiredServices = @(
+        "wuauserv",
+        "UsoSvc",
+        "BITS",
+        "DoSvc",
+        "WaaSMedicSvc"
+    )
+    foreach ($service in $requiredServices) {
+        $count = [regex]::Matches($source, [regex]::Escape($service)).Count
+        if ($count -lt 2) {
+            throw "Windows Update stop service $service must appear in both stop handling and readback coverage."
+        }
+    }
+
+    if (-not $source.Contains("AreExistingServicesDisabled(AutoUpdateBlockingServices)")) {
+        throw "Auto-update stop success must read back disabled core service state."
+    }
+    if (-not $source.Contains("AreExistingScheduledTasksDisabled(AutoUpdateScheduledTasks)")) {
+        throw "Auto-update stop success must read back disabled scheduled task state."
+    }
+    if (-not $source.Contains("AreExistingScheduledTasksEnabled(AutoUpdateScheduledTasks)")) {
+        throw "Auto-update restore success must read back enabled scheduled task state."
+    }
+
+    $requiredTasks = @(
+        "\Microsoft\Windows\WindowsUpdate\Scheduled Start",
+        "\Microsoft\Windows\WindowsUpdate\sih",
+        "\Microsoft\Windows\WindowsUpdate\sihboot",
+        "\Microsoft\Windows\UpdateOrchestrator\Schedule Scan",
+        "\Microsoft\Windows\UpdateOrchestrator\Schedule Scan Static Task",
+        "\Microsoft\Windows\UpdateOrchestrator\USO_UxBroker",
+        "\Microsoft\Windows\UpdateOrchestrator\Maintenance Install",
+        "\Microsoft\Windows\UpdateOrchestrator\Reboot",
+        "\Microsoft\Windows\UpdateOrchestrator\Reboot_AC",
+        "\Microsoft\Windows\UpdateOrchestrator\Reboot_Battery",
+        "\Microsoft\Windows\UpdateOrchestrator\Refresh Settings"
+    )
+    foreach ($task in $requiredTasks) {
+        $count = [regex]::Matches($source, [regex]::Escape($task)).Count
+        if ($count -lt 2) {
+            throw "Windows Update scheduled task $task must appear in both stop handling and readback coverage."
+        }
+    }
+}
+
+function Assert-JunkCleanupScanSafety {
+    function Join-CodePointString {
+        param([int[]]$CodePoints)
+        return -join ($CodePoints | ForEach-Object { [string][char]$_ })
+    }
+
+    $servicePath = Join-Path $repoRoot "src\MyTools\Services\JunkCleanupService.cs"
+    $viewModelPath = Join-Path $repoRoot "src\MyTools\ViewModels\MainViewModel.cs"
+    $viewPath = Join-Path $repoRoot "src\MyTools\Views\SystemOptimizationView.xaml"
+
+    $service = Get-Content -LiteralPath $servicePath -Raw -Encoding UTF8
+    $viewModel = Get-Content -LiteralPath $viewModelPath -Raw -Encoding UTF8
+    $view = Get-Content -LiteralPath $viewPath -Raw -Encoding UTF8
+
+    $exportReportText = Join-CodePointString @(0x5BFC, 0x51FA, 0x62A5, 0x544A)
+    $preflightReportText = Join-CodePointString @(0x9884, 0x68C0, 0x62A5, 0x544A)
+    $beforeCleanupReportText = Join-CodePointString @(0x6E05, 0x7406, 0x524D, 0x62A5, 0x544A)
+    foreach ($forbiddenToken in @("ExportJunkCleanupPlanCommand", "BuildJunkCleanupPlanText", $exportReportText, $preflightReportText, $beforeCleanupReportText)) {
+        if ($viewModel.Contains($forbiddenToken) -or $view.Contains($forbiddenToken)) {
+            throw ("Junk cleanup report export entry must stay removed; found " + $forbiddenToken + ".")
+        }
+    }
+
+    foreach ($token in @("JunkScanStepCount = 11", "WindowsErrorReports", "CrashDumps", "SafetyBoundary", "Evidence", "BuildBrowserCacheRoots", "RunAdminCleanupScriptAsync(pair.Key, pair.Value", "BuildPowerShellStringArray", "`$targets = ", "Invoke-SafeFileCleanup -Root `$target -Targets `$targets", "foreach (`$targetPath in `$Targets)", "Test-PathInsideRoot", "Test-ReparsePoint", "Invoke-SafeFileCleanup", "FileAttributes.ReparsePoint")) {
+        if (-not $service.Contains($token)) {
+            throw ("Junk cleanup scan safety token missing from service: " + $token)
+        }
+    }
+
+    foreach ($bindingToken in @("SafetyBoundary", "Evidence", "ScrollViewer.HorizontalScrollBarVisibility")) {
+        if (-not $view.Contains($bindingToken)) {
+            throw ("Junk cleanup scan grid missing binding token: " + $bindingToken)
+        }
+    }
+
+    foreach ($forbiddenToken in @("Remove-Item -LiteralPath `$_.FullName -Recurse", "Get-ChildItem -LiteralPath `$target -Force -Recurse")) {
+        if ($service.Contains($forbiddenToken)) {
+            throw ("Junk cleanup elevated script contains unsafe old recursive token: " + $forbiddenToken)
+        }
     }
 }
 
@@ -387,6 +480,72 @@ if ($runAll -or $Quick) {
 
     Invoke-Step "startup responsiveness guards" $repoRoot {
         Assert-StartupResponsivenessGuards
+    }
+
+    Invoke-Step "auto update stop readback coverage" $repoRoot {
+        Assert-AutoUpdateStopReadbackCoverage
+    }
+
+    Invoke-Step "auto optimize plan safety" $repoRoot {
+        $servicePath = Join-Path $repoRoot "src\MyTools\Services\SystemOptimizationService.cs"
+        $viewModelPath = Join-Path $repoRoot "src\MyTools\ViewModels\MainViewModel.cs"
+        $viewPath = Join-Path $repoRoot "src\MyTools\Views\SystemOptimizationView.xaml"
+
+        $service = Get-Content -LiteralPath $servicePath -Raw -Encoding UTF8
+        $viewModel = Get-Content -LiteralPath $viewModelPath -Raw -Encoding UTF8
+        $view = Get-Content -LiteralPath $viewPath -Raw -Encoding UTF8
+
+        if (-not $service.Contains("const int totalSteps = 14")) {
+            throw "Auto optimize scan must keep the documented 14-step plan."
+        }
+
+        foreach ($stepKey in @("StepKeyDeliveryOptimizationCache", "StepKeyWindowsErrorReports", "StepKeyCrashDumps", "StepKeyComponentStoreCleanup")) {
+            if (-not $service.Contains($stepKey)) {
+                throw "Auto optimize scan is missing deeper step key: $stepKey"
+            }
+        }
+
+        $doubleAmpersand = ([string][char]38) + ([string][char]38)
+        $defaultSelectionToken = "IsSelected = canOptimize " + $doubleAmpersand + " defaultSelected"
+        foreach ($token in @("RiskLevel", "SafetyBoundary", "Evidence", $defaultSelectionToken, "FileAttributes.ReparsePoint", "IsPathInsideRoot(file, safeRoot)", "ElevatedScriptTimeoutMs", "process.ExitCode != 0", "BuildSafeDeleteScriptPrelude", "Test-PathInsideRoot", "Test-ReparsePoint")) {
+            if (-not $service.Contains($token)) {
+                throw "Auto optimize safety token missing from service: $token"
+            }
+        }
+
+        foreach ($forbiddenToken in @("-Recurse -File", "-Recurse -Directory", "Remove-Item -LiteralPath `$_.FullName -Recurse")) {
+            if ($service.Contains($forbiddenToken)) {
+                throw "Auto optimize elevated cleanup script contains unsafe or PS2-incompatible token: $forbiddenToken"
+            }
+        }
+
+        $quote = [char]34
+        $highRiskDefaultPattern = "RiskHigh,\s*$quote[^$quote]*$quote,\s*[^,]+,\s*true"
+        $highRiskDefaultSelected = [regex]::Matches($service, $highRiskDefaultPattern, [System.Text.RegularExpressions.RegexOptions]::Singleline)
+        if ($highRiskDefaultSelected.Count -gt 0) {
+            throw "High-risk auto optimize items must not be selected by default."
+        }
+
+        $selectedFilterToken = "Where(x => x.CanOptimize " + $doubleAmpersand + " x.IsSelected)"
+        if (-not $viewModel.Contains($selectedFilterToken)) {
+            throw "Auto optimize selected-plan ViewModel guard missing: selected item filter"
+        }
+        if (-not $viewModel.Contains("BuildAutoOptimizeConfirmMessage")) {
+            throw "Auto optimize selected-plan ViewModel guard missing: confirm message builder"
+        }
+        if (-not $viewModel.Contains("DetachAutoOptimizePlanItems")) {
+            throw "Auto optimize selected-plan ViewModel guard missing: plan item detach"
+        }
+
+        foreach ($bindingToken in @("IsSelected", "RiskLevel", "SafetyBoundary", "Evidence")) {
+            if (-not $view.Contains($bindingToken)) {
+                throw "Auto optimize scan grid missing binding token: $bindingToken"
+            }
+        }
+    }
+
+    Invoke-Step "junk cleanup scan safety" $repoRoot {
+        Assert-JunkCleanupScanSafety
     }
 }
 
@@ -410,7 +569,10 @@ if ($runAll -or $Quick) {
 
         $modelsMethod = $compatType.GetMethod("BuildModelsResponseJson", [Reflection.BindingFlags]"Public,Static")
         $modelsJson = [string]$modelsMethod.Invoke($null, @("gpt-5.5"))
-        if (-not $modelsJson.Contains('"object":"list"') -or -not $modelsJson.Contains('"id":"gpt-5.5"')) {
+        $jsonQuote = [string][char]34
+        $modelsObjectNeedle = $jsonQuote + "object" + $jsonQuote + ":" + $jsonQuote + "list" + $jsonQuote
+        $modelsIdNeedle = $jsonQuote + "id" + $jsonQuote + ":" + $jsonQuote + "gpt-5.5" + $jsonQuote
+        if (-not $modelsJson.Contains($modelsObjectNeedle) -or -not $modelsJson.Contains($modelsIdNeedle)) {
             throw "Cursor-compatible models fallback did not return an OpenAI-style model list."
         }
 
@@ -452,9 +614,9 @@ if ($runAll -or $Quick) {
 
         $responsesBody = [Text.Encoding]::UTF8.GetString([byte[]]$buildArguments[2])
         if (-not [bool]$buildArguments[3]) {
-            throw "Cursor compatibility should preserve the client's streaming preference."
+            throw "Cursor compatibility should preserve client streaming preference."
         }
-        if (-not $responsesBody.Contains('"input"') -or -not $responsesBody.Contains('"tools"') -or -not $responsesBody.Contains('"max_output_tokens":7')) {
+        if (-not $responsesBody.Contains($jsonQuote + "input" + $jsonQuote) -or -not $responsesBody.Contains($jsonQuote + "tools" + $jsonQuote) -or -not $responsesBody.Contains($jsonQuote + "max_output_tokens" + $jsonQuote + ":7")) {
             throw "Converted Responses API request body lost input, tools, or token limit fields."
         }
 
@@ -467,7 +629,7 @@ if ($runAll -or $Quick) {
         }
 
         $completionJson = [string]$completionArguments[2]
-        if (-not $completionJson.Contains('"object":"chat.completion"') -or -not $completionJson.Contains('"content":"pong"') -or -not $completionJson.Contains('"total_tokens":2')) {
+        if (-not $completionJson.Contains($jsonQuote + "object" + $jsonQuote + ":" + $jsonQuote + "chat.completion" + $jsonQuote) -or -not $completionJson.Contains($jsonQuote + "content" + $jsonQuote + ":" + $jsonQuote + "pong" + $jsonQuote) -or -not $completionJson.Contains($jsonQuote + "total_tokens" + $jsonQuote + ":2")) {
             throw "Converted chat/completions JSON lost object type, content, or usage fields."
         }
 
@@ -479,7 +641,7 @@ if ($runAll -or $Quick) {
         }
 
         $ssePayload = [string]$sseArguments[2]
-        if (-not $ssePayload.Contains('"object":"chat.completion.chunk"') -or -not $ssePayload.Contains('"content":"pong"') -or -not $ssePayload.Contains('data: [DONE]')) {
+        if (-not $ssePayload.Contains($jsonQuote + "object" + $jsonQuote + ":" + $jsonQuote + "chat.completion.chunk" + $jsonQuote) -or -not $ssePayload.Contains($jsonQuote + "content" + $jsonQuote + ":" + $jsonQuote + "pong" + $jsonQuote) -or -not $ssePayload.Contains("data: [DONE]")) {
             throw "Converted chat/completions SSE lost chunk content or DONE marker."
         }
     }
@@ -663,7 +825,8 @@ if ($runAll -or $Quick) {
                 [string]$CellRef
             )
 
-            $cellNode = $Sheet.SelectSingleNode("//x:c[@r='$CellRef']", $SheetNs)
+            $cellXPath = "//x:c[@r=" + [char]39 + $CellRef + [char]39 + "]"
+            $cellNode = $Sheet.SelectSingleNode($cellXPath, $SheetNs)
             if ($null -eq $cellNode) {
                 throw "Cell $CellRef was not found in worksheet."
             }
@@ -690,7 +853,8 @@ if ($runAll -or $Quick) {
                 [string]$CellRef
             )
 
-            $cellNode = $Sheet.SelectSingleNode("//x:c[@r='$CellRef']", $SheetNs)
+            $cellXPath = "//x:c[@r=" + [char]39 + $CellRef + [char]39 + "]"
+            $cellNode = $Sheet.SelectSingleNode($cellXPath, $SheetNs)
             if ($null -eq $cellNode) {
                 throw "Cell $CellRef was not found in worksheet."
             }
@@ -704,22 +868,22 @@ if ($runAll -or $Quick) {
 
         $weekendRestHeaderCell = Get-CellText $sheetDoc $ns "AJ1"
         if ($weekendRestHeaderCell -ne $weekendRestHeader) {
-            throw "Schedule export should write weekend-rest header to AJ1, got '$weekendRestHeaderCell'."
+            throw "Schedule export should write weekend-rest header to AJ1, got $weekendRestHeaderCell."
         }
 
         $weekendRestValue = Get-CellText $sheetDoc $ns "AJ5"
         if ($weekendRestValue -ne "1.5") {
-            throw "Schedule export should count one full and one half weekend rest day in AJ5, got '$weekendRestValue'."
+            throw "Schedule export should count one full and one half weekend rest day in AJ5, got $weekendRestValue."
         }
 
         $availableWorkHeaderCell = Get-CellText $sheetDoc $ns "AK1"
         if ($availableWorkHeaderCell -ne $availableWorkHeader) {
-            throw "Schedule export should write available-work header to AK1, got '$availableWorkHeaderCell'."
+            throw "Schedule export should write available-work header to AK1, got $availableWorkHeaderCell."
         }
 
         $availableWorkValue = Get-CellText $sheetDoc $ns "AK5"
         if ($availableWorkValue -ne "26") {
-            throw "Schedule export should count unset cells plus current work cells as available work in AK5, got '$availableWorkValue'."
+            throw "Schedule export should count unset cells plus current work cells as available work in AK5, got $availableWorkValue."
         }
 
         $smallFill = Get-FillColorForCell $sheetDoc $ns $stylesDoc $styleNs "B5"
@@ -938,7 +1102,7 @@ if ($runAll -or $Quick) {
         )
         foreach ($token in $forbiddenExportGateTokens) {
             if ($scheduleViewModelSource.Contains($token)) {
-                throw "Schedule export should not be gated by auto-generation state; found forbidden token '$token' in ScheduleViewModel.cs."
+                throw "Schedule export should not be gated by auto-generation state; found forbidden token $token in ScheduleViewModel.cs."
             }
         }
 
@@ -998,7 +1162,7 @@ if ($runAll -or $Quick) {
         )
         foreach ($token in $requiredScheduleGridTokens) {
             if (-not $schedulePageSource.Contains($token)) {
-                throw "Schedule grid should place available-work after weekend-rest and move delete button after it; missing token '$token'."
+                throw "Schedule grid should place available-work after weekend-rest and move delete button after it; missing token $token."
             }
         }
 
@@ -1067,7 +1231,7 @@ if ($runAll -or $Quick) {
         $targets.SetValue([System.ValueTuple[int,int]]::new(1, 1), 2)
 
         $fillMethod = $viewModelType.GetMethod("FillCellsFromSource", [Reflection.BindingFlags]"Public,Instance")
-        $fillArguments = New-Object 'object[]' 3
+        $fillArguments = [object[]]::new(3)
         $fillArguments[0] = [int]0
         $fillArguments[1] = [int]0
         $fillArguments[2] = $targets
@@ -1101,7 +1265,7 @@ if ($runAll -or $Quick) {
         }
 
         $clearMethod = $viewModelType.GetMethod("ClearCells", [Reflection.BindingFlags]"Public,Instance")
-        $clearArguments = New-Object 'object[]' 1
+        $clearArguments = [object[]]::new(1)
         $clearArguments[0] = $targets
         $cleared = [int]$clearMethod.Invoke($viewModel, $clearArguments)
         if ($cleared -ne 3) {
