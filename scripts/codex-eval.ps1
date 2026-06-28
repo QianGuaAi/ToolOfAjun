@@ -473,6 +473,35 @@ function Assert-JunkCleanupScanSafety {
     }
 }
 
+function Assert-ScreenshotSettingsPersistence {
+    $settingsPath = Join-Path $repoRoot "src\MyTools\Services\AppSettingsService.cs"
+    $viewModelPath = Join-Path $repoRoot "src\MyTools\ViewModels\MainViewModel.cs"
+    $settings = Get-Content -LiteralPath $settingsPath -Raw -Encoding UTF8
+    $viewModel = Get-Content -LiteralPath $viewModelPath -Raw -Encoding UTF8
+
+    foreach ($token in @("IsGifRecordingMode", "RecordingFrameRateOption", "RecordingQualityOption")) {
+        if (-not $settings.Contains($token)) {
+            throw "AppSettings is missing screenshot recording setting: $token"
+        }
+    }
+
+    foreach ($token in @(
+        "_suppressRecordingBehaviorAutoSave",
+        "PersistRecordingBehaviorAsync",
+        "IsGifRecordingMode = settings.IsGifRecordingMode",
+        "RecordingFrameRateOption = settings.RecordingFrameRateOption",
+        "RecordingQualityOption = settings.RecordingQualityOption",
+        "settings.IsGifRecordingMode = IsGifRecordingMode",
+        "settings.RecordingFrameRateOption = RecordingFrameRateOption",
+        "settings.RecordingQualityOption = RecordingQualityOption",
+        "settings.AudioRecordingFormat = AudioRecordingFormat.FromExtension(AudioRecordingFormatOption).Extension"
+    )) {
+        if (-not $viewModel.Contains($token)) {
+            throw "Screenshot settings persistence path missing token: $token"
+        }
+    }
+}
+
 if ($runAll -or $Quick) {
     Invoke-Step "loop memory docs" $repoRoot {
         Assert-LoopMemoryDocs
@@ -546,6 +575,10 @@ if ($runAll -or $Quick) {
 
     Invoke-Step "junk cleanup scan safety" $repoRoot {
         Assert-JunkCleanupScanSafety
+    }
+
+    Invoke-Step "screenshot settings persistence" $repoRoot {
+        Assert-ScreenshotSettingsPersistence
     }
 }
 

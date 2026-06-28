@@ -128,6 +128,12 @@ namespace MyTools.Services
         public List<CodexProfileSettings> CodexProfiles { get; set; } = new List<CodexProfileSettings>();
         public string RecordingOutputFolder { get; set; } = string.Empty;
         public string AudioOutputFolder { get; set; } = string.Empty;
+        /// <summary>区域录像输出模式：false=MP4，true=GIF。</summary>
+        public bool IsGifRecordingMode { get; set; }
+        /// <summary>录像帧率选项：15 FPS / 30 FPS / 60 FPS。</summary>
+        public string RecordingFrameRateOption { get; set; } = "30 FPS";
+        /// <summary>MP4 画质选项：体积优先 / 均衡 / 高清。</summary>
+        public string RecordingQualityOption { get; set; } = "均衡";
         /// <summary>录音输出格式：wav / m4a / mp3。</summary>
         public string AudioRecordingFormat { get; set; } = "wav";
         public List<RecentPlaylistSettings> RecentPlaylists { get; set; } = new List<RecentPlaylistSettings>();

@@ -1875,6 +1875,7 @@ namespace MyTools.ViewModels
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(RecordingModeText));
                 OnPropertyChanged(nameof(RecordingModeHint));
+                SafeFireAndForget(PersistRecordingBehaviorAsync());
             }
         }
 
@@ -1903,6 +1904,7 @@ namespace MyTools.ViewModels
 
                 _recordingFrameRateOption = option;
                 OnPropertyChanged();
+                SafeFireAndForget(PersistRecordingBehaviorAsync());
             }
         }
 
@@ -1919,6 +1921,7 @@ namespace MyTools.ViewModels
 
                 _recordingQualityOption = option;
                 OnPropertyChanged();
+                SafeFireAndForget(PersistRecordingBehaviorAsync());
             }
         }
 
@@ -9062,11 +9065,22 @@ namespace MyTools.ViewModels
                 await Application.Current.Dispatcher.InvokeAsync(() =>
                 {
                     _suppressScreenshotAutoSave = true;
-                    _pendingModifiers = settings.ScreenshotHotkey.Modifiers;
-                    _pendingKey = settings.ScreenshotHotkey.Key;
-                    ShowEditorAfterCapture = settings.ShowEditorAfterCapture;
-                    ScreenshotMode = settings.ScreenshotMode;
-                    _suppressScreenshotAutoSave = false;
+                    _suppressRecordingBehaviorAutoSave = true;
+                    try
+                    {
+                        _pendingModifiers = settings.ScreenshotHotkey.Modifiers;
+                        _pendingKey = settings.ScreenshotHotkey.Key;
+                        ShowEditorAfterCapture = settings.ShowEditorAfterCapture;
+                        ScreenshotMode = settings.ScreenshotMode;
+                        IsGifRecordingMode = settings.IsGifRecordingMode;
+                        RecordingFrameRateOption = settings.RecordingFrameRateOption;
+                        RecordingQualityOption = settings.RecordingQualityOption;
+                    }
+                    finally
+                    {
+                        _suppressScreenshotAutoSave = false;
+                        _suppressRecordingBehaviorAutoSave = false;
+                    }
                     ScreenshotHotkeyText = string.IsNullOrWhiteSpace(settings.ScreenshotHotkey.DisplayText)
                         ? HotkeyService.BuildDisplayText(_pendingModifiers, _pendingKey)
                         : settings.ScreenshotHotkey.DisplayText;
@@ -9103,6 +9117,7 @@ namespace MyTools.ViewModels
         }
 
         private bool _suppressScreenshotAutoSave;
+        private bool _suppressRecordingBehaviorAutoSave;
         /// <summary>静默持久化截图行为（模式 / 是否打开编辑器），不弹"已保存"对话框。</summary>
         private async Task PersistScreenshotBehaviorAsync()
         {
@@ -9121,6 +9136,25 @@ namespace MyTools.ViewModels
             }
         }
 
+        /// <summary>静默持久化录像行为（GIF/MP4、帧率、画质），不弹"已保存"对话框。</summary>
+        private async Task PersistRecordingBehaviorAsync()
+        {
+            if (_suppressRecordingBehaviorAutoSave) return;
+            try
+            {
+                await AppSettingsService.UpdateAsync(settings =>
+                {
+                    settings.IsGifRecordingMode = IsGifRecordingMode;
+                    settings.RecordingFrameRateOption = RecordingFrameRateOption;
+                    settings.RecordingQualityOption = RecordingQualityOption;
+                });
+            }
+            catch (Exception ex)
+            {
+                AppLogService.Warning("PersistRecordingBehavior failed: {Msg}", ex.Message);
+            }
+        }
+
         private async Task SaveScreenshotSettingsAsync()
         {
             try
@@ -9136,6 +9170,10 @@ namespace MyTools.ViewModels
                     };
                     settings.ShowEditorAfterCapture = ShowEditorAfterCapture;
                     settings.ScreenshotMode = ScreenshotMode;
+                    settings.IsGifRecordingMode = IsGifRecordingMode;
+                    settings.RecordingFrameRateOption = RecordingFrameRateOption;
+                    settings.RecordingQualityOption = RecordingQualityOption;
+                    settings.AudioRecordingFormat = AudioRecordingFormat.FromExtension(AudioRecordingFormatOption).Extension;
                 });
 
                 var registered = await TryRegisterHotkeyAsync(_pendingModifiers, _pendingKey, true);

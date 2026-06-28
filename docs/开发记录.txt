@@ -2017,3 +2017,14 @@
 - `JunkCleanupService` 的安全枚举跳过 junction/symlink；普通目录候选按安全枚举逐个回收文件，提权清理脚本新增根内路径校验、reparse point 跳过，并只处理本次已勾选候选路径。
 - 垃圾清理结果表显式启用行/列虚拟化，降低大量缓存候选项时的界面卡顿风险。
 - `scripts/codex-eval.ps1 -Quick` 新增 `junk cleanup scan safety` 门禁，防止报告导出入口、边界证据列、按已勾选 Targets 清理和脚本安全校验回退。
+
+## [2026-06-27] 重新打包安装程序
+- 重新执行完整验证入口 `powershell -ExecutionPolicy Bypass -File scripts\codex-eval.ps1`，覆盖 Release 构建、回归检查与 installer pipeline，结果通过。
+- 重新生成安装包：`artifacts\installer\MyToolsSetup.exe`，版本 `2026.6.24.2`，大小 47,098,880 bytes，SHA256 = `D6BC0E790887BE357B6C973905F833717B75453C9042D1383C899CE05C47228E`。
+- 同步生成 payload：`artifacts\installer\MyToolsPayload.zip`，大小 46,900,884 bytes，SHA256 = `80ECA9E724D4F22411FB31E6B1F7A80C0D78FAE3C848D7C0CED8972021B5E396`；验证已确认安装器嵌入 payload 与卸载器资源，并包含主程序、配置、PowerShell 脚本、NativeBinaries 说明和 ffmpeg。
+
+## [2026-06-27] 修复截图工具设置不持久
+- `AppSettings` 新增区域录像输出模式、录像帧率和 MP4 画质字段，截图设置页切换 MP4/GIF、帧率或画质后会异步写入程序同目录 `MyTools.settings.json`，重启后自动回填。
+- “保存设置”现在同时写回截图范围、截图后打开编辑器、区域录像输出模式、录像帧率、MP4 画质和录音格式，避免截图工具设置只停留在本次运行内存里。
+- `scripts/codex-eval.ps1 -Quick` 新增 `screenshot settings persistence` 门禁，检查截图工具设置字段、加载回填和保存链路。
+- 验证：`.dotnet\dotnet.exe build src\MyTools\MyTools.csproj -c Release` 通过，0 warning / 0 error；`powershell -ExecutionPolicy Bypass -File scripts\codex-eval.ps1 -Quick` 通过。
