@@ -2028,3 +2028,8 @@
 - “保存设置”现在同时写回截图范围、截图后打开编辑器、区域录像输出模式、录像帧率、MP4 画质和录音格式，避免截图工具设置只停留在本次运行内存里。
 - `scripts/codex-eval.ps1 -Quick` 新增 `screenshot settings persistence` 门禁，检查截图工具设置字段、加载回填和保存链路。
 - 验证：`.dotnet\dotnet.exe build src\MyTools\MyTools.csproj -c Release` 通过，0 warning / 0 error；`powershell -ExecutionPolicy Bypass -File scripts\codex-eval.ps1 -Quick` 通过。
+
+## [2026-06-28] 重新打包安装程序
+- 重新执行 installer 定向门禁 `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\codex-eval.ps1 -Installer -InstallerVersion 2026.6.28.0`，随后执行完整验证入口 `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\codex-eval.ps1 -InstallerVersion 2026.6.28.0`，均通过。
+- 重新生成安装包：`artifacts\installer\MyToolsSetup.exe`，版本 `2026.6.28.0`，大小 47,099,904 bytes，SHA256 = `42A800A6B8F1C151A4359F6A727BE75B00431A7C99FB447BB0604F1732942F8F`。
+- 同步生成 payload：`artifacts\installer\MyToolsPayload.zip`，大小 46,901,499 bytes，SHA256 = `D867518D7E26F13C8EB9C310DD07FC067AB0D3ED7C4B420E17CC3F92687E58E2`；验证已确认安装器嵌入 payload 与卸载器资源，并包含主程序、配置、PowerShell 脚本、NativeBinaries 说明和 ffmpeg。
