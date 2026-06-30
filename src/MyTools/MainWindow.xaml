@@ -94,7 +94,6 @@
                     <MenuItem Header="多媒体(_M)" Command="{Binding ShowMultimediaCommand}" Style="{StaticResource TopMenuItem}" />
                     <MenuItem Header="截图工具(_S)" Command="{Binding ShowScreenshotCommand}" Style="{StaticResource TopMenuItem}" />
                     <Separator />
-                    <MenuItem Header="SQL 导出(_Q)" Command="{Binding ShowSqlExportCommand}" Style="{StaticResource TopMenuItem}" />
                     <MenuItem Header="FRP 穿透(_F)" Command="{Binding ShowFrpCommand}" Style="{StaticResource TopMenuItem}" />
                     <MenuItem Header="Codex 配置(_C)" Command="{Binding ShowCodexProfilesCommand}" Style="{StaticResource TopMenuItem}" />
                     <MenuItem Header="文件验证(_V)" Command="{Binding ShowFileVerifyCommand}" Style="{StaticResource TopMenuItem}" />
@@ -127,10 +126,7 @@
                         <Setter Property="Visibility" Value="Collapsed" />
                         <Setter Property="ContentTemplate" Value="{x:Null}" />
                         <Style.Triggers>
-                            <DataTrigger Binding="{Binding CurrentModule}" Value="SqlExport">
-                                <Setter Property="Visibility" Value="Visible" />
-                                <Setter Property="ContentTemplate" Value="{StaticResource MainModulesViewTemplate}" />
-                            </DataTrigger>
+
                             <DataTrigger Binding="{Binding CurrentModule}" Value="Screenshot">
                                 <Setter Property="Visibility" Value="Visible" />
                                 <Setter Property="ContentTemplate" Value="{StaticResource MainModulesViewTemplate}" />

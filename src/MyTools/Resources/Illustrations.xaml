@@ -129,38 +129,6 @@
         </DrawingImage.Drawing>
     </DrawingImage>
 
-    <DrawingImage x:Key="SqlEmpty">
-        <DrawingImage.Drawing>
-            <DrawingGroup>
-                <GeometryDrawing Brush="{DynamicResource BrushHeaderGradientEnd}">
-                    <GeometryDrawing.Geometry>
-                        <RectangleGeometry Rect="0,0,160,120" RadiusX="14" RadiusY="14" />
-                    </GeometryDrawing.Geometry>
-                </GeometryDrawing>
-                <GeometryDrawing Brush="{DynamicResource BrushAccentBlue}">
-                    <GeometryDrawing.Geometry>
-                        <EllipseGeometry Center="80,34" RadiusX="34" RadiusY="14" />
-                    </GeometryDrawing.Geometry>
-                </GeometryDrawing>
-                <GeometryDrawing Brush="{DynamicResource BrushAccentBlue}">
-                    <GeometryDrawing.Geometry>
-                        <RectangleGeometry Rect="46,34,68,44" />
-                    </GeometryDrawing.Geometry>
-                </GeometryDrawing>
-                <GeometryDrawing Brush="{DynamicResource BrushAccentBlue}">
-                    <GeometryDrawing.Geometry>
-                        <EllipseGeometry Center="80,78" RadiusX="34" RadiusY="14" />
-                    </GeometryDrawing.Geometry>
-                </GeometryDrawing>
-                <GeometryDrawing Brush="White">
-                    <GeometryDrawing.Geometry>
-                        <PathGeometry Figures="M98,54 L118,54 L118,44 L136,60 L118,76 L118,66 L98,66 Z" />
-                    </GeometryDrawing.Geometry>
-                </GeometryDrawing>
-            </DrawingGroup>
-        </DrawingImage.Drawing>
-    </DrawingImage>
-
     <DrawingImage x:Key="ScreenshotEmpty">
         <DrawingImage.Drawing>
             <DrawingGroup>

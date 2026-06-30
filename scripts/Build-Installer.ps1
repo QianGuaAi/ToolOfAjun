@@ -1,6 +1,6 @@
 param(
     [string]$Configuration = "Release",
-    [string]$Version = "2026.6.24.2",
+    [string]$Version = "2026.6.30.0",
     [switch]$SkipFfmpeg
 )
 
@@ -18,15 +18,33 @@ $payloadZip = Join-Path $artifactsRoot "MyToolsPayload.zip"
 $setupOutput = Join-Path $repoRoot "src\MyTools.Installer\bin\$Configuration\net48\MyToolsSetup.exe"
 $setupArtifact = Join-Path $artifactsRoot "MyToolsSetup.exe"
 
+function Resolve-Dotnet {
+    $localDotnet = Join-Path $repoRoot ".dotnet\dotnet.exe"
+    if (Test-Path -LiteralPath $localDotnet) {
+        $env:DOTNET_ROOT = Join-Path $repoRoot ".dotnet"
+        $env:PATH = "$env:DOTNET_ROOT;$env:PATH"
+        return $localDotnet
+    }
+
+    $dotnetCommand = Get-Command dotnet -ErrorAction SilentlyContinue
+    if ($dotnetCommand) {
+        return $dotnetCommand.Source
+    }
+
+    throw "dotnet not found. Use repo-local .dotnet or add dotnet to PATH."
+}
+
+$dotnetExe = Resolve-Dotnet
+
 function Invoke-CheckedDotnetBuild {
     param(
         [Parameter(Mandatory = $true)]
         [string[]]$Arguments
     )
 
-    & dotnet @Arguments
+    & $script:dotnetExe @Arguments
     if ($LASTEXITCODE -ne 0) {
-        throw "dotnet build failed: dotnet $($Arguments -join ' ')"
+        throw "dotnet build failed: $script:dotnetExe $($Arguments -join ' ')"
     }
 }
 
@@ -46,10 +64,6 @@ $requiredFiles = @(
     "NativeBinaries\README.txt",
     "NativeBinaries\ffmpeg\README.txt"
 )
-
-if (-not $SkipFfmpeg) {
-    $requiredFiles += "NativeBinaries\ffmpeg\ffmpeg.exe"
-}
 
 foreach ($relativePath in $requiredFiles) {
     $source = Join-Path $mainOutput $relativePath

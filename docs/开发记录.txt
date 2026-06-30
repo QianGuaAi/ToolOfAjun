@@ -1,4 +1,135 @@
 # 开发记录
+## [2026-06-30] Native Codex active profile 改名同步
+- `Rename first profile...` 不再因目标是当前 active profile 而直接阻断；改名 action 会把 `active_json_path` 与当前 `active_display_name` 传给 `CodexProfileEditService::UpdateProfileMetadata()`。
+- `CodexProfileEditService` 在写回 DPAPI 保护的 `profiles.json` 后，如果目标档案原本是 active profile，会继续通过 `FileSystem::WriteUtf8FileAtomic()` 更新 `active.json` 的 `ActiveDisplayName`，并保留其它字段；若 `active.json` 同步失败，会返回“profiles 已改名但 active.json 未同步”的局部失败提示。
+- `scripts\native-eval.ps1 -Quick` 与 `scripts\codex-eval.ps1 -Quick` 新增守卫：要求 active rename 走 service 同步 `active.json`，并禁止旧的 active rename blocked 文案回归。
+- 同步更新 `AGENTS.md`、`docs\功能说明.md`、`docs\程序逻辑.md`、`docs\场景驱动开发\控件交互逻辑说明.md` 和 `src\MyTools.Native\README.md`。
+- 验证：`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\native-eval.ps1 -Quick` 通过；完整 `codex-eval` 待本批收口后一并重跑。
+
+## [2026-06-30] Native Codex .codexbox 菜单导入导出接入
+- Native 主窗口 `Tools / Codex Profiles` 子菜单新增 `Export .codexbox...` 与 `Import .codexbox...`；原导入/导出弹框待接入状态改为仅保留 `.codexbox conflict choice dialog pending`。
+- 导出流程由主窗口先弹保存路径，再要求输入两次一致且非空的加密密码；导入流程由主窗口先弹打开路径，再要求输入一次非空密码。用户取消路径、取消密码、密码为空或两次密码不一致时不会调用导入/导出 action。
+- Native UI 不直接处理 `CDXB`、PBKDF2、AES-CBC 或 HMAC 包格式，只把路径和密码交给 `CodexProfileModule::RunUiAction()`；导入冲突当前固定使用安全自动重命名策略，跳过/覆盖/重命名选择弹框仍待后续迁移。
+- 同步更新 `AGENTS.md`、`docs\功能说明.md`、`docs\程序逻辑.md`、`docs\场景驱动开发\控件交互逻辑说明.md` 和 `src\MyTools.Native\README.md`。
+- 验证：本次文档 worker 不运行全量构建，仅执行 `git diff -- docs AGENTS.md src\MyTools.Native\README.md` 自查。
+
+## [2026-06-30] Native Codex 显式菜单动作接入
+- Native 主窗口 `Tools / Codex Profiles` 改为子菜单，新增 `Open overview`、`Refresh summaries`、`Diff first profile`、`Backup current .codex folder`、`Apply first profile...`、`Import current folder...`、`Restore latest backup...`；后续已继续接入 `.codexbox` 导入/导出路径与密码弹框，冲突选择弹框仍待迁移。
+- `CodexProfileModule::RunUiAction()` 新增显式动作路由：刷新摘要、查看第一条可读档案与当前 `~\.codex` 的非正文差异、创建当前目录 DPAPI 备份、导入当前目录为 `Native current yyyyMMdd_HHmmss`、应用第一条可读档案、恢复最新 `.bak.dpapi`。
+- 应用档案、导入当前目录、恢复备份三类写入动作由 `MainWindow::ConfirmCodexProfileWrite()` 先弹 `MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2` 确认；用户取消时不调用 service。动作结果只通过 MessageBox 展示非敏感摘要，不显示 config/auth 正文或 token。
+- `scripts\native-eval.ps1 -Quick` 与 `scripts\codex-eval.ps1 -Quick` 更新 Native Codex 守卫：允许主窗口通过 `CodexProfileModule` 调用显式动作，但禁止主窗口直接调用底层 service；继续禁止 UI 动作层直接低层写文件、联网、启动进程或暴露 protected config/auth 字段。
+- 同步更新 `AGENTS.md`、`docs\功能说明.md`、`docs\程序逻辑.md`、`docs\场景驱动开发\控件交互逻辑说明.md` 和 `src\MyTools.Native\README.md`。
+- 验证：`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\native-eval.ps1 -Quick` 通过；`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\native-eval.ps1 -Unit` 通过；`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\codex-eval.ps1 -Quick` 通过，Release build 0 warning / 0 error；`git diff --check` 无格式错误；`.codexbox` service 严格敏感边界扫描无命中；主窗口未直接调用 Codex 底层 service；`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\native-eval.ps1 -Build` 因当前机器未安装 `cmake` / MSVC Build Tools 失败。
+
+## [2026-06-30] Native Codex .codexbox 加密包服务骨架
+- 新增 `CodexProfileBoxService::ExportBox()` / `ImportBox()`：导出时把 DPAPI 保护的档案内嵌 `config.toml` / `auth.json` 转成便携 `ConfigTomlBase64` / `AuthJsonBase64` 载荷，导入时将便携载荷重新用当前 Windows 用户 DPAPI 保护后合并入本机档案库；旧包若仍包含 DPAPI 字段，则仅在当前 Windows 用户可解密时重保护入库。
+- `.codexbox` 文件格式保持 WPF 兼容：`CDXB` 文件头、schema 1、16 字节 salt、PBKDF2-HMAC-SHA256 200000 次、16 字节 IV、AES-256-CBC + PKCS7、HMAC-SHA256 EtM，并在解密前用定时比较校验 MAC。
+- 导入冲突策略先由后续调用方选择跳过、覆盖或重命名；该服务骨架落地时仍是 service-only 状态；后续已接入显式导入/导出菜单，冲突选择弹框仍待迁移。
+- `scripts\native-eval.ps1 -Quick` 与 `scripts\codex-eval.ps1 -Quick` 扩展 `.codexbox` 守卫，检查 CMake 纳入该 service、包格式关键参数、CNG 加密原语、DPAPI 重保护、原子写入，以及窗口导航不得直接调用 `ExportBox()` / `ImportBox()`。
+- 同步更新 `AGENTS.md`、`docs\功能说明.md`、`docs\程序逻辑.md`、`docs\场景驱动开发\控件交互逻辑说明.md`、`docs\规划\启动基线-NativeShell-2026-06-30.md` 和 `src\MyTools.Native\README.md`。
+- 验证：`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\native-eval.ps1 -Quick` 通过；`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\native-eval.ps1 -Unit` 通过；`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\codex-eval.ps1 -Quick` 通过，Release build 0 warning / 0 error；`git diff --check` 无格式错误；敏感边界 `rg` 扫描无命中；`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\native-eval.ps1 -Build` 因当前机器未安装 `cmake` / MSVC Build Tools 失败。
+
+## [2026-06-30] Native Codex 元数据编辑服务骨架
+- 新增 `CodexProfileEditService::UpdateProfileMetadata()`：读取并解开 DPAPI 保护的 `%LOCALAPPDATA%\MyTools\Codex\profiles.json` 外层档案库，按 `DisplayName / Name` 定位目标 item。
+- 元数据编辑 service 可按调用方显式选择更新 `DisplayName / Name`、`Note`、`Remark`、`Tags`，改名时检查其它 item 是否已有同名显示名，避免后续按显示名定位出现歧义。
+- 编辑 service 不命名、不读取、不解密内嵌 config/auth 字段，不解析 `access_token` / `refresh_token`，不联网，不启动进程，不记录 secret-bearing payload，不覆盖当前 `~\.codex` 文件；Native 页面导航只显示 service 状态，不触发备份、差异、编辑、导入、导出、恢复或切换。
+- `scripts\native-eval.ps1 -Quick` 与 `scripts\codex-eval.ps1 -Quick` 扩展元数据编辑守卫，检查 CMake 纳入该 service、编辑流程只更新元数据字段、重新 DPAPI 保护并原子写回档案库，且窗口导航不得直接调用编辑。
+- 同步更新 `AGENTS.md`、`docs\功能说明.md`、`docs\程序逻辑.md`、`docs\场景驱动开发\控件交互逻辑说明.md`、`docs\规划\启动基线-NativeShell-2026-06-30.md` 和 `src\MyTools.Native\README.md`。
+- 验证：`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\native-eval.ps1 -Quick` 通过；`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\native-eval.ps1 -Unit` 通过；`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\codex-eval.ps1 -Quick` 通过，Release build 0 warning / 0 error；`git diff --check` 无格式错误；`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\native-eval.ps1 -Build` 因当前机器未安装 `cmake` / MSVC Build Tools 失败。
+
+## [2026-06-30] Native Codex 当前目录导入服务骨架
+- 新增 `CodexProfileImportService::ImportCurrentFolderProfile()`：读取当前 `~\.codex\config.toml` 与 `auth.json`，用当前 Windows 用户 DPAPI 分别保护后写入 `ProtectedConfigTomlBase64` / `ProtectedAuthJsonBase64`，并同步写入旧兼容字段。
+- 导入 service 会解开已有 DPAPI 保护的 `%LOCALAPPDATA%\MyTools\Codex\profiles.json` 外层档案库并追加 item；档案库不存在或缺少 `items` 数组时创建 `schemaVersion=2` 最小结构，再重新 DPAPI 保护并原子写回。
+- 导入 service 不解析 `access_token` / `refresh_token`，不联网，不启动进程，不记录 secret-bearing payload，不覆盖当前 `~\.codex` 文件；Native 页面导航只显示 service 状态，不触发备份、差异、导入、导出、恢复或切换。
+- `scripts\native-eval.ps1 -Quick` 与 `scripts\codex-eval.ps1 -Quick` 扩展当前目录导入守卫，检查 CMake 纳入该 service、导入流程使用 DPAPI 保护、二进制读取和原子写回档案库，且窗口导航不得直接调用导入。
+- 同步更新 `AGENTS.md`、`docs\功能说明.md`、`docs\程序逻辑.md`、`docs\场景驱动开发\控件交互逻辑说明.md`、`docs\规划\启动基线-NativeShell-2026-06-30.md` 和 `src\MyTools.Native\README.md`。
+- 验证：`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\native-eval.ps1 -Quick` 通过；`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\native-eval.ps1 -Unit` 通过；`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\codex-eval.ps1 -Quick` 通过，Release build 0 warning / 0 error；`git diff --check` 无格式错误；`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\native-eval.ps1 -Build` 因当前机器未安装 `cmake` / MSVC Build Tools 失败。
+
+## [2026-06-30] Native Codex 差异摘要服务骨架
+- 新增 `CodexProfileDiffService::BuildProfileDiffSummary()`：按显示名从 DPAPI 保护的 `profiles.json` 外层档案库中定位 item，兼容读取 `ProtectedConfigTomlBase64` / `ProtectedAuthJsonBase64` 和旧字段 `ConfigTomlContentProtected` / `AuthJsonContentProtected`。
+- 差异 service 会用当前 Windows 用户 DPAPI 解出目标档案的 `config.toml` 与 `auth.json`，与当前 `~\.codex` 文件比较存在性、大小、行数、一致性和 SHA-256 指纹；使用 `FileSystem::Exists()` 区分缺失文件与空文件。
+- 差异 service 不返回文件正文，不解析 `access_token` / `refresh_token`，不联网，不启动进程，不写文件，不记录 secret-bearing payload；Native 页面导航只显示 service 状态，不触发备份、差异、导出、恢复或切换。
+- `scripts\native-eval.ps1 -Quick` 与 `scripts\codex-eval.ps1 -Quick` 扩展差异摘要守卫，检查 CMake 纳入该 service、CMake 链接 `bcrypt`、差异流程使用 `BCryptOpenAlgorithmProvider(BCRYPT_SHA256_ALGORITHM)` 和 `FileSystem::Exists()`，且窗口导航不得直接调用差异。
+- 同步更新 `AGENTS.md`、`docs\功能说明.md`、`docs\程序逻辑.md`、`docs\场景驱动开发\控件交互逻辑说明.md`、`docs\规划\启动基线-NativeShell-2026-06-30.md` 和 `src\MyTools.Native\README.md`。
+- 验证：`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\native-eval.ps1 -Quick` 通过；`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\native-eval.ps1 -Unit` 通过；`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\codex-eval.ps1 -Quick` 通过，Release build 0 warning / 0 error；`git diff --check` 无格式错误；`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\native-eval.ps1 -Build` 因当前机器未安装 `cmake` / MSVC Build Tools 失败。
+
+## [2026-06-30] Native Codex 普通文件导出服务骨架
+- 新增 `CodexProfileExportService::ExportProfileByDisplayName()`：按显示名从 DPAPI 保护的 `profiles.json` 外层档案库中定位 item，兼容读取 `ProtectedConfigTomlBase64` / `ProtectedAuthJsonBase64` 和旧字段 `ConfigTomlContentProtected` / `AuthJsonContentProtected`。
+- 导出 service 会用当前 Windows 用户 DPAPI 解出目标档案的 `config.toml` 与 `auth.json`，再通过 `FileSystem::WriteUtf8FileAtomic()` 原子写入用户明确选择的输出目录；当前未接入页面导航或自动导出。
+- 导出 service 不解析 `access_token` / `refresh_token`，不联网，不启动进程，不记录 secret-bearing payload；Native 页面导航只显示 service 状态，不触发备份、导出、恢复或切换。
+- `scripts\native-eval.ps1 -Quick` 与 `scripts\codex-eval.ps1 -Quick` 扩展普通文件导出守卫，检查 CMake 纳入该 service、导出流程解密内嵌 config/auth 并原子写入 `config.toml` / `auth.json`，且窗口导航不得直接调用导出。
+- 同步更新 `AGENTS.md`、`docs\功能说明.md`、`docs\程序逻辑.md`、`docs\场景驱动开发\控件交互逻辑说明.md`、`docs\规划\启动基线-NativeShell-2026-06-30.md` 和 `src\MyTools.Native\README.md`。
+- 验证：`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\native-eval.ps1 -Quick` 通过；`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\native-eval.ps1 -Unit` 通过；`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\codex-eval.ps1 -Quick` 通过，Release build 0 warning / 0 error；`git diff --check` 无格式错误；`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\native-eval.ps1 -Build` 因当前机器未安装 `cmake` / MSVC Build Tools 失败。
+
+## [2026-06-30] Native Codex 备份恢复服务骨架
+- `FileSystem` 新增 `WriteFileBytesAtomic()`，用于按原始字节原子写回 `config.toml` / `auth.json`，避免恢复备份时把配置强制当作 UTF-8 文本重写。
+- `CodexProfileBackupService` 新增 `RestoreLatestBackup()`：枚举 `%LOCALAPPDATA%\MyTools\Codex\Backups\*.bak.dpapi` 中最近修改的备份，使用当前 Windows 用户 DPAPI 解开备份包，Base64 解码 `ConfigTomlBase64` 与 `AuthJsonBase64`，再写回 `~\.codex`。
+- 恢复 service 不解析 `access_token` / `refresh_token`，不联网，不启动进程，不记录 secret-bearing payload；Native 页面导航只显示 service 状态，不触发备份、恢复或切换。
+- `scripts\native-eval.ps1 -Quick` 与 `scripts\codex-eval.ps1 -Quick` 扩展最近备份恢复守卫，检查恢复流程使用 `FindFirstFileW`、`CryptStringToBinaryA`、`WriteFileBytesAtomic`，并禁止主窗口导航直接调用恢复。
+- 同步更新 `AGENTS.md`、`docs\功能说明.md`、`docs\程序逻辑.md`、`docs\场景驱动开发\控件交互逻辑说明.md`、`docs\规划\启动基线-NativeShell-2026-06-30.md` 和 `src\MyTools.Native\README.md`。
+- 验证：`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\native-eval.ps1 -Quick` 通过；`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\native-eval.ps1 -Unit` 通过；`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\codex-eval.ps1 -Quick` 通过，Release build 0 warning / 0 error；`git diff --check` 无格式错误；`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\native-eval.ps1 -Build` 因当前机器未安装 `cmake` / MSVC Build Tools 失败。
+
+## [2026-06-30] Native Codex 显式切换服务骨架
+- 新增 `CodexProfileSwitchService::ApplyProfileByDisplayName()`：按显示名从 DPAPI 保护的 `profiles.json` 外层档案库中定位 item，兼容读取 `ProtectedConfigTomlBase64` / `ProtectedAuthJsonBase64` 和旧字段 `ConfigTomlContentProtected` / `AuthJsonContentProtected`。
+- 切换 service 会先调用 `CodexProfileBackupService::CreateCurrentFolderBackup()` 备份当前 `~\.codex`，备份成功后才原子写入目标 `config.toml`、`auth.json` 和 `active.json`；若后续写入失败，结果保留已创建的备份路径供后续回滚 UI 使用。
+- 切换 service 不解析 `access_token` / `refresh_token`，不联网，不启动进程，不记录 secret-bearing payload；Native 页面导航只显示 service 状态，不触发备份或切换。
+- `scripts\native-eval.ps1 -Quick` 与 `scripts\codex-eval.ps1 -Quick` 扩展显式切换 service 守卫，检查 CMake 纳入该 service、切换流程先备份再写入、窗口导航不得直接调用切换、切换 service 不得解析 token/联网/启动进程/记录 secret。
+- 同步更新 `AGENTS.md`、`docs\功能说明.md`、`docs\程序逻辑.md`、`docs\场景驱动开发\控件交互逻辑说明.md`、`docs\规划\启动基线-NativeShell-2026-06-30.md` 和 `src\MyTools.Native\README.md`。
+- 验证：`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\native-eval.ps1 -Quick` 通过；`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\native-eval.ps1 -Unit` 通过；`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\codex-eval.ps1 -Quick` 通过，Release build 0 warning / 0 error；`git diff --check` 无格式错误；`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\native-eval.ps1 -Build` 因当前机器未安装 `cmake` / MSVC Build Tools 失败。
+
+## [2026-06-30] Native Codex 切换前备份服务骨架
+- `FileSystem` 新增 `ReadFileBytes()`，供 Native 读取 `config.toml` / `auth.json` 原始字节，不把配置备份强行当成文本处理。
+- `SecretStoreDpapi` 新增 `ProtectUtf8ToBase64()`，使用当前 Windows 用户 DPAPI 保护 UTF-8 备份包并输出 Base64，和既有 `UnprotectBase64ToUtf8()` 形成后续迁移所需的双向能力。
+- 新增 `CodexProfileBackupService::CreateCurrentFolderBackup()`：后续显式切换前可读取当前 `~\.codex\config.toml` 与 `auth.json`，分别 Base64 后写入 `native-codex-current-folder-before-switch` JSON，再 DPAPI 加密并原子写入 `%LOCALAPPDATA%\MyTools\Codex\Backups\native_switch_<name>_<timestamp>.bak.dpapi`；当前未接入页面导航或自动切换。
+- Native Codex Profiles 状态页新增切换备份目录和备份 service 状态展示；仍不读取或展示档案内嵌 config/auth secrets，不联网，不覆盖 `~\.codex`。
+- `scripts\native-eval.ps1 -Quick` 与 `scripts\codex-eval.ps1 -Quick` 扩展 Native Codex 备份 service、DPAPI 保护、二进制读取、原子写入和敏感边界守卫。
+- 验证：`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\native-eval.ps1 -Quick` 通过；`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\native-eval.ps1 -Unit` 通过；`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\codex-eval.ps1 -Quick` 通过，Release build 0 warning / 0 error；`git diff --check` 无格式错误；`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\native-eval.ps1 -Build` 因当前机器未安装 `cmake` / MSVC Build Tools 失败。
+
+## [2026-06-30] Native Codex 档案元数据摘要读取
+- `SecretStoreDpapi` 新增 `UnprotectBase64ToUtf8()`，兼容 WPF 版 `ProtectedData.Protect(..., CurrentUser)` 后 Base64 写入 `profiles.json` 的外层档案库格式。
+- `CodexProfileModule` 在 `profiles.json` 存在时读取外层档案库元数据，按 `items` 对象逐条只抽取 `DisplayName / Name / Status / LastImportedAt` 摘要，最多展示 5 条；`active.json` 存在时读取 `ActiveDisplayName` 并在摘要中标记当前档案；摘要扫描后清零解密后的 JSON 缓冲和临时对象文本。
+- Codex 档案摘要的 JSON 字符串扫描补充 `\uXXXX` 与代理对解析，避免中文档案名或备注字段被显示成问号。
+- 当前 Native Codex Profiles 仍不读取或展示 `ProtectedConfigTomlBase64`、`ProtectedAuthJsonBase64`、`access_token`、`refresh_token` 等敏感字段，不联网、不写文件、不切换账号。
+- `scripts\native-eval.ps1 -Quick` 与 `scripts\codex-eval.ps1 -Quick` 扩展 DPAPI Base64、Codex 摘要、Unicode 转义和 active 档案标记守卫，检查当前阶段不得暴露 secrets、联网、写入或切换。
+- 同步更新 `AGENTS.md`、`docs\功能说明.md`、`docs\程序逻辑.md`、`docs\场景驱动开发\控件交互逻辑说明.md`、`docs\规划\启动基线-NativeShell-2026-06-30.md` 和 `src\MyTools.Native\README.md`。
+- 验证：`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\native-eval.ps1 -Quick` 通过；`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\native-eval.ps1 -Unit` 通过；`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\codex-eval.ps1 -Quick` 通过，Release build 0 warning / 0 error；`git diff --check` 无格式错误；`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\native-eval.ps1 -Build` 因当前机器未安装 `cmake` / MSVC Build Tools 失败。
+
+## [2026-06-30] Native 阶段 3 Codex Profiles 承载点
+- `src\MyTools.Native\` 新增模块导航层：`modules\module_registry.*` 定义 `ModuleInfo` 与 Home 模块，`RendererD2D` 改为按当前模块绘制标题、副标题、状态和 bullet 列表。
+- Native 主窗口 Tools 菜单新增 `Home` 与 `Codex Profiles`，FRP Tunnel 和 Screenshot 继续灰置为待迁移项。
+- 新增 `modules\codex_profiles\codex_profile_module.*`，阶段 3 起步只解析 `LOCALAPPDATA` / `USERPROFILE`，探测 `%LOCALAPPDATA%\MyTools\Codex\profiles.json`、`active.json`、`~\.codex\config.toml`、`auth.json` 是否存在；不解密、不读取 token、不联网、不切换账号。
+- `scripts\native-eval.ps1 -Quick` 与 `scripts\codex-eval.ps1 -Quick` 扩展 Native 模块导航和 Codex Profiles scaffold 守卫，检查当前阶段不得引入解密、网络测试或账号切换行为。
+- 同步更新 `AGENTS.md`、`docs\功能说明.md`、`docs\程序逻辑.md`、`docs\场景驱动开发\控件交互逻辑说明.md` 和 `src\MyTools.Native\README.md`。
+- 验证：`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\native-eval.ps1 -Quick` 通过；`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\native-eval.ps1 -Unit` 通过；`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\codex-eval.ps1 -Quick` 通过，Release build 0 warning / 0 error；`git diff --check` 无格式错误；`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\native-eval.ps1 -Build` 因当前机器未安装 `cmake` / MSVC Build Tools 失败。
+
+## [2026-06-30] 执行 Native 重写阶段 2 基础服务
+- `src\MyTools.Native\` 新增阶段 2 基础服务：`ConfigStore`、`FileSystem`、`FileScanner`、`TaskRunner`、`ProcessRunner`、`NetworkService`、`HotkeyService`。
+- 新增 C 层 `ccore\json\mt_json_schema.c`，提供 `mt_json_has_schema_version`，作为后续底层 C/C ABI 能力的最小边界样例。
+- `ConfigStore` 要求 JSON 包含 `schema_version`；`FileSystem` 使用临时文件、`FlushFileBuffers` 和 `MoveFileExW` 做原子写入；`FileScanner` 支持取消并跳过 reparse point；进程、网络和热键能力均封装在 service 层。
+- `scripts\native-eval.ps1 -Quick` 与 `scripts\codex-eval.ps1 -Quick` 扩展 Native 阶段 2 静态守卫，覆盖 CMake C/C++ 工程、WinSock 链接、配置、原子写入、扫描取消、进程、网络、热键和任务队列。
+- 同步更新 `AGENTS.md`、`docs\功能说明.md`、`docs\程序逻辑.md`、`docs\规划\启动基线-NativeShell-2026-06-30.md` 和 `src\MyTools.Native\README.md`。
+- 验证：`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\native-eval.ps1 -Quick` 通过；`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\native-eval.ps1 -Unit` 通过；`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\codex-eval.ps1 -Quick` 通过，Release build 0 warning / 0 error；`git diff --check` 无格式错误；`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\native-eval.ps1 -Build` 因当前机器未安装 `cmake` / MSVC Build Tools 失败。
+
+## [2026-06-30] 移除 Codex 轮换控件与本地模型导入
+- Codex 配置页移除“立即轮换”“全选轮换”“反选轮换”“轮换后通知”“无可用轮换目标”，并同步移除档案卡片中的“加入轮换 / 优先级”轮换池控件。
+- 取消“导入 Ollama 模型 / 导入本地模型”入口和自动读取本机模型列表功能；删除 `CodexOllamaProfileService.cs`。
+- 删除已无入口的手动轮换与 hot-token 兼容代码：`CodexRotationService.cs`、`CodexHotTokenService.cs`；保留档案数据里的历史轮换字段兼容旧文件。
+- `scripts/codex-eval.ps1 -Quick` 新增 `codex rotation and ollama import removal guards`，检查相关控件、命令和服务文件保持移除。
+- 验证：`.dotnet\dotnet.exe build src\MyTools\MyTools.csproj -c Release` 通过，0 warning / 0 error；`powershell -ExecutionPolicy Bypass -File scripts\codex-eval.ps1 -Quick` 通过。
+
+## [2026-06-30] 移除 SQL 导出工具
+- 顶部菜单和主内容区移除 SQL 导出入口，不再创建 `SqlExport` 模块、SQL 导出页、SQL 查询页、连接输入框、测试连接、导出 Excel、取消和复制结果控件。
+- `MainViewModel` 移除 SQL 连接、数据库/表列表、查询结果、导出流程、取消令牌和历史回填状态；删除 `SqlConnectionHistoryService`、`SqlExportModels`、`SqlExportProvider`、`SqlExportService`、`SqlServerExportProvider`。
+- 系统设置备份不再导出/导入 `MyTools.sqlhistory.json`，系统设置页说明移除 SQL 历史；删除未使用的 `SqlEmpty` 插画资源。
+- `scripts/codex-eval.ps1 -Quick` 新增 `sql export removal guards`，检查 SQL 导出入口、服务文件、历史文件名和插画资源保持移除。
+- 验证：`.dotnet\dotnet.exe build src\MyTools\MyTools.csproj -c Release` 通过，0 warning / 0 error；`powershell -ExecutionPolicy Bypass -File scripts\codex-eval.ps1 -Quick` 通过。
+
+## [2026-06-30] 缩减体积与外置依赖
+- FFmpeg 改为外置依赖：`MyTools.csproj` 不再复制 `NativeBinaries\ffmpeg\ffmpeg.exe`，安装包 payload 不再包含该文件，保留 PATH / 程序目录 / `NativeBinaries\ffmpeg\` 查找逻辑。
+- 移除 Codex 429 SQLite 自动监控、MySQL/PostgreSQL 导出 Provider、LibreHardwareMonitor 实时传感器模块及对应 NuGet/嵌入资源；保留 FRP、Material/MahApps UI 和 NAudio 录音能力。
+- SQL 导出界面收敛为 SQL Server-only；系统信息页移除"实时传感器"标签，仅保留硬件摘要和管理员重启入口；系统设置备份项改名为"外置依赖"。
+- 同步更新 `docs/功能说明.md`、`docs/程序逻辑.md`、`docs/场景驱动开发/控件交互逻辑说明.md` 和 `scripts/codex-eval.ps1` 的体积/打包/控件规则。
+- 验证：`.dotnet\dotnet.exe restore src\MyTools\MyTools.csproj` 通过；`.dotnet\dotnet.exe build src\MyTools\MyTools.csproj -c Release` 通过，0 warning / 0 error；`powershell -ExecutionPolicy Bypass -File scripts\codex-eval.ps1 -Quick` 通过；`powershell -ExecutionPolicy Bypass -File scripts\codex-eval.ps1 -Installer` 通过，安装器约 10.49 MB，payload 不含 `NativeBinaries\ffmpeg\ffmpeg.exe`。
 
 ## [2026-06-26] 加固自动优化扫描与执行确认
 - 系统优化“自动优化”扫描从基础可优化列表升级为 14 步审计计划，新增执行勾选、风险等级、安全边界、扫描证据列，并加入 Delivery Optimization 缓存、Windows 错误报告、旧崩溃转储和 DISM 组件存储清理等更深入项目。
@@ -2033,3 +2164,31 @@
 - 重新执行 installer 定向门禁 `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\codex-eval.ps1 -Installer -InstallerVersion 2026.6.28.0`，随后执行完整验证入口 `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\codex-eval.ps1 -InstallerVersion 2026.6.28.0`，均通过。
 - 重新生成安装包：`artifacts\installer\MyToolsSetup.exe`，版本 `2026.6.28.0`，大小 47,099,904 bytes，SHA256 = `42A800A6B8F1C151A4359F6A727BE75B00431A7C99FB447BB0604F1732942F8F`。
 - 同步生成 payload：`artifacts\installer\MyToolsPayload.zip`，大小 46,901,499 bytes，SHA256 = `D867518D7E26F13C8EB9C310DD07FC067AB0D3ED7C4B420E17CC3F92687E58E2`；验证已确认安装器嵌入 payload 与卸载器资源，并包含主程序、配置、PowerShell 脚本、NativeBinaries 说明和 ffmpeg。
+
+## [2026-06-30] 重新打包安装程序
+- 将 `scripts\Build-Installer.ps1` 与 `scripts\codex-eval.ps1` 的默认安装器版本同步为 `2026.6.30.0`，避免无参数打包回退到旧版本号。
+- 重新执行完整验证入口 `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\codex-eval.ps1`，覆盖 Release 构建、回归检查与 installer pipeline，结果通过。
+- 重新生成安装包：`artifacts\installer\MyToolsSetup.exe`，版本 `2026.6.30.0`，大小 10,949,632 bytes，SHA256 = `41EC528C6456B19E6689FFD3DBB8ABEA682622DE977C9327C557489BE8276E7F`。
+- 同步生成 payload：`artifacts\installer\MyToolsPayload.zip`，大小 10,751,386 bytes，SHA256 = `F0D9DA66681BC191A171AED9239933C719C93422943423C2AF564DC49F8C089D`；payload 仅包含主程序、配置、PowerShell 脚本、`NativeBinaries` 说明和 `NativeBinaries\ffmpeg\README.txt`，不再内置 `ffmpeg.exe`。
+
+## [2026-06-30] C++ 原生重写总体规划
+- 新增 `docs\规划\C++原生重写总体规划.md`，明确 C/C++ 全量重写建议路线：C++20 主程序、Win32 + Direct2D + DirectWrite 自绘 UI、Windows API 系统能力、C/C ABI 底层库、CMake + MSVC 构建。
+- 规划文件定义了 Win10/Win11 平台边界、目录结构、架构分层、配置与 DPAPI 迁移、模块迁移顺序、验证体系、性能基线、风险对策和正式实施前需要用户确认的决策。
+- 已将 SQL 导出、Codex 轮换/Ollama 导入、硬件实时传感器和内置 `ffmpeg.exe` 列为 Native 版本不迁回功能。
+
+## [2026-06-30] 执行 Native 重写阶段 0/1
+- `AGENTS.md` 新增 Native 重写轨道规则：C/C++ Native 版本只支持 Windows 10 / Windows 11，默认优先 x64；既有 WPF 版本仍作为当前可用版本维护。
+- 新增 `src\MyTools.Native\` 阶段 1 原生壳，包含 CMake 工程、Win32 入口、单实例 Mutex、主窗口、原生菜单栏、Direct2D/DirectWrite 渲染、托盘图标、启动/运行/崩溃日志和 DPAPI smoke test。
+- 新增 `scripts\native-eval.ps1`，提供 `-Quick` 源码结构/路线守卫和 `-Build` CMake 构建入口；`scripts\codex-eval.ps1 -Quick` 新增 `native shell scaffold` 守卫。
+- 同步更新 `docs\功能说明.md`、`docs\程序逻辑.md`、`docs\场景驱动开发\控件交互逻辑说明.md`、`docs\智能助手记忆索引.md` 和 `docs\规划\启动基线-NativeShell-2026-06-30.md`。
+- 验证：`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\native-eval.ps1 -Quick` 通过；`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\codex-eval.ps1 -Quick` 通过；`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\native-eval.ps1 -Build` 因当前机器未安装 `cmake` / MSVC Build Tools 失败，源码已保留可复跑入口。
+
+## [2026-06-30] 同步 Native Codex Profiles 普通导出与改名文档
+- Native Codex Profiles 显式菜单新增 `Export first profile files...` 与 `Rename first profile...` 文档事实：普通文件导出确认后选择目标文件夹，并禁止选择当前 Codex 目录 `~\.codex`，避免无备份覆盖当前账号文件；改名确认后输入新显示名，输入会 trim、不能为空、最长 120 字符且不能包含控制字符。
+- 记录当前 active profile 暂不允许通过该入口改名，直到 `active.json` rename 同步迁移完成；Native UI 只收集路径或文本并通过 `CodexProfileModule::RunUiAction()` 路由，真正读写仍由 service 执行。
+- 同步更新 `docs\功能说明.md`、`docs\程序逻辑.md`、`docs\场景驱动开发\控件交互逻辑说明.md`、`AGENTS.md` 和 `src\MyTools.Native\README.md`；本次仅改文档，不改代码或脚本。
+
+## [2026-06-30] 同步 Native Codex Profiles note/remark/tags 文档
+- Native Codex Profiles 显式菜单新增 `Edit first profile note...`、`Edit first profile remark...`、`Edit first profile tags...` 文档事实：三项写入类动作均先确认，再通过 `PromptText` 输入文本，文本 trim，允许空值以清空字段。
+- 记录 note/remark 最长 500 字符、tags 最长 200 字符，均拒绝 C0/C1 控制字符；Native UI 只收集文本并通过 `CodexProfileModule::RunUiAction()` 路由，真正更新由 `CodexProfileEditService::UpdateProfileMetadata()` 写回 DPAPI 保护的 `profiles.json`，页面导航本身不编辑。
+- 同步更新 `docs\功能说明.md`、`docs\程序逻辑.md`、`docs\场景驱动开发\控件交互逻辑说明.md`、`AGENTS.md` 和 `src\MyTools.Native\README.md`；本次仅改文档，不改代码或脚本。

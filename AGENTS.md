@@ -1,24 +1,25 @@
 # MyTools - Windows 个人实用工具集
 
-本项目是一个基于 .NET Framework 4.8 的原生 Windows 桌面工具，旨在提供高效、美观、且在 Win7/10/11 环境下均可直接运行的个人常用功能（如系统增强、轻量数据处理等）。
+本项目当前包含两条轨道：既有 .NET Framework 4.8 / WPF 桌面工具维护轨道，以及新增 C/C++ Native 重写轨道。既有 WPF 版本继续作为当前可用版本维护；Native 版本面向 Windows 10 / Windows 11，以体积更小、启动更快、运行时依赖更少为目标。
 
 ## 一、项目原则
-1. **高兼容性**：必须支持 Windows 7 SP1 以上所有系统，严禁引入 .NET Core 或高版本运行时依赖。
-2. **极简分发**：最终产物必须是单一的 `.exe` 文件（利用 Costura.Fody 打包），严禁产生零散 DLL。
+1. **兼容边界**：既有 WPF 版本仍按 .NET Framework 4.8 规则维护；C/C++ Native 重写版本只支持 Windows 10 / Windows 11，默认优先 x64，不再为 Win7 做降级设计。
+2. **极简分发**：WPF 产物继续保持单一 `.exe`（利用 Costura.Fody 打包）；Native 产物优先单 exe，无法单 exe 时必须说明每个随附文件的用途。
 3. **视觉 Premium**：界面必须现代、流畅，符合 Material Design 审美。
 4. **本地优先**：数据与日志均存放在程序同级目录，不依赖云端。当前轻量配置使用 JSON + DPAPI；SQLite 为预留方案，需要结构化存储时再启用。
 
 ## 二、核心技术栈
 - **框架**: .NET Framework 4.8 / WPF（MVVM 模式），csproj 采用 `Microsoft.NET.Sdk.WindowsDesktop` SDK 风格。
+- **Native 重写**: C++20 / Win32 / Direct2D / DirectWrite，CMake + MSVC 构建，底层稳定能力可使用 C 或 C ABI 封装。
 - **UI 组件**:
   - **MaterialDesignThemes**：全局风格。
   - **MahApps.Metro**：窗体容器（`MetroWindow`）。
   - **FluentWPF**：动态毛玻璃效果。
   - **Hardcodet.NotifyIcon.Wpf**：系统托盘图标与右键菜单。
 - **数据层**:
-  - **System.Data.SqlClient**：SQL Server 连接与查询（导出模块使用）。
+  - **System.Data.SqlClient**：历史 SQL 导出模块依赖；当前 SQL 导出已移除，新功能不得默认恢复该依赖。
   - **System.Data.SQLite + Dapper**：预留依赖，业务真正需要本地结构化存储时再启用。
-  - **Newtonsoft.Json**：本地配置序列化（如 SQL 连接历史 `MyTools.sqlhistory.json`）。
+  - **Newtonsoft.Json**：WPF 版本本地配置序列化（如 `MyTools.settings.json`、Codex 档案元数据等）。
 - **工具**:
   - **Serilog + Serilog.Sinks.File**：异步文件日志。
   - **Costura.Fody**：单文件打包，并嵌入 `SQLite.Interop.dll`（x86/x64）。
@@ -27,10 +28,11 @@
 - `src/MyTools/`：主工程根目录。
   - `App.xaml(.cs)`：应用入口、全局异常处理、显式创建主窗口（不使用 `StartupUri`）。
   - `MainWindow.xaml(.cs)`：主窗体与托盘宿主。
-  - `Services/`：业务服务（`WireGuardService`、`SqlExportService`、`SqlConnectionHistoryService`、`AppLogService`、`StartupService`、`NetworkService` 等）。
+  - `Services/`：业务服务（`WireGuardService`、`AppLogService`、`StartupService`、`NetworkService`、`CodexProfileLibraryService`、`FrpService`、`ScreenshotService` 等）。
   - `ViewModels/`：MVVM 视图模型与转换器。
   - `Resources/`：图标、图片等嵌入资源（`AppIcon.ico` / `AppIcon.png`）。
   - `NativeBinaries/`：随产物输出的原生依赖与脚本（如 `LockWin10_22H2.ps1`）。
+- `src/MyTools.Native/`：C/C++ Native 重写工程根目录；当前从 Native Shell 开始，先并行于 WPF 版本，不直接依赖 WPF 产物。
 - `docs/`：`功能说明.md` 与 `开发记录.txt`。
 - `.dotnet/`：仓库内置的 .NET SDK，用于离线构建。
 
@@ -62,6 +64,11 @@
   ```
 - Release 产物为单一 `MyTools.exe`，须确认 Costura.Fody 已合并全部托管 DLL，且 `SQLite.Interop.dll` 通过 `EmbeddedResource` 嵌入。
 - 应用图标固定为 `src/MyTools/Resources/AppIcon.ico`（在 csproj 中通过 `<ApplicationIcon>` 指定）。
+- **Native 验证命令**：
+  ```powershell
+  powershell -NoProfile -ExecutionPolicy Bypass -File scripts\native-eval.ps1 -Quick
+  ```
+- Native 编译需要 CMake 与 MSVC Build Tools；未安装工具链时，`scripts\native-eval.ps1 -Build` 会给出明确失败原因，不能把静态守卫通过等同于已完成 Native 编译。
 
 ## 六、工作流程
 1. **需求定义**：每次新增功能先在 `docs/功能说明.md` 中简述逻辑、核心步骤与涉及文件。
@@ -92,9 +99,10 @@
 ## 七、现有功能模块
 - **WireGuard 连接**：`WireGuardService` 调用本地/系统 `wireguard.exe`，通过 `installtunnelservice` / `uninstalltunnelservice` 控制隧道，结合网卡状态判断连通性。
 - **系统托盘**：关闭按钮默认隐藏到托盘，托盘提供"显示窗口 / 退出程序"菜单及双击恢复。
-- **SQL Server 导出 Excel**：仅支持 SQL 身份验证；自动降级 `sys.databases` → `sp_databases`；自写 OpenXML `.xlsx`，无需安装 Office；导出前校验 `1,048,576` 行上限。
-- **SQL 连接历史**：服务器/用户名/密码本地保存（密码 DPAPI 加密），启动回填最后一次成功连接。
-- **应用日志**：`AppLogService` 记录 SQL 导出等关键步骤，遵循 4.4 安全规范。
+- **已移除：SQL 导出工具**：当前版本不再提供 SQL 导出、SQL 查询、数据库连接历史或相关 UI；`scripts/codex-eval.ps1 -Quick` 会守卫该移除状态。
+- **已移除：Codex 轮换与本地模型导入**：当前版本不再提供立即轮换、全选/反选轮换、轮换后通知、轮换池优先级或导入 Ollama 模型入口。
+- **Native Shell、基础服务与 Codex Profiles 承载点**：`src/MyTools.Native/` 已建立 Win32 + Direct2D + DirectWrite 原生壳，包含单实例、主窗口、托盘、DPI、日志、DPAPI smoke test、配置、二进制读取/写入、原子文件写入、可取消扫描、任务队列、进程、网络探测和热键基础服务；Native 菜单已提供 `Tools / Codex Profiles` 阶段 3 承载点，当前可用当前 Windows 用户 DPAPI 读取外层档案库摘要，并已接入刷新摘要、首个档案差异、当前目录备份、应用首个档案、导入当前目录、恢复最近备份、导出首个档案普通文件、改名首个档案、编辑首个档案 note/remark/tags、导出 `.codexbox`、导入 `.codexbox` 等显式菜单动作；写入类动作必须先弹确认，普通文件导出由主窗口选择目标文件夹且禁止选择当前 Codex 目录 `~/.codex`，改名由主窗口输入新显示名并执行 trim、非空、最长 120 字符和禁止控制字符校验，若改名目标正是当前 active profile，会在写回 DPAPI 保护的 `profiles.json` 后同步更新 `active.json` 的 `ActiveDisplayName`，同步失败会返回局部失败提示并刷新摘要；note/remark/tags 编辑由主窗口确认后通过 `PromptText` 收集文本，执行 trim，允许空值清空字段，note/remark 最长 500 字符、tags 最长 200 字符，均拒绝 C0/C1 控制字符；`.codexbox` 导出由主窗口选择保存路径并两次确认密码，导入由主窗口选择打开路径、选择同名冲突策略（Rename / Skip / Replace）并输入一次密码，具体包格式和档案读写通过 `CodexProfileModule` action 路由调用 service 处理。Native 已具备后续显式切换所需的 DPAPI 保护备份、差异摘要、元数据编辑、当前目录导入、档案导出、`.codexbox` 加密包导入导出、apply service 与最近备份恢复 service；页面导航本身不解密档案内嵌 config/auth 内容、不联网、不切换账号、不恢复备份、不编辑元数据、不导入档案、不导出档案、不会自动导入/导出 `.codexbox`、不生成差异。
+- **应用日志**：WPF 版本通过 `AppLogService` 记录关键步骤；Native 版本通过程序同级目录的 `MyToolsNative*.log` 记录启动、运行和崩溃摘要，均遵循 4.4 安全规范。
 
 ## 八、任务说明书生成规则（Task Brief Generator）
 

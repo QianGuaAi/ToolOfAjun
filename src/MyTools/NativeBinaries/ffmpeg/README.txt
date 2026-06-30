@@ -1,6 +1,6 @@
-Put ffmpeg.exe in this folder to enable screen recording and audio recording.
+MyTools no longer bundles ffmpeg.exe.
 
-Expected layout after build:
+Install FFmpeg separately and add the folder that contains ffmpeg.exe to the system PATH.
+For portable use, copy ffmpeg.exe into the application output or install directory here:
 NativeBinaries\ffmpeg\ffmpeg.exe
-
-You can also install FFmpeg separately and add the folder that contains ffmpeg.exe to the system PATH.
+The repository keeps this folder as a placeholder only; build and installer scripts intentionally exclude that binary.

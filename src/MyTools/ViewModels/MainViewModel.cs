@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
-using System.Data;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
@@ -38,15 +37,8 @@ namespace MyTools.ViewModels
         private ObservableCollection<NetworkData> _networkList;
         private ObservableCollection<StartupItem> _startupList;
         private ICollectionView _filteredStartupView;
-        private ObservableCollection<DatabaseItem> _sqlDatabaseList;
-        private ObservableCollection<TableItem> _sqlTableList;
-        private ObservableCollection<TableItem> _allSqlTableList;
         private ObservableCollection<InstalledProgram> _installedPrograms;
         private ICollectionView _filteredInstalledProgramsView;
-        private ObservableCollection<string> _sqlServerAddressHistory;
-        private ObservableCollection<string> _sqlUsernameHistory;
-        private ObservableCollection<string> _sqlPasswordHistory;
-        private ObservableCollection<SqlConnectionHistoryItem> _sqlRecentConnections;
         private ObservableCollection<CodexProfileItem> _codexProfiles;
         private ObservableCollection<HomeCommandItem> _homeCommandItems;
         private ICollectionView _filteredHomeCommandView;
@@ -61,35 +53,14 @@ namespace MyTools.ViewModels
         private SystemSettingsViewModel _systemSettings;
         private MultimediaViewModel _multimedia;
         private FrpViewModel _frp;
-        private string _sqlServerAddress;
-        private string _sqlPort = "1433";
-        private SqlProviderKind _selectedSqlProvider = SqlProviderKind.SqlServer;
-        private string _sqlUsername;
-        private string _sqlPassword;
-        private string _sqlTableSearchText;
         private string _startupSearchText = string.Empty;
         private string _installedProgramSearchText = string.Empty;
         private string _installedProgramSortMode = "名称 A-Z";
         private string _installedProgramSizeFilter = "全部大小";
         private string _installedProgramDateFilter = "全部日期";
-        private DatabaseItem _selectedSqlDatabase;
-        private TableItem _selectedSqlTable;
-        private ICollectionView _filteredSqlTableView;
-        private string _sqlStatusMessage = "请输入 SQL Server 连接信息后测试连接。";
-        private bool _isSqlBusy;
-        private CancellationTokenSource _sqlExportCancellationTokenSource;
-        private CancellationTokenSource _loadTablesCancellationTokenSource;
-        private bool _suppressSqlTableAutoLoad;
-        private bool _isApplyingSqlHistory;
-        private bool _hasUserModifiedSqlConnectionInputs;
-        private SqlServerConnectionOptions _activeSqlConnectionOptions;
         private bool _isDefenderEnabled = true;
         private bool _isAutoUpdateEnabled = true;
         private string _systemStatusMessage = string.Empty;
-        private string _sqlQueryText = string.Empty;
-        private DataView _sqlQueryResult;
-        private bool _isQueryBusy;
-        private string _queryStatusMessage = string.Empty;
         private bool _isInstalledProgramsBusy;
         private string _installedProgramsStatusMessage = "点击刷新加载可卸载程序列表。";
         private ObservableCollection<OptimizationPlanItem> _autoOptimizePlanItems;
@@ -172,22 +143,12 @@ namespace MyTools.ViewModels
         private string _audioRecordHotkeyText = "\u672a\u8bbe\u7f6e";
         private bool _isCapturingAudioRecordHotkey;
         private string _codexProfilesStatusMessage = "拖入包含 config.toml 和 auth.json 的文件夹，生成可应用的 Codex 配置记录。";
-        private string _codexNextSwitchPreview = "无可用轮换目标";
         private string _codexLocalRelayStatus = CodexProfileItem.RelayStatusUnknown;
         private string _codexLocalRelayStatusMessage = "本地中转未测试。";
         private DateTime? _codexLocalRelayCheckedAt;
         private bool _isCodexLocalRelayChecking;
         private bool _isCodexLocalRelaySwitchMode;
         private bool _isCodexRelayBatchTesting;
-        private CodexRotationSettings _codexRotationSettings = new CodexRotationSettings();
-        private readonly DispatcherTimer _codexRateLimitMonitorTimer;
-        private readonly CancellationTokenSource _codexRateLimitMonitorCts = new CancellationTokenSource();
-        private bool _isCodexRateLimitMonitoring;
-        private bool _isCodexRateLimitHandling;
-        private long _codexRateLimitLastSeenLogId;
-        private long _codexRateLimitLastHandledLogId;
-        private DateTime? _codexRateLimitLastSwitchAt;
-        private string _codexRateLimitStatusText = "429 自动轮换未启动。";
         private string _codexExpirySummaryText = "未加载 Codex 档案。";
         private bool _hasCodexExpiryReminder;
         private bool _isCodexExpiryCritical;
@@ -249,16 +210,11 @@ namespace MyTools.ViewModels
         private string _videoViewerPlaylistSearchText = string.Empty;
         private readonly Random _videoViewerRandom = new Random();
 
-        private readonly AsyncRelayCommand _executeQueryCommand;
-        private readonly AsyncRelayCommand _exportQueryResultCommand;
-        private readonly AsyncRelayCommand _exportQueryResultCsvCommand;
-        private readonly RelayCommand _cancelQueryCommand;
         private readonly AsyncRelayParameterCommand _applyCodexProfileCommand;
         private readonly AsyncRelayParameterCommand _exportCodexProfileCommand;
         private readonly AsyncRelayParameterCommand _previewCodexProfileDiffCommand;
         private readonly AsyncRelayParameterCommand _applyCodexConfigTemplateToAllCommand;
         private readonly AsyncRelayCommand _importCodexProfileCommand;
-        private readonly AsyncRelayCommand _importCodexOllamaProfilesCommand;
         private readonly AsyncRelayCommand _importCodexCpaTokenCommand;
         private readonly AsyncRelayParameterCommand _refreshCodexProfileCommand;
         private readonly AsyncRelayParameterCommand _renameCodexProfileCommand;
@@ -267,23 +223,17 @@ namespace MyTools.ViewModels
         private readonly AsyncRelayCommand _restoreLastCodexBackupCommand;
         private readonly AsyncRelayCommand _exportCodexProfilesEncBoxCommand;
         private readonly AsyncRelayCommand _importCodexProfilesEncBoxCommand;
-        private readonly AsyncRelayCommand _rotateToNextCodexProfileCommand;
         private readonly AsyncRelayCommand _restartCodexDesktopCommand;
         private readonly AsyncRelayCommand _enableCodexLocalRelayCommand;
         private readonly AsyncRelayCommand _disableCodexLocalRelayCommand;
         private readonly AsyncRelayCommand _restartCodexWithLocalRelayCommand;
-        private readonly AsyncRelayParameterCommand _toggleCodexProfileRotationCommand;
         private readonly AsyncRelayCommand _testCodexRelaysCommand;
         private readonly AsyncRelayParameterCommand _testCodexProfileRelayCommand;
-        private readonly AsyncRelayCommand _selectAllCodexRotationCommand;
-        private readonly AsyncRelayCommand _invertCodexRotationCommand;
         private readonly AsyncRelayCommand _openRecordRegionCommand;
         private readonly AsyncRelayCommand _toggleAudioRecordingCommand;
         private readonly AsyncRelayCommand _refreshInstalledProgramsCommand;
         private readonly AsyncRelayParameterCommand _uninstallProgramCommand;
 
-        private readonly AsyncRelayCommand _testSqlConnectionCommand;
-        private readonly AsyncRelayCommand _exportSqlTableCommand;
         private readonly AsyncRelayCommand _toggleDefenderCommand;
         private readonly AsyncRelayCommand _toggleAutoUpdateCommand;
         private readonly AsyncRelayCommand _triggerUpdateNowCommand;
@@ -310,7 +260,6 @@ namespace MyTools.ViewModels
         private WeChatDataLocator _weChatDataLocator;
         private WeChatCleanupService _weChatCleanupService;
         private WeChatBackupService _weChatBackupService;
-        private bool _sqlHistoryLoadRequested;
         private bool _screenshotHotkeysLoadRequested;
         private bool _screenshotStartupLoadRequested;
         private bool _videoViewerStartupLoadRequested;
@@ -320,14 +269,6 @@ namespace MyTools.ViewModels
         private bool _systemOptimizationLoadRequested;
         private bool _weChatStartupLoadRequested;
         private bool _frpConfigLoadRequested;
-        private bool _suppressCodexProfileAutoSave;
-        private static readonly IReadOnlyList<SqlProviderOption> SqlProviderOptionItems = new List<SqlProviderOption>
-        {
-            new SqlProviderOption(SqlProviderKind.SqlServer, "SQL Server"),
-            new SqlProviderOption(SqlProviderKind.PostgreSql, "PostgreSQL"),
-            new SqlProviderOption(SqlProviderKind.MySql, "MySQL")
-        };
-
         private RecordingService Recording => _recordingService ?? (_recordingService = new RecordingService());
         private OptimizationReportService OptimizationReportsStore => _optimizationReportService ?? (_optimizationReportService = new OptimizationReportService());
         private SystemOptimizationService SystemOptimizer => _systemOptimizationService ?? (_systemOptimizationService = new SystemOptimizationService());
@@ -343,17 +284,10 @@ namespace MyTools.ViewModels
             StartupList = new ObservableCollection<StartupItem>();
             FilteredStartupView = CollectionViewSource.GetDefaultView(StartupList);
             FilteredStartupView.Filter = FilterStartupItem;
-            SqlDatabaseList = new ObservableCollection<DatabaseItem>();
-            SqlTableList = new ObservableCollection<TableItem>();
-            AllSqlTableList = new ObservableCollection<TableItem>();
             InstalledPrograms = new ObservableCollection<InstalledProgram>();
             FilteredInstalledProgramsView = CollectionViewSource.GetDefaultView(InstalledPrograms);
             FilteredInstalledProgramsView.Filter = FilterInstalledProgram;
             ApplyInstalledProgramSort();
-            SqlServerAddressHistory = new ObservableCollection<string>();
-            SqlUsernameHistory = new ObservableCollection<string>();
-            SqlPasswordHistory = new ObservableCollection<string>();
-            SqlRecentConnections = new ObservableCollection<SqlConnectionHistoryItem>();
             CodexProfiles = new ObservableCollection<CodexProfileItem>();
             HomeCommandItems = new ObservableCollection<HomeCommandItem>();
             FilteredHomeCommandView = CollectionViewSource.GetDefaultView(HomeCommandItems);
@@ -372,26 +306,17 @@ namespace MyTools.ViewModels
             WeChatCleanupCandidates = new ObservableCollection<WeChatCleanupCandidate>();
             WeChatRoots = new ObservableCollection<WeChatRoot>();
             RecentWeChatBackups = new ObservableCollection<RecentWeChatBackupItem>();
-            FilteredSqlTableView = CollectionViewSource.GetDefaultView(SqlTableList);
-            FilteredSqlTableView.Filter = FilterSqlTable;
             _audioRecordingTimer = new DispatcherTimer
             {
                 Interval = TimeSpan.FromMilliseconds(250)
             };
             _audioRecordingTimer.Tick += AudioRecordingTimer_OnTick;
-            _codexRateLimitMonitorTimer = new DispatcherTimer
-            {
-                Interval = TimeSpan.FromSeconds(20)
-            };
-            _codexRateLimitMonitorTimer.Tick += CodexRateLimitMonitorTimer_OnTick;
-
             RefreshCommand = new RelayCommand(Refresh);
             ShowHomeCommand = new RelayCommand(() => SwitchModule("Home"));
             ShowNetworkCommand = new RelayCommand(() => SwitchModule("Network"));
             ShowStartupCommand = new RelayCommand(() => SwitchModule("Startup"));
             ShowSystemCommand = new RelayCommand(() => SwitchModule("Optimization"));
             ShowUninstallCommand = new RelayCommand(() => SwitchModule("Uninstall"));
-            ShowSqlExportCommand = new RelayCommand(() => { SwitchModule("SqlExport"); Refresh(); });
             ShowFrpCommand = new RelayCommand(() => SwitchModule("Frp"));
             ShowCodexProfilesCommand = new RelayCommand(() => SwitchModule("CodexProfiles"));
             ShowSystemInfoCommand = new RelayCommand(() => SwitchModule("SystemInfo"));
@@ -404,8 +329,6 @@ namespace MyTools.ViewModels
             ShowScheduleCommand = new RelayCommand(() => SwitchModule("Schedule"));
             ShowSystemSettingsCommand = new RelayCommand(() => SwitchModule("SystemSettings"));
             LoadSystemInfoCommand = new AsyncRelayCommand(LoadSystemInfoAsync, () => !_isSystemInfoBusy);
-            ToggleHardwareSensorsCommand = new RelayCommand(ToggleHardwareSensors);
-            RefreshSensorsOnceCommand = new RelayCommand(() => SafeFireAndForget(RefreshSensorsAsync()), () => _sensorService != null);
             RestartAsAdminCommand = new RelayCommand(RestartAsAdmin);
             VerifyFileCommand = new AsyncRelayCommand(VerifyFileAsync, () => !_isFileHashBusy);
             ConvertImageCommand = new AsyncRelayCommand(ConvertImageAsync, () => !_isConvertBusy);
@@ -497,21 +420,7 @@ namespace MyTools.ViewModels
             SelectWeChatRestoreTargetRootCommand = _selectWeChatRestoreTargetRootCommand;
             ShowReportDetailsCommand = _showReportDetailsCommand;
 
-            _executeQueryCommand = new AsyncRelayCommand(ExecuteSqlQueryAsync, CanExecuteSqlQuery);
-            _exportQueryResultCommand = new AsyncRelayCommand(ExportQueryResultAsync, CanExportQueryResult);
-            _exportQueryResultCsvCommand = new AsyncRelayCommand(ExportQueryResultCsvAsync, CanExportQueryResult);
-            _cancelQueryCommand = new RelayCommand(CancelSqlQuery, () => IsQueryBusy);
-            ExecuteSqlQueryCommand = _executeQueryCommand;
-            ExportQueryResultCommand = _exportQueryResultCommand;
-            ExportQueryResultCsvCommand = _exportQueryResultCsvCommand;
-            CancelSqlQueryCommand = _cancelQueryCommand;
 
-            _testSqlConnectionCommand = new AsyncRelayCommand(TestSqlConnectionAsync, () => !IsSqlBusy);
-            _exportSqlTableCommand = new AsyncRelayCommand(ExportSelectedTableAsync, CanExportSqlTable);
-            CancelSqlExportCommand = new RelayCommand(CancelSqlExport, () => IsSqlBusy && _sqlExportCancellationTokenSource != null);
-            TestSqlConnectionCommand = _testSqlConnectionCommand;
-            ExportSqlTableCommand = _exportSqlTableCommand;
-            ApplySqlRecentConnectionCommand = new RelayParameterCommand(ApplySqlRecentConnection, parameter => !IsSqlBusy && parameter is SqlConnectionHistoryItem);
             _refreshInstalledProgramsCommand = new AsyncRelayCommand(LoadInstalledProgramsAsync, () => !IsInstalledProgramsBusy);
             _uninstallProgramCommand = new AsyncRelayParameterCommand(UninstallProgramAsync, parameter => parameter is InstalledProgram);
             RefreshInstalledProgramsCommand = _refreshInstalledProgramsCommand;
@@ -609,8 +518,6 @@ namespace MyTools.ViewModels
             ApplyCodexConfigTemplateToAllCommand = _applyCodexConfigTemplateToAllCommand;
             _importCodexProfileCommand = new AsyncRelayCommand(ImportCodexProfileAsync);
             ImportCodexProfileCommand = _importCodexProfileCommand;
-            _importCodexOllamaProfilesCommand = new AsyncRelayCommand(ImportCodexOllamaProfilesAsync);
-            ImportCodexOllamaProfilesCommand = _importCodexOllamaProfilesCommand;
             _importCodexCpaTokenCommand = new AsyncRelayCommand(ImportCodexCpaTokenAsync);
             ImportCodexCpaTokenCommand = _importCodexCpaTokenCommand;
             _refreshCodexProfileCommand = new AsyncRelayParameterCommand(RefreshCodexProfileAsync, parameter => parameter is CodexProfileItem);
@@ -630,8 +537,6 @@ namespace MyTools.ViewModels
             DeleteCodexProfileCommand = new AsyncRelayParameterCommand(DeleteCodexProfileAsync, parameter => parameter is CodexProfileItem);
             EditCodexConfigTomlCommand = new AsyncRelayParameterCommand(p => EditCodexFileAsync(p, CodexConfigProfileService.ConfigFileName), parameter => parameter is CodexProfileItem);
             EditCodexAuthJsonCommand = new AsyncRelayParameterCommand(p => EditCodexFileAsync(p, CodexConfigProfileService.AuthFileName), parameter => parameter is CodexProfileItem);
-            _rotateToNextCodexProfileCommand = new AsyncRelayCommand(RotateToNextCodexProfileAsync, () => IsCodexRotationAvailable);
-            RotateToNextCodexProfileCommand = _rotateToNextCodexProfileCommand;
             _restartCodexDesktopCommand = new AsyncRelayCommand(RestartCodexDesktopAsync);
             RestartCodexDesktopCommand = _restartCodexDesktopCommand;
             _enableCodexLocalRelayCommand = new AsyncRelayCommand(EnableCodexLocalRelayAsync);
@@ -640,16 +545,10 @@ namespace MyTools.ViewModels
             DisableCodexLocalRelayCommand = _disableCodexLocalRelayCommand;
             _restartCodexWithLocalRelayCommand = new AsyncRelayCommand(RestartCodexWithLocalRelayAsync, () => CanRestartCodexWithLocalRelay);
             RestartCodexWithLocalRelayCommand = _restartCodexWithLocalRelayCommand;
-            _toggleCodexProfileRotationCommand = new AsyncRelayParameterCommand(ToggleCodexProfileRotationAsync, parameter => parameter is CodexProfileItem);
-            ToggleCodexProfileRotationCommand = _toggleCodexProfileRotationCommand;
             _testCodexRelaysCommand = new AsyncRelayCommand(TestCodexRelaysAsync, CanTestCodexRelays);
             TestCodexRelaysCommand = _testCodexRelaysCommand;
             _testCodexProfileRelayCommand = new AsyncRelayParameterCommand(TestCodexProfileRelayAsync, CanTestCodexProfileRelay);
             TestCodexProfileRelayCommand = _testCodexProfileRelayCommand;
-            _selectAllCodexRotationCommand = new AsyncRelayCommand(SelectAllCodexRotationAsync, () => CodexProfiles != null && CodexProfiles.Count > 0);
-            SelectAllCodexRotationCommand = _selectAllCodexRotationCommand;
-            _invertCodexRotationCommand = new AsyncRelayCommand(InvertCodexRotationAsync, () => CodexProfiles != null && CodexProfiles.Count > 0);
-            InvertCodexRotationCommand = _invertCodexRotationCommand;
 
             CurrentModule = "Home";
             ScheduleStartupBackgroundLoads();
@@ -663,68 +562,6 @@ namespace MyTools.ViewModels
             dispatcher.BeginInvoke(
                 DispatcherPriority.ContextIdle,
                 new Action(() => SafeFireAndForget(LoadStartupShellStateAsync())));
-            // Hardware sensor startup can probe drivers and block for seconds on
-            // some machines, so it is started only when the SystemInfo module is opened.
-        }
-
-        private async Task StartSensorsBackgroundAsync()
-        {
-            if (_isSensorStarting || _sensorService != null || _isSensorsRunning)
-            {
-                return;
-            }
-
-            var service = new HardwareSensorService();
-            var started = false;
-            try
-            {
-                _isSensorStarting = true;
-                SensorStatusMessage = "正在启动传感器…";
-                HomeSensorRiskText = "正在启动传感器采集。";
-                started = await Task.Run(() => service.TryStart()).ConfigureAwait(true);
-            }
-            catch (Exception ex)
-            {
-                AppLogService.Warning("HardwareSensorService async start failed: {Msg}", ex.Message);
-            }
-            finally
-            {
-                _isSensorStarting = false;
-            }
-
-            if (!started)
-            {
-                SensorStatusMessage = "传感器启动失败：" + (service.LastError ?? "未知错误。请以管理员身份重新运行 MyTools。");
-                HomeSensorRiskText = "传感器启动失败，无法读取温度风险。";
-                service.Dispose();
-                return;
-            }
-
-            _sensorService = service;
-            SensorTimer.Tick -= SensorTimer_OnTick;
-            SensorTimer.Tick += SensorTimer_OnTick;
-            _isSensorsRunning = true;
-            OnPropertyChanged(nameof(IsSensorsRunning));
-            TriggerCommandRequery();
-            ApplySensorRefreshMode();
-            await RefreshSensorsAsync().ConfigureAwait(true);
-
-            if (SensorReadings.Count == 0)
-            {
-                SensorStatusMessage = HardwareSensorService.IsRunningAsAdmin
-                    ? "未读取到传感器数据，硬件可能不被支持。"
-                    : "当前为非管理员模式：温度/风扇/电压通常无法读取。请以管理员身份重启 MyTools。";
-                HomeSensorRiskText = HardwareSensorService.IsRunningAsAdmin
-                    ? "未读取到传感器数据，硬件可能不支持。"
-                    : "未读到传感器：建议以管理员身份重启后查看温度风险。";
-            }
-            else
-            {
-                SensorStatusMessage = HardwareSensorService.IsRunningAsAdmin
-                    ? $"已启用 · {SensorReadings.Count} 项 · {SensorRefreshMode}刷新"
-                    : $"已启用（非管理员，仅 {SensorReadings.Count} 项可读）";
-                HomeSensorRiskText = $"传感器正常：已读取 {SensorReadings.Count} 项，未发现高温或高负载。";
-            }
         }
 
         private async Task LoadStartupShellStateAsync()
@@ -757,30 +594,6 @@ namespace MyTools.ViewModels
             }
         }
 
-        public ObservableCollection<DatabaseItem> SqlDatabaseList
-        {
-            get => _sqlDatabaseList;
-            set { _sqlDatabaseList = value; OnPropertyChanged(); }
-        }
-
-        public ObservableCollection<TableItem> SqlTableList
-        {
-            get => _sqlTableList;
-            set
-            {
-                _sqlTableList = value;
-                FilteredSqlTableView = CollectionViewSource.GetDefaultView(_sqlTableList);
-                FilteredSqlTableView.Filter = FilterSqlTable;
-                OnPropertyChanged();
-            }
-        }
-
-        public ObservableCollection<TableItem> AllSqlTableList
-        {
-            get => _allSqlTableList;
-            set { _allSqlTableList = value; OnPropertyChanged(); }
-        }
-
         public ObservableCollection<InstalledProgram> InstalledPrograms
         {
             get => _installedPrograms;
@@ -809,43 +622,6 @@ namespace MyTools.ViewModels
             get => _filteredInstalledProgramsView;
             set { _filteredInstalledProgramsView = value; OnPropertyChanged(); }
         }
-
-        public ICollectionView FilteredSqlTableView
-        {
-            get => _filteredSqlTableView;
-            set { _filteredSqlTableView = value; OnPropertyChanged(); }
-        }
-
-        public ObservableCollection<string> SqlServerAddressHistory
-        {
-            get => _sqlServerAddressHistory;
-            set { _sqlServerAddressHistory = value; OnPropertyChanged(); }
-        }
-
-        public ObservableCollection<string> SqlUsernameHistory
-        {
-            get => _sqlUsernameHistory;
-            set { _sqlUsernameHistory = value; OnPropertyChanged(); }
-        }
-
-        public ObservableCollection<string> SqlPasswordHistory
-        {
-            get => _sqlPasswordHistory;
-            set { _sqlPasswordHistory = value; OnPropertyChanged(); }
-        }
-
-        public ObservableCollection<SqlConnectionHistoryItem> SqlRecentConnections
-        {
-            get => _sqlRecentConnections;
-            set
-            {
-                _sqlRecentConnections = value;
-                OnPropertyChanged();
-                OnPropertyChanged(nameof(HasSqlRecentConnections));
-            }
-        }
-
-        public bool HasSqlRecentConnections => SqlRecentConnections.Count > 0;
 
         public ObservableCollection<CodexProfileItem> CodexProfiles
         {
@@ -1002,20 +778,6 @@ namespace MyTools.ViewModels
                 OnPropertyChanged(nameof(CurrentNavigationText));
                 NotifySystemSectionVisibilityChanged();
 
-                // Auto-pause sensor polling when leaving SystemInfo page to save CPU
-                if (prev == "SystemInfo" && _isSensorsRunning && SensorTimer.IsEnabled)
-                {
-                    SensorTimer.Stop();
-                }
-                else if (value == "SystemInfo" && _isSensorsRunning && !SensorTimer.IsEnabled)
-                {
-                    SensorTimer.Start();
-                }
-                else if (prev == "System" && value != "System" && string.Equals(CurrentSystemSection, "SystemInfo", StringComparison.Ordinal) && _isSensorsRunning && SensorTimer.IsEnabled)
-                {
-                    SensorTimer.Stop();
-                }
-
                 if (string.Equals(value, "CodexProfiles", StringComparison.Ordinal))
                 {
                     EnsureCodexProfilesLoading();
@@ -1034,14 +796,6 @@ namespace MyTools.ViewModels
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(CurrentNavigationText));
                 NotifySystemSectionVisibilityChanged();
-                if (string.Equals(previous, "SystemInfo", StringComparison.Ordinal) && _isSensorsRunning && SensorTimer.IsEnabled)
-                {
-                    SensorTimer.Stop();
-                }
-                else if (string.Equals(value, "SystemInfo", StringComparison.Ordinal) && _isSensorsRunning && !SensorTimer.IsEnabled)
-                {
-                    SensorTimer.Start();
-                }
             }
         }
 
@@ -1083,177 +837,6 @@ namespace MyTools.ViewModels
             catch (Exception ex) { AppLogService.Warning("SystemInfoSnapshot load failed: {Msg}", ex.Message); }
         }
 
-        public IReadOnlyList<SqlProviderOption> SqlProviderOptions => SqlProviderOptionItems;
-
-        public SqlProviderKind SelectedSqlProvider
-        {
-            get => _selectedSqlProvider;
-            set
-            {
-                if (_selectedSqlProvider == value)
-                {
-                    return;
-                }
-
-                _selectedSqlProvider = value;
-                OnPropertyChanged();
-                OnPropertyChanged(nameof(SqlPortHint));
-                ApplyDefaultSqlPortIfNeeded();
-                MarkSqlConnectionInputAsUserModified();
-                SafeFireAndForget(LoadSqlConnectionHistoryAsync());
-            }
-        }
-
-        public string SqlServerAddress
-        {
-            get => _sqlServerAddress;
-            set
-            {
-                if (string.Equals(_sqlServerAddress, value, StringComparison.Ordinal))
-                {
-                    return;
-                }
-
-                _sqlServerAddress = value;
-                MarkSqlConnectionInputAsUserModified();
-                OnPropertyChanged();
-            }
-        }
-
-        public string SqlPort
-        {
-            get => _sqlPort;
-            set
-            {
-                if (string.Equals(_sqlPort, value, StringComparison.Ordinal))
-                {
-                    return;
-                }
-
-                _sqlPort = value;
-                MarkSqlConnectionInputAsUserModified();
-                OnPropertyChanged();
-            }
-        }
-
-        public string SqlPortHint
-        {
-            get
-            {
-                switch (SelectedSqlProvider)
-                {
-                    case SqlProviderKind.PostgreSql:
-                        return "端口（默认 5432）";
-                    case SqlProviderKind.MySql:
-                        return "端口（默认 3306）";
-                    default:
-                        return "端口（默认 1433）";
-                }
-            }
-        }
-
-        public string SqlUsername
-        {
-            get => _sqlUsername;
-            set
-            {
-                if (string.Equals(_sqlUsername, value, StringComparison.Ordinal))
-                {
-                    return;
-                }
-
-                _sqlUsername = value;
-                MarkSqlConnectionInputAsUserModified();
-                OnPropertyChanged();
-            }
-        }
-
-        public string SqlPassword
-        {
-            get => _sqlPassword;
-            set
-            {
-                if (string.Equals(_sqlPassword, value, StringComparison.Ordinal))
-                {
-                    return;
-                }
-
-                _sqlPassword = value;
-                MarkSqlConnectionInputAsUserModified();
-                OnPropertyChanged();
-            }
-        }
-
-        public string SqlTableSearchText
-        {
-            get => _sqlTableSearchText;
-            set
-            {
-                if (_sqlTableSearchText == value)
-                {
-                    return;
-                }
-
-                _sqlTableSearchText = value;
-                OnPropertyChanged();
-                if (SelectedSqlTable != null && !string.Equals(SelectedSqlTable.DisplayName, value, StringComparison.OrdinalIgnoreCase))
-                {
-                    SelectedSqlTable = null;
-                }
-
-                FilteredSqlTableView?.Refresh();
-            }
-        }
-
-        public DatabaseItem SelectedSqlDatabase
-        {
-            get => _selectedSqlDatabase;
-            set
-            {
-                if (_selectedSqlDatabase == value)
-                {
-                    return;
-                }
-
-                _selectedSqlDatabase = value;
-                OnPropertyChanged();
-                SelectedSqlTable = null;
-                TriggerCommandRequery();
-                if (!_suppressSqlTableAutoLoad)
-                {
-                    SafeFireAndForget(LoadTablesForSelectedDatabaseAsync());
-                }
-            }
-        }
-
-        public TableItem SelectedSqlTable
-        {
-            get => _selectedSqlTable;
-            set
-            {
-                _selectedSqlTable = value;
-                OnPropertyChanged();
-                TriggerCommandRequery();
-            }
-        }
-
-        public string SqlStatusMessage
-        {
-            get => _sqlStatusMessage;
-            set { _sqlStatusMessage = value; OnPropertyChanged(); }
-        }
-
-        public bool IsSqlBusy
-        {
-            get => _isSqlBusy;
-            set
-            {
-                _isSqlBusy = value;
-                OnPropertyChanged();
-                TriggerCommandRequery();
-            }
-        }
-
         public ICommand RefreshCommand { get; }
         public ICommand ExecuteHomeCommandItemCommand { get; }
         public ICommand OpenHomeRecentItemCommand { get; }
@@ -1262,7 +845,6 @@ namespace MyTools.ViewModels
         public ICommand ShowStartupCommand { get; }
         public ICommand ShowSystemCommand { get; }
         public ICommand ShowUninstallCommand { get; }
-        public ICommand ShowSqlExportCommand { get; }
         public ICommand ShowFrpCommand { get; }
         public ICommand ShowCodexProfilesCommand { get; }
         public ICommand ShowMultimediaCommand { get; }
@@ -1371,43 +953,6 @@ namespace MyTools.ViewModels
             : $"已选 {SelectedInstalledProgramsCount} 个";
 
 
-        public string SqlQueryText
-        {
-            get => _sqlQueryText;
-            set { _sqlQueryText = value; OnPropertyChanged(); _executeQueryCommand?.RaiseCanExecuteChanged(); }
-        }
-
-        public DataView SqlQueryResult
-        {
-            get => _sqlQueryResult;
-            set
-            {
-                _sqlQueryResult = value;
-                OnPropertyChanged();
-                _exportQueryResultCommand?.RaiseCanExecuteChanged();
-                _exportQueryResultCsvCommand?.RaiseCanExecuteChanged();
-            }
-        }
-
-        public bool IsQueryBusy
-        {
-            get => _isQueryBusy;
-            set
-            {
-                _isQueryBusy = value;
-                OnPropertyChanged();
-                _executeQueryCommand?.RaiseCanExecuteChanged();
-                _exportQueryResultCommand?.RaiseCanExecuteChanged();
-                _exportQueryResultCsvCommand?.RaiseCanExecuteChanged();
-            }
-        }
-
-        public string QueryStatusMessage
-        {
-            get => _queryStatusMessage;
-            set { _queryStatusMessage = value; OnPropertyChanged(); }
-        }
-
         public bool IsInstalledProgramsBusy
         {
             get => _isInstalledProgramsBusy;
@@ -1426,10 +971,6 @@ namespace MyTools.ViewModels
             set { _installedProgramsStatusMessage = value; OnPropertyChanged(); }
         }
 
-        public ICommand ExecuteSqlQueryCommand { get; }
-        public ICommand ExportQueryResultCommand { get; }
-        public ICommand ExportQueryResultCsvCommand { get; }
-        public ICommand CancelSqlQueryCommand { get; }
 
         public bool IsDefenderEnabled
         {
@@ -2015,7 +1556,6 @@ namespace MyTools.ViewModels
         public ICommand PreviewCodexProfileDiffCommand { get; }
         public ICommand ApplyCodexConfigTemplateToAllCommand { get; }
         public ICommand ImportCodexProfileCommand { get; }
-        public ICommand ImportCodexOllamaProfilesCommand { get; }
         public ICommand ImportCodexCpaTokenCommand { get; }
         public ICommand RefreshCodexProfileCommand { get; }
         public ICommand RenameCodexProfileCommand { get; }
@@ -2027,53 +1567,12 @@ namespace MyTools.ViewModels
         public ICommand DeleteCodexProfileCommand { get; }
         public ICommand EditCodexConfigTomlCommand { get; }
         public ICommand EditCodexAuthJsonCommand { get; }
-        public ICommand RotateToNextCodexProfileCommand { get; }
         public ICommand RestartCodexDesktopCommand { get; }
         public ICommand EnableCodexLocalRelayCommand { get; }
         public ICommand DisableCodexLocalRelayCommand { get; }
         public ICommand RestartCodexWithLocalRelayCommand { get; }
-        public ICommand ToggleCodexProfileRotationCommand { get; }
         public ICommand TestCodexRelaysCommand { get; }
         public ICommand TestCodexProfileRelayCommand { get; }
-        public ICommand SelectAllCodexRotationCommand { get; }
-        public ICommand InvertCodexRotationCommand { get; }
-
-        public string CodexNextSwitchPreview
-        {
-            get => _codexNextSwitchPreview;
-            private set
-            {
-                if (string.Equals(_codexNextSwitchPreview, value, StringComparison.Ordinal)) return;
-                _codexNextSwitchPreview = value ?? "无可用轮换目标";
-                OnPropertyChanged();
-            }
-        }
-
-        public CodexRotationSettings CodexRotationSettings
-        {
-            get => _codexRotationSettings;
-            set
-            {
-                if (ReferenceEquals(_codexRotationSettings, value)) return;
-                _codexRotationSettings = value ?? new CodexRotationSettings();
-                OnPropertyChanged();
-            }
-        }
-
-        public bool IsCodexRotationAvailable
-        {
-            get
-            {
-                if (CodexProfiles == null) return false;
-                var current = CodexProfiles.FirstOrDefault(p => p != null && p.IsActive);
-                if (current == null) return false;
-
-                return CodexProfiles.Any(p => p != null
-                    && p.EnableRotation
-                    && p.Status != CodexProfileLibraryService.StatusExpired
-                    && !string.Equals(p.DisplayName, current.DisplayName, StringComparison.Ordinal));
-            }
-        }
 
         public string CodexLocalRelayStatus
         {
@@ -3015,28 +2514,6 @@ namespace MyTools.ViewModels
             }
         }
 
-        public string CodexRateLimitStatusText
-        {
-            get => _codexRateLimitStatusText;
-            private set
-            {
-                if (string.Equals(_codexRateLimitStatusText, value, StringComparison.Ordinal)) return;
-                _codexRateLimitStatusText = value ?? string.Empty;
-                OnPropertyChanged();
-            }
-        }
-
-        public bool IsCodexRateLimitMonitoring
-        {
-            get => _isCodexRateLimitMonitoring;
-            private set
-            {
-                if (_isCodexRateLimitMonitoring == value) return;
-                _isCodexRateLimitMonitoring = value;
-                OnPropertyChanged();
-            }
-        }
-
         public ICommand LockWin10Command { get; }
         public ICommand ExitCommand { get; }
         public ICommand RestoreCommand { get; }
@@ -3097,10 +2574,6 @@ namespace MyTools.ViewModels
             get => _isAutoStartEnabled;
             set { _isAutoStartEnabled = value; OnPropertyChanged(); }
         }
-        public ICommand TestSqlConnectionCommand { get; }
-        public ICommand ExportSqlTableCommand { get; }
-        public ICommand CancelSqlExportCommand { get; }
-        public ICommand ApplySqlRecentConnectionCommand { get; }
         public ICommand ToggleDefenderCommand { get; }
         public ICommand ToggleAutoUpdateCommand { get; }
         public ICommand TriggerUpdateNowCommand { get; }
@@ -3180,8 +2653,6 @@ namespace MyTools.ViewModels
                     return "性能测试";
                 case "SystemSettings":
                     return "系统设置";
-                case "SqlExport":
-                    return "SQL 导出";
                 case "Frp":
                     return "内网穿透";
                 case "Multimedia":
@@ -3247,17 +2718,6 @@ namespace MyTools.ViewModels
                 EnsureWeChatStartupDataLoading();
                 RefreshSystemStatus();
             }
-        }
-
-        private void EnsureSqlStartupDataLoading()
-        {
-            if (_sqlHistoryLoadRequested)
-            {
-                return;
-            }
-
-            _sqlHistoryLoadRequested = true;
-            SafeFireAndForget(LoadSqlConnectionHistoryAsync());
         }
 
         private void EnsureScreenshotStartupDataLoading()
@@ -3406,7 +2866,6 @@ namespace MyTools.ViewModels
             {
                 EnsureSystemInfoSnapshotLoading();
                 SafeFireAndForget(LoadSystemInfoAsync());
-                SafeFireAndForget(StartSensorsBackgroundAsync());
             }
             else if (string.Equals(module, "Optimization", StringComparison.Ordinal))
             {
@@ -3417,10 +2876,6 @@ namespace MyTools.ViewModels
             else if (string.Equals(module, "Frp", StringComparison.Ordinal))
             {
                 EnsureFrpConfigLoading();
-            }
-            else if (string.Equals(module, "SqlExport", StringComparison.Ordinal))
-            {
-                EnsureSqlStartupDataLoading();
             }
             else if (string.Equals(module, "Screenshot", StringComparison.Ordinal))
             {
@@ -3462,7 +2917,6 @@ namespace MyTools.ViewModels
 
             AddHomeCommand("多媒体", "图片查看 + 音视频播放 + 批量格式转换", "多媒体 图片 视频 音频 转换 multimedia image video audio convert", ShowMultimediaCommand);
             AddHomeCommand("截图 / 录像 / 录音", "打开截图工具、区域录像、系统声音录音", "截图 截屏 录像 录屏 录音 声音 热键 capture record audio", ShowScreenshotCommand);
-            AddHomeCommand("SQL 导出 / 查询", "连接数据库、查询、导出 Excel 或 CSV", "sql 数据库 查询 导出 excel csv mysql postgresql", ShowSqlExportCommand);
             AddHomeCommand("隧道穿透", "配置 frp 服务器和端口映射，一键启动或停止 frpc", "frp 穿透 隧道 端口 映射 公网 tunnel proxy", ShowFrpCommand);
             AddHomeCommand("排班管理", "维护人员、生成排班、冲突检查、导出 Excel", "排班 班次 人员 休息 冲突 excel schedule", ShowScheduleCommand);
             AddHomeCommand("文件哈希校验", "计算 MD5、SHA-1、SHA-256、CRC32", "哈希 校验 md5 sha crc 文件 verify hash", ShowFileVerifyCommand);
@@ -3579,7 +3033,7 @@ namespace MyTools.ViewModels
             }
             catch (OperationCanceledException)
             {
-                SqlStatusMessage = "导出已取消。";
+                SystemStatusMessage = "操作已取消。";
             }
             catch (Exception ex)
             {
@@ -3805,9 +3259,7 @@ namespace MyTools.ViewModels
                     }
 
                     CodexProfilesStatusMessage = statusMessage;
-                    UpdateCodexRotationState();
                     UpdateCodexExpirySummary();
-                    StartCodexRateLimitMonitoring();
                     _codexProfilesLoadedSuccessfully = true;
                 });
             }
@@ -3931,11 +3383,6 @@ namespace MyTools.ViewModels
 
         private void CodexProfileItem_OnPropertyChanged(object sender, PropertyChangedEventArgs e)
         {
-            if (_suppressCodexProfileAutoSave)
-            {
-                return;
-            }
-
             if (e.PropertyName == nameof(CodexProfileItem.Remark)
                 || e.PropertyName == nameof(CodexProfileItem.Tags)
                 || e.PropertyName == nameof(CodexProfileItem.Note))
@@ -3943,18 +3390,10 @@ namespace MyTools.ViewModels
                 SafeFireAndForget(SaveCodexProfilesAsync());
             }
 
-            if (e.PropertyName == nameof(CodexProfileItem.EnableRotation)
-                || e.PropertyName == nameof(CodexProfileItem.RotationPriority))
-            {
-                UpdateCodexRotationState();
-                SafeFireAndForget(SaveCodexProfilesAsync());
-            }
-
             if (e.PropertyName == nameof(CodexProfileItem.Status)
                 || e.PropertyName == nameof(CodexProfileItem.AccessTokenExpiresAt))
             {
                 UpdateCodexExpirySummary();
-                UpdateCodexRotationState();
             }
         }
 
@@ -4205,7 +3644,6 @@ namespace MyTools.ViewModels
                 SortCodexProfilesByLastApplied();
                 await SaveCodexProfilesAsync();
                 AppLogService.Information("Switched Codex profile to {DisplayName}, backup at {BackupPath}", SafeCodexLogName(item.DisplayName), backupPath ?? string.Empty);
-                UpdateCodexRotationState();
                 MessageBox.Show(
                     $"已成功切换到「{item.DisplayName}」。\n\n目标目录：{result.TargetFolderPath}\n请重启 Codex 或重新打开终端后使用。",
                     "Codex 账号切换成功",
@@ -4302,7 +3740,6 @@ namespace MyTools.ViewModels
                 : $"已通过本地中转切换到「{item.DisplayName}」。Codex App 下一次请求将使用新的 NewAPI 上游。";
             SortCodexProfilesByLastApplied();
             await SaveCodexProfilesAsync().ConfigureAwait(true);
-            UpdateCodexRotationState();
             AppLogService.Information("Switched Codex local relay to {DisplayName}", SafeCodexLogName(item.DisplayName));
             if (relaySwitch.RequiresCodexRestart)
             {
@@ -4433,108 +3870,6 @@ namespace MyTools.ViewModels
             {
                 AppLogService.Error(new InvalidOperationException(ex.Message), "Importing current Codex profile failed with {ErrorType}", ex.GetType().Name);
                 MessageBox.Show(ex.Message, "导入失败", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
-        private async Task ImportCodexOllamaProfilesAsync()
-        {
-            try
-            {
-                CodexProfilesStatusMessage = "正在读取本机 Ollama 模型...";
-                var definitions = await CodexOllamaProfileService
-                    .LoadInstalledProfilesAsync(CancellationToken.None)
-                    .ConfigureAwait(true);
-                if (definitions.Count == 0)
-                {
-                    CodexProfilesStatusMessage = "未检测到本机 Ollama 模型。";
-                    MessageBox.Show(
-                        "未检测到本机 Ollama 模型。请确认 Ollama 正在运行，并且至少已经拉取一个模型。",
-                        "导入 Ollama 模型",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Information);
-                    return;
-                }
-
-                var added = 0;
-                var updated = 0;
-                foreach (var definition in definitions)
-                {
-                    var protectedConfig = CodexConfigProfileService.ProtectBytesToBase64(definition.ConfigTomlBytes);
-                    var protectedAuth = CodexConfigProfileService.ProtectBytesToBase64(definition.AuthJsonBytes);
-                    var existing = CodexProfiles.FirstOrDefault(item =>
-                        IsOllamaProfileForModel(item, definition.ModelName)
-                        || string.Equals(item.DisplayName, definition.DisplayName, StringComparison.OrdinalIgnoreCase));
-                    var tags = BuildOllamaProfileTags(definition.ModelName);
-                    var note = "本机 Ollama 模型：" + definition.ModelName;
-
-                    if (existing != null)
-                    {
-                        existing.DisplayName = string.IsNullOrWhiteSpace(existing.DisplayName)
-                            ? definition.DisplayName
-                            : existing.DisplayName;
-                        existing.Name = existing.DisplayName;
-                        existing.Note = string.IsNullOrWhiteSpace(existing.Note) ? note : existing.Note;
-                        existing.Remark = string.IsNullOrWhiteSpace(existing.Note) ? existing.DisplayName : existing.Note;
-                        existing.Tags = tags;
-                        existing.FolderPath = string.Empty;
-                        existing.ProtectedConfigTomlBase64 = protectedConfig;
-                        existing.ProtectedAuthJsonBase64 = protectedAuth;
-                        existing.ConfigTomlContentProtected = protectedConfig;
-                        existing.AuthJsonContentProtected = protectedAuth;
-                        existing.AccountEmail = string.Empty;
-                        existing.AccessTokenExpiresAt = null;
-                        existing.RefreshTokenExpiresAt = null;
-                        existing.LastImportedAt = DateTime.UtcNow;
-                        existing.Status = CodexProfileLibraryService.StatusUnknown;
-                        existing.StatusMessage = "已更新本机 Ollama 模型配置。";
-                        existing.RelayTestStatus = CodexProfileItem.RelayStatusUnknown;
-                        existing.RelayTestedAt = null;
-                        existing.RelayTestMessage = string.Empty;
-                        updated++;
-                        continue;
-                    }
-
-                    var displayName = EnsureUniqueCodexDisplayName(definition.DisplayName, null);
-                    var item = CreateCodexProfileItem(
-                        string.Empty,
-                        displayName,
-                        note,
-                        tags,
-                        null,
-                        protectedConfig,
-                        protectedAuth);
-                    item.DisplayName = displayName;
-                    item.Name = displayName;
-                    item.Note = note;
-                    item.Remark = note;
-                    item.AccountEmail = string.Empty;
-                    item.AccessTokenExpiresAt = null;
-                    item.RefreshTokenExpiresAt = null;
-                    item.Status = CodexProfileLibraryService.StatusUnknown;
-                    item.StatusMessage = "已导入本机 Ollama 模型。";
-                    item.EnableRotation = false;
-                    item.RotationPriority = 0;
-                    item.RelayTestStatus = CodexProfileItem.RelayStatusUnknown;
-                    AddCodexProfileItem(item);
-                    added++;
-                }
-
-                SortCodexProfilesByLastApplied();
-                await SaveCodexProfilesAsync().ConfigureAwait(true);
-                UpdateCodexRotationState();
-                CodexProfilesStatusMessage = $"已导入 Ollama 模型：新增 {added}，更新 {updated}。";
-                AppLogService.Information("Imported Ollama Codex profiles: added = {Added}, updated = {Updated}", added, updated);
-                MessageBox.Show(
-                    $"已导入本机 Ollama 模型档案：新增 {added}，更新 {updated}。\n\n点击“测试中转”可验证这些模型；点击对应档案“切换”后重启 Codex App 即可使用。",
-                    "导入 Ollama 模型完成",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
-            }
-            catch (Exception ex)
-            {
-                AppLogService.Error(new InvalidOperationException(ex.Message), "Importing Ollama Codex profiles failed with {ErrorType}", ex.GetType().Name);
-                CodexProfilesStatusMessage = "导入 Ollama 模型失败：" + ex.Message;
-                MessageBox.Show(ex.Message, "导入 Ollama 模型失败", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -4759,7 +4094,6 @@ namespace MyTools.ViewModels
                 AddCodexProfileItem(copy);
                 SortCodexProfilesByLastApplied();
                 await SaveCodexProfilesAsync().ConfigureAwait(true);
-                UpdateCodexRotationState();
                 CodexProfilesStatusMessage = $"已复制「{sourceName}」为「{copy.DisplayName}」。";
                 AppLogService.Information("Copied Codex profile {SourceName} to {CopyName}", SafeCodexLogName(sourceName), SafeCodexLogName(copy.DisplayName));
             }
@@ -4990,7 +4324,7 @@ namespace MyTools.ViewModels
 
             var confirm = MessageBox.Show(
                 $"将以「{templateItem.DisplayName}」的 config.toml 作为模板，同步到其他 {targets.Count} 个 Codex 档案。\n\n" +
-                "每个目标档案会保留自己的 base_url = \"...\" 行；auth.json、别名、备注和轮换设置不会修改。\n\n" +
+                "每个目标档案会保留自己的 base_url = \"...\" 行；auth.json、别名、备注和测试状态不会修改。\n\n" +
                 "执行前会创建一份 DPAPI 加密的档案库备份。该操作只更新档案库，不会立即覆盖当前 ~/.codex。继续？",
                 "以此为模板应用到所有",
                 MessageBoxButton.OKCancel,
@@ -5135,118 +4469,6 @@ namespace MyTools.ViewModels
             CodexProfilesStatusMessage = $"已删除「{item.DisplayName}」。";
             await SaveCodexProfilesAsync();
             AppLogService.Information("Deleted Codex profile {DisplayName}", SafeCodexLogName(item.DisplayName));
-            UpdateCodexRotationState();
-        }
-
-        private async Task RotateToNextCodexProfileAsync()
-        {
-            var current = CodexProfiles?.FirstOrDefault(p => p != null && p.IsActive);
-            if (current == null)
-            {
-                CodexProfilesStatusMessage = "未找到当前激活的 Codex 账号";
-                return;
-            }
-
-            await SaveCodexProfilesAsync();
-            var nextCandidate = FindNextCodexRotationTarget(current);
-            if (nextCandidate != null)
-            {
-                nextCandidate.IsRelayTesting = true;
-                nextCandidate.RelayTestStatus = CodexProfileItem.RelayStatusTesting;
-                nextCandidate.RelayTestMessage = "轮换前正在测试中转...";
-                CodexProfilesStatusMessage = $"正在测试将要轮换的中转：{nextCandidate.DisplayName}...";
-            }
-            else
-            {
-                CodexProfilesStatusMessage = "正在切换 Codex 账号...";
-            }
-
-            var result = await CodexRotationService.RotateToNextAsync(
-                current, CodexRotationSettings.NotifyOnSwitch, CancellationToken.None);
-
-            if (nextCandidate != null)
-            {
-                nextCandidate.IsRelayTesting = false;
-            }
-
-            if (result.RelayTestExecuted)
-            {
-                var testedItem = CodexProfiles?.FirstOrDefault(p =>
-                    p != null && string.Equals(p.DisplayName, result.ToProfile, StringComparison.OrdinalIgnoreCase));
-                if (testedItem != null)
-                {
-                    testedItem.RelayTestStatus = string.IsNullOrWhiteSpace(result.RelayTestStatus)
-                        ? (result.RelayTestSucceeded ? CodexProfileItem.RelayStatusOk : CodexProfileItem.RelayStatusFailed)
-                        : result.RelayTestStatus;
-                    testedItem.RelayTestedAt = result.RelayTestedAt ?? DateTime.Now;
-                    testedItem.RelayTestMessage = LimitRelayTestMessage(result.RelayTestMessage);
-                }
-            }
-            else if (!result.Success && nextCandidate != null)
-            {
-                nextCandidate.RelayTestStatus = CodexProfileItem.RelayStatusFailed;
-                nextCandidate.RelayTestedAt = DateTime.Now;
-                nextCandidate.RelayTestMessage = LimitRelayTestMessage(result.Message);
-            }
-
-            if (result.Success)
-            {
-                current.IsActive = false;
-                var next = CodexProfiles?.FirstOrDefault(p => p != null && p.DisplayName == result.ToProfile);
-                if (next != null)
-                {
-                    next.IsActive = true;
-                    next.LastAppliedAt = DateTime.Now;
-                    next.StatusMessage = $"已轮换：{next.LastAppliedAt:yyyy-MM-dd HH:mm:ss}";
-                }
-
-                CodexProfilesStatusMessage = result.UsedLocalRelaySwitch
-                    ? (result.RequiresCodexRestart
-                        ? $"已切换本地中转：{result.FromProfile} → {result.ToProfile}，并已修复 Codex 固定本地配置。请重启 Codex App 后使用。"
-                        : $"已切换本地中转：{result.FromProfile} → {result.ToProfile}。Codex 下一次请求会使用新上游。")
-                    : (result.UsedHotTokenRefresh
-                        ? $"已热轮换：{result.FromProfile} → {result.ToProfile}。等待 Codex 自动刷新 token。"
-                        : $"已写入：{result.FromProfile} → {result.ToProfile}。请重启 Codex App 后使用。");
-                SortCodexProfilesByLastApplied();
-                await SaveCodexProfilesAsync();
-                UpdateCodexRotationState();
-                if (result.RequiresCodexRestart)
-                {
-                    var restartTitle = result.UsedLocalRelaySwitch
-                        ? "Codex 本地中转配置已修复"
-                        : "Codex 账号轮换已写入";
-                    var restartMessage = result.UsedLocalRelaySwitch
-                        ? $"已把本地中转上游切换为「{result.ToProfile}」，并把 Codex 配置重新固定到本地 relay。\n\n当前已运行的 Codex App 后端仍可能使用旧配置。是否现在温和重启 Codex App？\n\n已保存的对话历史通常会保留；正在生成的回复或正在执行的命令会被中断。请确认当前 Codex 没有正在工作。"
-                        : $"已把 Codex 配置写入为「{result.ToProfile}」。\n\n当前已运行的 Codex App 后端不会热加载 auth.json。是否现在温和重启 Codex App？\n\n已保存的对话历史通常会保留；正在生成的回复或正在执行的命令会被中断。请确认当前 Codex 没有正在工作。";
-                    var restartNow = MessageBox.Show(
-                        restartMessage,
-                        restartTitle,
-                        MessageBoxButton.YesNo,
-                        MessageBoxImage.Information);
-                    if (restartNow == MessageBoxResult.Yes)
-                    {
-                        await RestartCodexDesktopCoreAsync();
-                    }
-                }
-                else
-                {
-                    var liveMessage = result.UsedLocalRelaySwitch
-                        ? $"已把本地中转上游切换为「{result.ToProfile}」。\n\nCodex App 固定连接本地 relay，下一次请求会使用新的 NewAPI base_url 和 key，通常无需重启。"
-                        : $"已把热轮换 token 更新为「{result.ToProfile}」。\n\nCodex App 会按 auth.command 的刷新间隔读取新 token，通常无需重启。";
-                    MessageBox.Show(
-                        liveMessage,
-                        result.UsedLocalRelaySwitch ? "Codex 本地中转已切换" : "Codex 热轮换已更新",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Information);
-                }
-            }
-            else
-            {
-                CodexProfilesStatusMessage = result.RelayTestExecuted
-                    ? $"轮换已停止：{result.Message}"
-                    : result.Message;
-                await SaveCodexProfilesAsync();
-            }
         }
 
         private async Task RestartCodexDesktopAsync()
@@ -5380,114 +4602,6 @@ namespace MyTools.ViewModels
                 result.Success ? MessageBoxImage.Information : MessageBoxImage.Warning);
         }
 
-        private async Task ToggleCodexProfileRotationAsync(object parameter)
-        {
-            if (!(parameter is CodexProfileItem item)) return;
-            item.EnableRotation = !item.EnableRotation;
-            await SaveCodexProfilesAsync();
-            UpdateCodexRotationState();
-        }
-
-        private async Task SelectAllCodexRotationAsync()
-        {
-            await SetCodexRotationSelectionAsync(true, "已全选轮换档案。");
-        }
-
-        private async Task InvertCodexRotationAsync()
-        {
-            if (CodexProfiles == null || CodexProfiles.Count == 0)
-            {
-                CodexProfilesStatusMessage = "没有可操作的 Codex 档案。";
-                return;
-            }
-
-            _suppressCodexProfileAutoSave = true;
-            try
-            {
-                foreach (var item in CodexProfiles.Where(item => item != null))
-                {
-                    item.EnableRotation = !item.EnableRotation;
-                }
-            }
-            finally
-            {
-                _suppressCodexProfileAutoSave = false;
-            }
-
-            await SaveCodexProfilesAsync();
-            UpdateCodexRotationState();
-            var selectedCount = CodexProfiles.Count(item => item != null && item.EnableRotation);
-            CodexProfilesStatusMessage = $"已反选轮换档案：当前 {selectedCount}/{CodexProfiles.Count} 个加入轮换。";
-        }
-
-        private async Task SetCodexRotationSelectionAsync(bool selected, string message)
-        {
-            if (CodexProfiles == null || CodexProfiles.Count == 0)
-            {
-                CodexProfilesStatusMessage = "没有可操作的 Codex 档案。";
-                return;
-            }
-
-            _suppressCodexProfileAutoSave = true;
-            try
-            {
-                foreach (var item in CodexProfiles.Where(item => item != null))
-                {
-                    item.EnableRotation = selected;
-                }
-            }
-            finally
-            {
-                _suppressCodexProfileAutoSave = false;
-            }
-
-            await SaveCodexProfilesAsync();
-            UpdateCodexRotationState();
-            CodexProfilesStatusMessage = message;
-        }
-
-        private void UpdateCodexNextSwitchPreview()
-        {
-            var current = CodexProfiles?.FirstOrDefault(p => p != null && p.IsActive);
-            if (current == null)
-            {
-                CodexNextSwitchPreview = "无可用轮换目标";
-                return;
-            }
-
-            var next = FindNextCodexRotationTarget(current);
-
-            CodexNextSwitchPreview = next == null
-                ? "无可用轮换目标"
-                : $"当前：{current.DisplayName} → 切换至：{next.DisplayName}";
-        }
-
-        private CodexProfileItem FindNextCodexRotationTarget(CodexProfileItem current)
-        {
-            if (current == null)
-            {
-                return null;
-            }
-
-            return CodexProfiles?
-                .Where(p => p != null
-                            && p.EnableRotation
-                            && p.Status != CodexProfileLibraryService.StatusExpired
-                            && !string.Equals(p.DisplayName, current.DisplayName, StringComparison.Ordinal))
-                .OrderBy(p => p.RotationPriority)
-                .ThenBy(p => p.LastAppliedAt ?? DateTime.MinValue)
-                .FirstOrDefault();
-        }
-
-        private void UpdateCodexRotationState()
-        {
-            OnPropertyChanged(nameof(IsCodexRotationAvailable));
-            UpdateCodexNextSwitchPreview();
-            _rotateToNextCodexProfileCommand?.RaiseCanExecuteChanged();
-            _selectAllCodexRotationCommand?.RaiseCanExecuteChanged();
-            _invertCodexRotationCommand?.RaiseCanExecuteChanged();
-        }
-
         private void UpdateCodexExpirySummary()
         {
             var items = CodexProfiles?.Where(item => item != null).ToList() ?? new List<CodexProfileItem>();
@@ -5506,191 +4620,6 @@ namespace MyTools.ViewModels
             CodexExpirySummaryText = HasCodexExpiryReminder
                 ? $"过期提醒：已过期 {expired} 个，即将过期 {warn} 个。"
                 : "过期提醒：全部可用。";
-        }
-
-        private void StartCodexRateLimitMonitoring()
-        {
-            if (_isDisposed || _codexRateLimitMonitorTimer.IsEnabled)
-            {
-                return;
-            }
-
-            IsCodexRateLimitMonitoring = true;
-            CodexRateLimitStatusText = "429 自动轮换：初始化中。";
-            SafeFireAndForget(InitializeCodexRateLimitMonitoringAsync());
-        }
-
-        private async Task InitializeCodexRateLimitMonitoringAsync()
-        {
-            var result = await CodexRateLimitLogMonitorService.InitializeBaselineAsync(_codexRateLimitMonitorCts.Token).ConfigureAwait(false);
-            await (Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher).InvokeAsync(() =>
-            {
-                if (_isDisposed)
-                {
-                    return;
-                }
-
-                if (!result.Success)
-                {
-                    IsCodexRateLimitMonitoring = false;
-                    CodexRateLimitStatusText = result.Message;
-                    return;
-                }
-
-                _codexRateLimitLastSeenLogId = result.LastSeenLogId;
-                CodexRateLimitStatusText = "429 自动轮换：监控中。";
-                _codexRateLimitMonitorTimer.Start();
-            });
-        }
-
-        private void CodexRateLimitMonitorTimer_OnTick(object sender, EventArgs e)
-        {
-            if (_isCodexRateLimitHandling || _isDisposed)
-            {
-                return;
-            }
-
-            SafeFireAndForget(CheckCodexRateLimitAsync());
-        }
-
-        private async Task CheckCodexRateLimitAsync()
-        {
-            if (_isCodexRateLimitHandling)
-            {
-                return;
-            }
-
-            _isCodexRateLimitHandling = true;
-            try
-            {
-                var probe = await CodexRateLimitLogMonitorService.ProbeAsync(_codexRateLimitLastSeenLogId, _codexRateLimitMonitorCts.Token).ConfigureAwait(false);
-                await (Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher).InvokeAsync(() =>
-                {
-                    if (_isDisposed)
-                    {
-                        return;
-                    }
-
-                    if (probe.Success)
-                    {
-                        _codexRateLimitLastSeenLogId = Math.Max(_codexRateLimitLastSeenLogId, probe.LastSeenLogId);
-                    }
-
-                    if (!probe.Success)
-                    {
-                        CodexRateLimitStatusText = probe.Message;
-                    }
-                    else if (!probe.Detected)
-                    {
-                        CodexRateLimitStatusText = "429 自动轮换：监控中。";
-                    }
-                });
-
-                if (probe.Success && probe.Detected)
-                {
-                    await HandleCodexRateLimitHitAsync(probe).ConfigureAwait(false);
-                }
-            }
-            finally
-            {
-                _isCodexRateLimitHandling = false;
-            }
-        }
-
-        private async Task HandleCodexRateLimitHitAsync(CodexRateLimitProbeResult probe)
-        {
-            if (probe == null || probe.LogId <= 0 || probe.LogId == _codexRateLimitLastHandledLogId)
-            {
-                return;
-            }
-
-            if (_codexRateLimitLastSwitchAt.HasValue
-                && DateTime.Now - _codexRateLimitLastSwitchAt.Value < TimeSpan.FromMinutes(2))
-            {
-                await SetCodexRateLimitStatusOnUiAsync("检测到 429，但刚刚已轮换，已跳过重复触发。").ConfigureAwait(false);
-                return;
-            }
-
-            CodexProfileItem current = null;
-            await (Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher).InvokeAsync(() =>
-            {
-                current = CodexProfiles?.FirstOrDefault(p => p != null && p.IsActive);
-            });
-            if (current == null)
-            {
-                await SetCodexRateLimitStatusOnUiAsync("检测到 429，但未找到当前活动账号。").ConfigureAwait(false);
-                return;
-            }
-
-            await SetCodexRateLimitStatusOnUiAsync(probe.Message + " 正在尝试热轮换。").ConfigureAwait(false);
-            var result = await CodexRotationService.RotateToNextAsync(
-                current,
-                CodexRotationSettings.NotifyOnSwitch,
-                CancellationToken.None,
-                allowFullConfigSwitch: false).ConfigureAwait(false);
-
-            CodexProfilesFile snapshotToSave = null;
-            await (Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher).InvokeAsync(() =>
-            {
-                if (_isDisposed)
-                {
-                    return;
-                }
-
-                if (result.RelayTestExecuted)
-                {
-                    var testedItem = CodexProfiles?.FirstOrDefault(p =>
-                        p != null && string.Equals(p.DisplayName, result.ToProfile, StringComparison.OrdinalIgnoreCase));
-                    if (testedItem != null)
-                    {
-                        testedItem.RelayTestStatus = string.IsNullOrWhiteSpace(result.RelayTestStatus)
-                            ? (result.RelayTestSucceeded ? CodexProfileItem.RelayStatusOk : CodexProfileItem.RelayStatusFailed)
-                            : result.RelayTestStatus;
-                        testedItem.RelayTestedAt = result.RelayTestedAt ?? DateTime.Now;
-                        testedItem.RelayTestMessage = LimitRelayTestMessage(result.RelayTestMessage);
-                    }
-                }
-
-                if (result.Success)
-                {
-                    current.IsActive = false;
-                    var next = CodexProfiles?.FirstOrDefault(p => p != null && p.DisplayName == result.ToProfile);
-                    if (next != null)
-                    {
-                        next.IsActive = true;
-                        next.LastAppliedAt = DateTime.Now;
-                        next.StatusMessage = $"429 自动轮换：{next.LastAppliedAt:yyyy-MM-dd HH:mm:ss}";
-                    }
-
-                    _codexRateLimitLastHandledLogId = probe.LogId;
-                    _codexRateLimitLastSwitchAt = DateTime.Now;
-                    CodexRateLimitStatusText = $"429 自动轮换完成：{result.FromProfile} → {result.ToProfile}";
-                    CodexProfilesStatusMessage = CodexRateLimitStatusText;
-                    SortCodexProfilesByLastApplied();
-                    UpdateCodexRotationState();
-                    UpdateCodexExpirySummary();
-                    snapshotToSave = BuildCodexProfilesFileFromCollection();
-                }
-                else
-                {
-                    _codexRateLimitLastHandledLogId = probe.LogId;
-                    CodexRateLimitStatusText = "429 自动轮换未执行：" + result.Message;
-                    CodexProfilesStatusMessage = CodexRateLimitStatusText;
-                    snapshotToSave = BuildCodexProfilesFileFromCollection();
-                }
-            });
-
-            if (snapshotToSave != null)
-            {
-                await CodexProfileLibraryService.SaveAsync(snapshotToSave, CancellationToken.None).ConfigureAwait(false);
-            }
-        }
-
-        private Task SetCodexRateLimitStatusOnUiAsync(string message)
-        {
-            return (Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher)
-                .InvokeAsync(() => CodexRateLimitStatusText = message ?? string.Empty)
-                .Task;
         }
 
         private void SetCodexLocalRelayStatus(string status, string message, bool updateCheckedAt)
@@ -5713,24 +4642,6 @@ namespace MyTools.ViewModels
             return value.IndexOf('@') >= 0
                 ? CodexProfileLibraryService.MaskEmail(value)
                 : value;
-        }
-
-        private static string BuildOllamaProfileTags(string modelName)
-        {
-            return "ollama,local,model:" + (modelName ?? string.Empty).Trim();
-        }
-
-        private static bool IsOllamaProfileForModel(CodexProfileItem item, string modelName)
-        {
-            if (item == null || string.IsNullOrWhiteSpace(modelName))
-            {
-                return false;
-            }
-
-            var expected = "model:" + modelName.Trim();
-            return (item.Tags ?? string.Empty)
-                .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
-                .Any(tag => string.Equals(tag.Trim(), expected, StringComparison.OrdinalIgnoreCase));
         }
 
         private static string LimitRelayTestMessage(string value)
@@ -6127,39 +5038,6 @@ namespace MyTools.ViewModels
             {
                 await stream.WriteAsync(bytes, 0, bytes.Length, cancellationToken);
             }
-        }
-
-        private void MarkSqlConnectionInputAsUserModified()
-        {
-            if (_isApplyingSqlHistory)
-            {
-                return;
-            }
-
-            _hasUserModifiedSqlConnectionInputs = true;
-            _activeSqlConnectionOptions = null;
-            if (SqlDatabaseList.Count == 0 && SqlTableList.Count == 0 && SelectedSqlDatabase == null && SelectedSqlTable == null)
-            {
-                return;
-            }
-
-            CancelPendingTableLoad();
-            _suppressSqlTableAutoLoad = true;
-            try
-            {
-                SelectedSqlDatabase = null;
-                SelectedSqlTable = null;
-            }
-            finally
-            {
-                _suppressSqlTableAutoLoad = false;
-            }
-
-            SqlDatabaseList.Clear();
-            SqlTableList.Clear();
-            AllSqlTableList.Clear();
-            SqlTableSearchText = string.Empty;
-            SqlStatusMessage = "连接信息已变化，请重新测试连接。";
         }
 
         private void EditClipboardImage()
@@ -9848,13 +8726,6 @@ namespace MyTools.ViewModels
                 FilteredStartupView?.Refresh();
                 OnPropertyChanged(nameof(HasNoStartupItems));
             }
-            else if (CurrentModule == "SqlExport")
-            {
-                if (SelectedSqlDatabase != null && SqlTableList.Count == 0)
-                {
-                    SafeFireAndForget(LoadTablesForSelectedDatabaseAsync());
-                }
-            }
             else if (CurrentModule == "System")
             {
                 if (string.Equals(CurrentSystemSection, "Network", StringComparison.Ordinal))
@@ -9881,392 +8752,6 @@ namespace MyTools.ViewModels
                 {
                     RefreshSystemStatus();
                 }
-            }
-        }
-
-        private async Task TestSqlConnectionAsync()
-        {
-            try
-            {
-                IsSqlBusy = true;
-                SqlStatusMessage = $"正在连接 {GetSqlProviderDisplayName(SelectedSqlProvider)}...";
-                CancelPendingTableLoad(clearBusy: false);
-                SqlDatabaseList.Clear();
-                SqlTableList.Clear();
-                AllSqlTableList.Clear();
-                _suppressSqlTableAutoLoad = true;
-                try
-                {
-                    SelectedSqlDatabase = null;
-                    SelectedSqlTable = null;
-                }
-                finally
-                {
-                    _suppressSqlTableAutoLoad = false;
-                }
-
-                SqlTableSearchText = string.Empty;
-
-                var options = BuildSqlConnectionOptions();
-                var provider = SqlExportProviderFactory.GetProvider(options.ProviderKind);
-                await provider.TestConnectionAsync(options, CancellationToken.None);
-                _activeSqlConnectionOptions = CloneSqlConnectionOptions(options);
-                _hasUserModifiedSqlConnectionInputs = false;
-                await SaveSqlConnectionHistoryAsync(options);
-
-                SqlStatusMessage = "连接成功，正在读取数据库列表...";
-                var databases = await provider.GetDatabasesAsync(options, CancellationToken.None);
-                SqlDatabaseList.Clear();
-                foreach (var database in databases)
-                {
-                    SqlDatabaseList.Add(database);
-                }
-
-                SqlStatusMessage = databases.Count > 0
-                    ? $"连接成功，已加载 {databases.Count} 个数据库，请继续选择数据库和表。"
-                    : "连接成功，但当前账号没有可访问的数据库。";
-            }
-            catch (Exception ex)
-            {
-                _activeSqlConnectionOptions = null;
-                AppLogService.Error(ex, "SQL connection test failed for {ServerAddress}", SqlServerAddress ?? string.Empty);
-                SqlStatusMessage = "连接失败，请检查服务器地址、端口、用户名和密码。";
-                MessageBox.Show(ex.Message, $"{GetSqlProviderDisplayName(SelectedSqlProvider)} 连接失败", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-            finally
-            {
-                IsSqlBusy = false;
-            }
-        }
-
-        private async Task LoadTablesForSelectedDatabaseAsync()
-        {
-            CancelPendingTableLoad(clearBusy: false);
-            SqlTableList.Clear();
-            AllSqlTableList.Clear();
-            SqlTableSearchText = string.Empty;
-
-            if (SelectedSqlDatabase == null)
-            {
-                IsSqlBusy = false;
-                SqlStatusMessage = SqlDatabaseList.Count == 0
-                    ? $"请输入 {GetSqlProviderDisplayName(SelectedSqlProvider)} 连接信息后测试连接。"
-                    : "请选择数据库以加载数据表。";
-                return;
-            }
-
-            var cancellationTokenSource = new CancellationTokenSource();
-            _loadTablesCancellationTokenSource = cancellationTokenSource;
-
-            try
-            {
-                IsSqlBusy = true;
-                SqlStatusMessage = $"正在读取数据库 {SelectedSqlDatabase.Name} 的表列表...";
-
-                var options = GetEffectiveSqlConnectionOptions();
-                var provider = SqlExportProviderFactory.GetProvider(options.ProviderKind);
-                var tables = await provider.GetTablesAsync(
-                    options,
-                    SelectedSqlDatabase.Name,
-                    cancellationTokenSource.Token);
-
-                if (cancellationTokenSource.IsCancellationRequested)
-                {
-                    return;
-                }
-
-                SqlTableList.Clear();
-                AllSqlTableList.Clear();
-                foreach (var table in tables)
-                {
-                    AllSqlTableList.Add(table);
-                    SqlTableList.Add(table);
-                }
-                FilteredSqlTableView?.Refresh();
-
-                SqlStatusMessage = tables.Count > 0
-                    ? $"已加载 {tables.Count} 张表，请选择需要导出的表。"
-                    : "当前数据库下没有可导出的用户表。";
-            }
-            catch (OperationCanceledException)
-            {
-            }
-            catch (Exception ex)
-            {
-                AppLogService.Error(ex, "Loading SQL tables failed for {DatabaseName}", SelectedSqlDatabase?.Name ?? string.Empty);
-                SqlStatusMessage = "读取表列表失败。";
-                MessageBox.Show(ex.Message, "读取表列表失败", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-            finally
-            {
-                if (ReferenceEquals(_loadTablesCancellationTokenSource, cancellationTokenSource))
-                {
-                    _loadTablesCancellationTokenSource = null;
-                    IsSqlBusy = false;
-                }
-
-                cancellationTokenSource.Dispose();
-            }
-        }
-
-        private async Task ExportSelectedTableAsync()
-        {
-            CancellationTokenSource exportCancellationTokenSource = null;
-            try
-            {
-                var options = GetEffectiveSqlConnectionOptions();
-                if (SelectedSqlDatabase == null)
-                {
-                    throw new InvalidOperationException("请先选择数据库。");
-                }
-
-                if (SelectedSqlTable == null)
-                {
-                    throw new InvalidOperationException("请先选择数据表。");
-                }
-
-                var dialog = new SaveFileDialog
-                {
-                    Filter = "Excel 工作簿 (*.xlsx)|*.xlsx",
-                    FileName = SqlExportService.BuildDefaultFileName(options.ServerAddress, SelectedSqlDatabase.Name, SelectedSqlTable),
-                    DefaultExt = ".xlsx",
-                    AddExtension = true,
-                    OverwritePrompt = true
-                };
-
-                if (dialog.ShowDialog() != true)
-                {
-                    return;
-                }
-
-                IsSqlBusy = true;
-                exportCancellationTokenSource = new CancellationTokenSource();
-                _sqlExportCancellationTokenSource = exportCancellationTokenSource;
-                SqlStatusMessage = "正在检查数据量并导出 Excel...";
-                var progress = new Progress<SqlExportProgress>(p => SqlStatusMessage = FormatSqlExportProgress(p));
-
-                var provider = SqlExportProviderFactory.GetProvider(options.ProviderKind);
-                var exportResult = await provider.ExportTableAsync(
-                    options,
-                    SelectedSqlDatabase.Name,
-                    SelectedSqlTable,
-                    dialog.FileName,
-                    exportCancellationTokenSource.Token,
-                    progress);
-
-                SqlStatusMessage = FormatSqlExportResult("导出完成", exportResult);
-                MessageBox.Show(
-                    $"导出成功。\n行数：{exportResult.RowCount:N0}\n耗时：{FormatDuration(exportResult.Duration)}\n大小：{FormatFileSize(exportResult.FileSizeBytes)}\n文件路径：{exportResult.FilePath}",
-                    "导出完成",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
-            }
-            catch (Exception ex)
-            {
-                AppLogService.Error(
-                    ex,
-                    "SQL export failed for {DatabaseName}.{TableName}",
-                    SelectedSqlDatabase?.Name ?? string.Empty,
-                    SelectedSqlTable?.DisplayName ?? string.Empty);
-                SqlStatusMessage = "导出失败。";
-                MessageBox.Show(ex.Message, "导出失败", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-            finally
-            {
-                if (ReferenceEquals(_sqlExportCancellationTokenSource, exportCancellationTokenSource))
-                {
-                    _sqlExportCancellationTokenSource = null;
-                }
-
-                exportCancellationTokenSource?.Dispose();
-                IsSqlBusy = false;
-            }
-        }
-
-        private void CancelSqlExport()
-        {
-            try
-            {
-                _sqlExportCancellationTokenSource?.Cancel();
-                SqlStatusMessage = "正在取消导出...";
-            }
-            catch (Exception ex)
-            {
-                AppLogService.Warning("Cancel SQL export failed: {Msg}", ex.Message);
-            }
-        }
-
-        private SqlServerConnectionOptions BuildSqlConnectionOptions()
-        {
-            return new SqlServerConnectionOptions
-            {
-                ProviderKind = SelectedSqlProvider,
-                ServerAddress = SqlServerAddress?.Trim(),
-                Port = SqlPort?.Trim(),
-                Username = SqlUsername?.Trim(),
-                Password = SqlPassword
-            };
-        }
-
-        private SqlServerConnectionOptions GetEffectiveSqlConnectionOptions()
-        {
-            return _activeSqlConnectionOptions != null
-                ? CloneSqlConnectionOptions(_activeSqlConnectionOptions)
-                : BuildSqlConnectionOptions();
-        }
-
-        private static SqlServerConnectionOptions CloneSqlConnectionOptions(SqlServerConnectionOptions options)
-        {
-            if (options == null)
-            {
-                return null;
-            }
-
-            return new SqlServerConnectionOptions
-            {
-                ProviderKind = options.ProviderKind,
-                ServerAddress = options.ServerAddress,
-                Port = options.Port,
-                Username = options.Username,
-                Password = options.Password
-            };
-        }
-
-        private async Task LoadSqlConnectionHistoryAsync()
-        {
-            var history = await SqlConnectionHistoryService.LoadAsync(SelectedSqlProvider);
-            await Application.Current.Dispatcher.InvokeAsync(() =>
-            {
-                _isApplyingSqlHistory = true;
-                try
-                {
-                    ReplaceItems(SqlServerAddressHistory, history.ServerAddresses);
-                    ReplaceItems(SqlUsernameHistory, history.Usernames);
-                    ReplaceItems(SqlPasswordHistory, history.Passwords);
-                    ReplaceItems(SqlRecentConnections, history.RecentConnections);
-                    OnPropertyChanged(nameof(HasSqlRecentConnections));
-
-                    if (!_hasUserModifiedSqlConnectionInputs)
-                    {
-                        SqlServerAddress = history.LastServerAddress;
-                        var defaultPort = GetDefaultSqlPort(SelectedSqlProvider);
-                        SqlPort = string.IsNullOrWhiteSpace(history.LastPort) ? defaultPort : history.LastPort;
-                        SqlUsername = history.LastUsername;
-                        SqlPassword = history.LastPassword;
-                    }
-                }
-                finally
-                {
-                    _isApplyingSqlHistory = false;
-                }
-            });
-        }
-
-        private async Task SaveSqlConnectionHistoryAsync(SqlServerConnectionOptions options)
-        {
-            await SqlConnectionHistoryService.SaveAsync(options);
-            var history = await SqlConnectionHistoryService.LoadAsync(options?.ProviderKind ?? SelectedSqlProvider);
-            await Application.Current.Dispatcher.InvokeAsync(() =>
-            {
-                _isApplyingSqlHistory = true;
-                try
-                {
-                    ReplaceItems(SqlServerAddressHistory, history.ServerAddresses);
-                    ReplaceItems(SqlUsernameHistory, history.Usernames);
-                    ReplaceItems(SqlPasswordHistory, history.Passwords);
-                    ReplaceItems(SqlRecentConnections, history.RecentConnections);
-                    OnPropertyChanged(nameof(HasSqlRecentConnections));
-                }
-                finally
-                {
-                    _isApplyingSqlHistory = false;
-                }
-            });
-        }
-
-        private void ApplySqlRecentConnection(object parameter)
-        {
-            if (!(parameter is SqlConnectionHistoryItem item) || IsSqlBusy)
-            {
-                return;
-            }
-
-            _isApplyingSqlHistory = true;
-            try
-            {
-                SqlServerAddress = item.ServerAddress ?? string.Empty;
-                SqlPort = string.IsNullOrWhiteSpace(item.Port) ? GetDefaultSqlPort(SelectedSqlProvider) : item.Port;
-                SqlUsername = item.Username ?? string.Empty;
-                SqlPassword = item.Password ?? string.Empty;
-                _hasUserModifiedSqlConnectionInputs = true;
-                _activeSqlConnectionOptions = null;
-            }
-            finally
-            {
-                _isApplyingSqlHistory = false;
-            }
-
-            CancelPendingTableLoad();
-            _suppressSqlTableAutoLoad = true;
-            try
-            {
-                SelectedSqlDatabase = null;
-                SelectedSqlTable = null;
-            }
-            finally
-            {
-                _suppressSqlTableAutoLoad = false;
-            }
-
-            SqlDatabaseList.Clear();
-            SqlTableList.Clear();
-            AllSqlTableList.Clear();
-            SqlTableSearchText = string.Empty;
-            SqlStatusMessage = "已套用最近连接，请测试连接。";
-            TriggerCommandRequery();
-        }
-
-        private void ApplyDefaultSqlPortIfNeeded()
-        {
-            if (_isApplyingSqlHistory)
-            {
-                return;
-            }
-
-            var current = SqlPort?.Trim();
-            if (string.IsNullOrWhiteSpace(current)
-                || string.Equals(current, "1433", StringComparison.Ordinal)
-                || string.Equals(current, "5432", StringComparison.Ordinal)
-                || string.Equals(current, "3306", StringComparison.Ordinal))
-            {
-                _sqlPort = GetDefaultSqlPort(SelectedSqlProvider);
-                OnPropertyChanged(nameof(SqlPort));
-            }
-        }
-
-        private static string GetDefaultSqlPort(SqlProviderKind providerKind)
-        {
-            switch (providerKind)
-            {
-                case SqlProviderKind.PostgreSql:
-                    return "5432";
-                case SqlProviderKind.MySql:
-                    return "3306";
-                default:
-                    return "1433";
-            }
-        }
-
-        private static string GetSqlProviderDisplayName(SqlProviderKind providerKind)
-        {
-            switch (providerKind)
-            {
-                case SqlProviderKind.PostgreSql:
-                    return "PostgreSQL";
-                case SqlProviderKind.MySql:
-                    return "MySQL";
-                default:
-                    return "SQL Server";
             }
         }
 
@@ -10555,21 +9040,6 @@ namespace MyTools.ViewModels
             return builder.ToString();
         }
 
-        private bool FilterSqlTable(object item)
-        {
-            if (!(item is TableItem table))
-            {
-                return false;
-            }
-
-            if (string.IsNullOrWhiteSpace(SqlTableSearchText))
-            {
-                return true;
-            }
-
-            return table.DisplayName.IndexOf(SqlTableSearchText.Trim(), StringComparison.OrdinalIgnoreCase) >= 0;
-        }
-
         private bool FilterStartupItem(object item)
         {
             if (!(item is StartupItem startup))
@@ -10724,41 +9194,6 @@ namespace MyTools.ViewModels
                 && value.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
-        private bool CanExportSqlTable()
-        {
-            return !IsSqlBusy && SelectedSqlDatabase != null && SelectedSqlTable != null;
-        }
-
-        private static string FormatSqlExportProgress(SqlExportProgress progress)
-        {
-            if (progress == null)
-            {
-                return "正在导出...";
-            }
-
-            var stage = string.IsNullOrWhiteSpace(progress.Stage) ? "正在导出" : progress.Stage;
-            var rowsText = progress.TotalRows.HasValue && progress.TotalRows.Value > 0
-                ? $"{progress.ProcessedRows:N0} / {progress.TotalRows.Value:N0} 行"
-                : $"{progress.ProcessedRows:N0} 行";
-            var message = $"{stage}：{rowsText} · {FormatDuration(progress.Elapsed)}";
-            if (progress.FileSizeBytes > 0)
-            {
-                message += $" · {FormatFileSize(progress.FileSizeBytes)}";
-            }
-
-            return message;
-        }
-
-        private static string FormatSqlExportResult(string title, ExportResult result)
-        {
-            if (result == null)
-            {
-                return title;
-            }
-
-            return $"{title}：{result.RowCount:N0} 行 · {FormatDuration(result.Duration)} · {FormatFileSize(result.FileSizeBytes)}。";
-        }
-
         private static string FormatDuration(TimeSpan duration)
         {
             if (duration < TimeSpan.Zero)
@@ -10799,21 +9234,6 @@ namespace MyTools.ViewModels
             }
 
             return bytes + " B";
-        }
-
-        private void CancelPendingTableLoad(bool clearBusy = true)
-        {
-            if (_loadTablesCancellationTokenSource == null)
-            {
-                return;
-            }
-
-            _loadTablesCancellationTokenSource.Cancel();
-            _loadTablesCancellationTokenSource = null;
-            if (clearBusy)
-            {
-                IsSqlBusy = false;
-            }
         }
 
         private void RestoreWindow()
@@ -10909,69 +9329,9 @@ namespace MyTools.ViewModels
         private HardwareSummary _systemInfo;
         private bool _isSystemInfoBusy;
         private string _systemInfoStatusMessage = "点击下方刷新读取硬件信息。";
-        private bool _isSensorsRunning;
-        private string _sensorStatusMessage = "正在启动传感器…";
-        private DispatcherTimer _sensorTimer;
-        private HardwareSensorService _sensorService;
-        private bool _isSensorStarting;
-        private bool _isSensorRefreshing;
-        private string _sensorRefreshMode = "2 秒";
-        private string _homeSensorRiskText = "传感器未启用，进入“系统信息”后可开启采集。";
-        private string _cpuTemp = "—";
-        private string _gpuTemp = "—";
-        private string _motherboardTemp = "—";
-        private string _fanRpm = "—";
-        private string _cpuLoad = "—";
 
         public ICommand ShowSystemInfoCommand { get; }
         public ICommand LoadSystemInfoCommand { get; }
-        public ICommand ToggleHardwareSensorsCommand { get; }
-        public ICommand RefreshSensorsOnceCommand { get; }
-
-        public ObservableCollection<SensorReading> SensorReadings { get; } = new ObservableCollection<SensorReading>();
-
-        public string CpuTemp
-        {
-            get => _cpuTemp;
-            private set { _cpuTemp = value; OnPropertyChanged(); }
-        }
-
-        public string GpuTemp
-        {
-            get => _gpuTemp;
-            private set { _gpuTemp = value; OnPropertyChanged(); }
-        }
-
-        public string MotherboardTemp
-        {
-            get => _motherboardTemp;
-            private set { _motherboardTemp = value; OnPropertyChanged(); }
-        }
-
-        public string FanRpm
-        {
-            get => _fanRpm;
-            private set { _fanRpm = value; OnPropertyChanged(); }
-        }
-
-        public string CpuLoad
-        {
-            get => _cpuLoad;
-            private set { _cpuLoad = value; OnPropertyChanged(); }
-        }
-
-        private DispatcherTimer SensorTimer
-        {
-            get
-            {
-                if (_sensorTimer == null)
-                {
-                    _sensorTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
-                }
-
-                return _sensorTimer;
-            }
-        }
 
         public HardwareSummary HardwareSummaryInfo
         {
@@ -10991,45 +9351,6 @@ namespace MyTools.ViewModels
         {
             get => _systemInfoStatusMessage;
             set { _systemInfoStatusMessage = value; OnPropertyChanged(); }
-        }
-
-        public bool IsSensorsRunning
-        {
-            get => _isSensorsRunning;
-            set { _isSensorsRunning = value; OnPropertyChanged(); OnPropertyChanged(nameof(SensorsToggleLabel)); }
-        }
-
-        public string SensorsToggleLabel => _isSensorsRunning ? "停止采集" : "启用传感器";
-
-        public string SensorStatusMessage
-        {
-            get => _sensorStatusMessage;
-            set { _sensorStatusMessage = value; OnPropertyChanged(); }
-        }
-
-        public string HomeSensorRiskText
-        {
-            get => _homeSensorRiskText;
-            private set { _homeSensorRiskText = value; OnPropertyChanged(); }
-        }
-
-        public IReadOnlyList<string> SensorRefreshModes { get; } = new[] { "手动", "2 秒", "5 秒" };
-
-        public string SensorRefreshMode
-        {
-            get => _sensorRefreshMode;
-            set
-            {
-                var mode = string.IsNullOrWhiteSpace(value) || !SensorRefreshModes.Contains(value) ? "2 秒" : value;
-                if (string.Equals(_sensorRefreshMode, mode, StringComparison.Ordinal))
-                {
-                    return;
-                }
-
-                _sensorRefreshMode = mode;
-                OnPropertyChanged();
-                ApplySensorRefreshMode();
-            }
         }
 
         private async Task LoadSystemInfoAsync()
@@ -11054,183 +9375,6 @@ namespace MyTools.ViewModels
             }
         }
 
-        private void ToggleHardwareSensors()
-        {
-            if (!_isSensorsRunning && _sensorService == null)
-            {
-                SafeFireAndForget(StartSensorsBackgroundAsync());
-                return;
-            }
-
-            SensorTimer.Stop();
-            SensorTimer.Tick -= SensorTimer_OnTick;
-            _sensorService?.Dispose();
-            _sensorService = null;
-            _isSensorsRunning = false;
-            OnPropertyChanged(nameof(IsSensorsRunning));
-            TriggerCommandRequery();
-            SensorReadings.Clear();
-            SensorStatusMessage = "已停止采集。";
-            HomeSensorRiskText = "传感器已停止，进入“系统信息”后可重新开启采集。";
-        }
-
-        private void ApplySensorRefreshMode()
-        {
-            if (string.Equals(SensorRefreshMode, "手动", StringComparison.Ordinal))
-            {
-                SensorTimer.Stop();
-                if (_isSensorsRunning)
-                {
-                    SensorStatusMessage = $"已切换为手动刷新 · {SensorReadings.Count} 项";
-                }
-                return;
-            }
-
-            SensorTimer.Interval = string.Equals(SensorRefreshMode, "5 秒", StringComparison.Ordinal)
-                ? TimeSpan.FromSeconds(5)
-                : TimeSpan.FromSeconds(2);
-            if (_isSensorsRunning || _sensorService != null)
-            {
-                SensorTimer.Start();
-            }
-        }
-
-        private void SensorTimer_OnTick(object sender, EventArgs e)
-        {
-            SafeFireAndForget(RefreshSensorsAsync());
-        }
-
-        private async Task RefreshSensorsAsync()
-        {
-            if (_isSensorRefreshing)
-            {
-                return;
-            }
-
-            try
-            {
-                _isSensorRefreshing = true;
-                var service = _sensorService;
-                if (service == null)
-                {
-                    return;
-                }
-
-                var readings = await Task.Run(() => service.ReadAll()).ConfigureAwait(true);
-                if (readings == null) return;
-                SensorReadings.Clear();
-                foreach (var r in readings.OrderBy(r => r.HardwareKind).ThenBy(r => r.HardwareName).ThenBy(r => r.SensorKind))
-                {
-                    SensorReadings.Add(r);
-                }
-
-                ExtractSensorSummary(readings);
-
-                var warning = BuildSensorWarning(readings);
-                if (!string.IsNullOrWhiteSpace(warning))
-                {
-                    SensorStatusMessage = warning;
-                    HomeSensorRiskText = warning;
-                }
-                else if (_isSensorsRunning && SensorReadings.Count > 0)
-                {
-                    SensorStatusMessage = string.Equals(SensorRefreshMode, "手动", StringComparison.Ordinal)
-                        ? $"已刷新 · {SensorReadings.Count} 项 · 手动"
-                        : $"已刷新 · {SensorReadings.Count} 项 · 每 {SensorRefreshMode}";
-                    HomeSensorRiskText = $"传感器正常：已读取 {SensorReadings.Count} 项，未发现高温或高负载。";
-                }
-
-                // Keep status fresh on each tick if user is running as non-admin
-                if (_isSensorsRunning && SensorReadings.Count == 0 && !HardwareSensorService.IsRunningAsAdmin)
-                {
-                    SensorStatusMessage = "未读到传感器：请以管理员身份重启 MyTools。";
-                    HomeSensorRiskText = "未读到传感器：建议以管理员身份重启后查看温度风险。";
-                }
-            }
-            catch (Exception ex)
-            {
-                AppLogService.Warning("Sensor read failed: {Msg}", ex.Message);
-                HomeSensorRiskText = "传感器读取失败：" + ex.Message;
-            }
-            finally
-            {
-                _isSensorRefreshing = false;
-            }
-        }
-
-        private static readonly HashSet<string> GpuHardwareKinds = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            "GpuNvidia", "GpuAmd", "GpuIntel"
-        };
-
-        private void ExtractSensorSummary(IReadOnlyList<SensorReading> readings)
-        {
-            string cpuTempVal = null, gpuTempVal = null, mbTempVal = null, fanVal = null, cpuLoadVal = null;
-
-            foreach (var r in readings)
-            {
-                if (string.Equals(r.SensorKind, "Temperature", StringComparison.OrdinalIgnoreCase))
-                {
-                    if (string.Equals(r.HardwareKind, "Cpu", StringComparison.OrdinalIgnoreCase))
-                        cpuTempVal = r.Value + r.Unit;
-                    else if (GpuHardwareKinds.Contains(r.HardwareKind))
-                        gpuTempVal = r.Value + r.Unit;
-                    else if (string.Equals(r.HardwareKind, "Motherboard", StringComparison.OrdinalIgnoreCase))
-                        mbTempVal = r.Value + r.Unit;
-                    else
-                        AppLogService.InformationIfInitialized("Sensor: Temp HardwareKind={HK} SensorName={SN} Value={V}", r.HardwareKind, r.SensorName, r.Value);
-                }
-                else if (string.Equals(r.SensorKind, "Fan", StringComparison.OrdinalIgnoreCase))
-                {
-                    AppLogService.InformationIfInitialized("Sensor: Fan HardwareKind={HK} SensorName={SN} Value={V}", r.HardwareKind, r.SensorName, r.Value);
-                    if (fanVal == null) fanVal = r.Value + r.Unit;
-                }
-                else if (string.Equals(r.SensorKind, "Load", StringComparison.OrdinalIgnoreCase))
-                {
-                    if (string.Equals(r.HardwareKind, "Cpu", StringComparison.OrdinalIgnoreCase)
-                        && (cpuLoadVal == null || r.SensorName.IndexOf("Total", StringComparison.OrdinalIgnoreCase) >= 0 || r.SensorName.IndexOf("Package", StringComparison.OrdinalIgnoreCase) >= 0))
-                    {
-                        cpuLoadVal = r.Value + r.Unit;
-                    }
-                }
-            }
-
-            if (cpuTempVal != null) CpuTemp = cpuTempVal;
-            if (gpuTempVal != null) GpuTemp = gpuTempVal;
-            if (mbTempVal != null) MotherboardTemp = mbTempVal;
-            if (fanVal != null) FanRpm = fanVal;
-            if (cpuLoadVal != null) CpuLoad = cpuLoadVal;
-            AppLogService.InformationIfInitialized("Sensor summary: cpuTemp={CT} gpuTemp={GT} mbTemp={MT} fan={FR} cpuLoad={CL}", cpuTempVal, gpuTempVal, mbTempVal, fanVal, cpuLoadVal);
-        }
-
-        private static string BuildSensorWarning(IEnumerable<SensorReading> readings)
-        {
-            var warning = (readings ?? Enumerable.Empty<SensorReading>())
-                .Select(reading => new { Reading = reading, Value = ParseSensorValue(reading?.Value) })
-                .FirstOrDefault(item =>
-                    item.Value.HasValue &&
-                    ((string.Equals(item.Reading.SensorKind, "Temperature", StringComparison.OrdinalIgnoreCase) && item.Value.Value >= 85)
-                     || (string.Equals(item.Reading.SensorKind, "Load", StringComparison.OrdinalIgnoreCase) && item.Value.Value >= 95)));
-            if (warning == null)
-            {
-                return string.Empty;
-            }
-
-            return $"异常提示：{warning.Reading.HardwareName} / {warning.Reading.SensorName} {warning.Reading.Value}{warning.Reading.Unit}";
-        }
-
-        private static double? ParseSensorValue(string value)
-        {
-            if (string.IsNullOrWhiteSpace(value))
-            {
-                return null;
-            }
-
-            return double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var result)
-                ? result
-                : (double?)null;
-        }
-
         private void RestartAsAdmin()
         {
             try
@@ -11238,7 +9382,7 @@ namespace MyTools.ViewModels
                 var exe = System.Reflection.Assembly.GetEntryAssembly()?.Location;
                 if (string.IsNullOrEmpty(exe) || !System.IO.File.Exists(exe))
                 {
-                    SensorStatusMessage = "无法定位 MyTools.exe 路径。";
+                    SystemInfoStatusMessage = "无法定位 MyTools.exe 路径。";
                     return;
                 }
                 var psi = new System.Diagnostics.ProcessStartInfo(exe)
@@ -11253,16 +9397,33 @@ namespace MyTools.ViewModels
             catch (System.ComponentModel.Win32Exception)
             {
                 // User cancelled UAC
-                SensorStatusMessage = "已取消管理员授权。";
+                SystemInfoStatusMessage = "已取消管理员授权。";
             }
             catch (Exception ex)
             {
                 AppLogService.Warning("RestartAsAdmin failed: {Msg}", ex.Message);
-                SensorStatusMessage = "重启失败：" + ex.Message;
+                SystemInfoStatusMessage = "重启失败：" + ex.Message;
             }
         }
 
-        public bool IsRunningAsAdmin => HardwareSensorService.IsRunningAsAdmin;
+        public bool IsRunningAsAdmin
+        {
+            get
+            {
+                try
+                {
+                    using (var identity = System.Security.Principal.WindowsIdentity.GetCurrent())
+                    {
+                        return new System.Security.Principal.WindowsPrincipal(identity)
+                            .IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
+                    }
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+        }
         public ICommand RestartAsAdminCommand { get; }
 
         // ==================== Convert Module ====================
@@ -13179,24 +11340,8 @@ namespace MyTools.ViewModels
 
             _isDisposed = true;
             DetachAutoOptimizePlanItems();
-            CancelPendingTableLoad();
-            _queryCts?.Cancel();
-            _queryCts?.Dispose();
-            _queryCts = null;
             _audioRecordingTimer.Stop();
             _audioRecordingTimer.Tick -= AudioRecordingTimer_OnTick;
-            _codexRateLimitMonitorTimer.Stop();
-            _codexRateLimitMonitorTimer.Tick -= CodexRateLimitMonitorTimer_OnTick;
-            _codexRateLimitMonitorCts.Cancel();
-            _codexRateLimitMonitorCts.Dispose();
-
-            if (_sensorTimer != null)
-            {
-                _sensorTimer.Stop();
-                try { _sensorTimer.Tick -= SensorTimer_OnTick; } catch { }
-            }
-            _sensorService?.Dispose();
-            _sensorService = null;
 
             _frp?.Dispose();
 
@@ -13412,158 +11557,6 @@ namespace MyTools.ViewModels
                 AppLogService.Error(ex, "Locking current Windows version failed.");
                 SystemStatusMessage = "系统锁定失败：" + ex.Message;
                 MessageBox.Show("执行失败: " + ex.Message, "错误", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
-        private bool CanExecuteSqlQuery()
-            => !IsQueryBusy && SelectedSqlDatabase != null && !string.IsNullOrWhiteSpace(SqlQueryText);
-
-        private bool CanExportQueryResult()
-            => !IsQueryBusy && SqlQueryResult != null && SqlQueryResult.Count > 0;
-
-        private CancellationTokenSource _queryCts;
-
-        private async Task ExecuteSqlQueryAsync()
-        {
-            _queryCts?.Cancel();
-            _queryCts?.Dispose();
-            _queryCts = new CancellationTokenSource();
-            var ct = _queryCts.Token;
-
-            IsQueryBusy = true;
-            QueryStatusMessage = "正在执行查询...";
-            SqlQueryResult = null;
-            _cancelQueryCommand?.RaiseCanExecuteChanged();
-            try
-            {
-                var options = GetEffectiveSqlConnectionOptions();
-                var provider = SqlExportProviderFactory.GetProvider(options.ProviderKind);
-                var table = await provider.ExecuteQueryAsync(
-                    options,
-                    SelectedSqlDatabase.Name,
-                    SqlQueryText,
-                    ct);
-
-                SqlQueryResult = table.DefaultView;
-                QueryStatusMessage = $"共 {table.Rows.Count} 行，{table.Columns.Count} 列。";
-            }
-            catch (OperationCanceledException)
-            {
-                AppLogService.Information("SQL query cancelled by user");
-                QueryStatusMessage = "查询已取消。";
-            }
-            catch (Exception ex)
-            {
-                AppLogService.Error(ex, "SQL query execution failed");
-                QueryStatusMessage = "执行失败：" + ex.Message;
-                MessageBox.Show(ex.Message, "SQL 执行失败", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-            finally
-            {
-                IsQueryBusy = false;
-                _cancelQueryCommand?.RaiseCanExecuteChanged();
-            }
-        }
-
-        private void CancelSqlQuery()
-        {
-            try
-            {
-                _queryCts?.Cancel();
-                QueryStatusMessage = "正在取消查询...";
-            }
-            catch (Exception ex)
-            {
-                AppLogService.Error(ex, "Cancelling SQL query failed");
-            }
-        }
-
-        private async Task ExportQueryResultAsync()
-        {
-            if (SqlQueryResult == null) return;
-            var dialog = new SaveFileDialog
-            {
-                Filter = "Excel 工作簿 (*.xlsx)|*.xlsx",
-                FileName = $"QueryResult_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx",
-                DefaultExt = ".xlsx",
-                AddExtension = true,
-                OverwritePrompt = true
-            };
-            if (dialog.ShowDialog() != true) return;
-
-            IsQueryBusy = true;
-            QueryStatusMessage = "正在导出 Excel...";
-            try
-            {
-                var table = SqlQueryResult.Table;
-                var progress = new Progress<SqlExportProgress>(p => QueryStatusMessage = FormatSqlExportProgress(p));
-                var result = await SqlExportService.ExportDataTableAsync(
-                    table,
-                    "QueryResult",
-                    dialog.FileName,
-                    CancellationToken.None,
-                    progress);
-
-                QueryStatusMessage = FormatSqlExportResult("导出完成", result);
-                MessageBox.Show(
-                    $"导出成功。\n行数：{result.RowCount:N0}\n耗时：{FormatDuration(result.Duration)}\n大小：{FormatFileSize(result.FileSizeBytes)}\n文件路径：{result.FilePath}",
-                    "导出完成",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
-            }
-            catch (Exception ex)
-            {
-                AppLogService.Error(ex, "Query result export failed");
-                QueryStatusMessage = "导出失败：" + ex.Message;
-                MessageBox.Show(ex.Message, "导出失败", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-            finally
-            {
-                IsQueryBusy = false;
-            }
-        }
-
-        private async Task ExportQueryResultCsvAsync()
-        {
-            if (SqlQueryResult == null) return;
-            var dialog = new SaveFileDialog
-            {
-                Filter = "CSV 文件 (*.csv)|*.csv",
-                FileName = $"QueryResult_{DateTime.Now:yyyyMMdd_HHmmss}.csv",
-                DefaultExt = ".csv",
-                AddExtension = true,
-                OverwritePrompt = true
-            };
-            if (dialog.ShowDialog() != true) return;
-
-            IsQueryBusy = true;
-            QueryStatusMessage = "正在导出 CSV...";
-            try
-            {
-                var table = SqlQueryResult.Table;
-                var progress = new Progress<SqlExportProgress>(p => QueryStatusMessage = FormatSqlExportProgress(p));
-                var result = await SqlExportService.ExportDataTableToCsvAsync(
-                    table,
-                    dialog.FileName,
-                    CancellationToken.None,
-                    progress);
-
-                QueryStatusMessage = FormatSqlExportResult("CSV 导出完成", result);
-                MessageBox.Show(
-                    $"导出成功。\n行数：{result.RowCount:N0}\n耗时：{FormatDuration(result.Duration)}\n大小：{FormatFileSize(result.FileSizeBytes)}\n文件路径：{result.FilePath}",
-                    "导出完成",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
-            }
-            catch (Exception ex)
-            {
-                AppLogService.Error(ex, "Query result CSV export failed");
-                QueryStatusMessage = "CSV 导出失败：" + ex.Message;
-                MessageBox.Show(ex.Message, "CSV 导出失败", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-            finally
-            {
-                IsQueryBusy = false;
             }
         }
 
@@ -14608,13 +12601,6 @@ namespace MyTools.ViewModels
 
         private void TriggerCommandRequery()
         {
-            _testSqlConnectionCommand?.RaiseCanExecuteChanged();
-            _exportSqlTableCommand?.RaiseCanExecuteChanged();
-            (CancelSqlExportCommand as RelayCommand)?.RaiseCanExecuteChanged();
-            (ApplySqlRecentConnectionCommand as RelayParameterCommand)?.RaiseCanExecuteChanged();
-            _executeQueryCommand?.RaiseCanExecuteChanged();
-            _exportQueryResultCommand?.RaiseCanExecuteChanged();
-            _exportQueryResultCsvCommand?.RaiseCanExecuteChanged();
             _scanAutoOptimizeCommand?.RaiseCanExecuteChanged();
             _startAutoOptimizeCommand?.RaiseCanExecuteChanged();
             _startJunkScanCommand?.RaiseCanExecuteChanged();
@@ -14629,11 +12615,9 @@ namespace MyTools.ViewModels
             _selectWeChatRestoreTargetRootCommand?.RaiseCanExecuteChanged();
             _openRecordRegionCommand?.RaiseCanExecuteChanged();
             _toggleAudioRecordingCommand?.RaiseCanExecuteChanged();
-            (RefreshSensorsOnceCommand as RelayCommand)?.RaiseCanExecuteChanged();
             _refreshInstalledProgramsCommand?.RaiseCanExecuteChanged();
             _uninstallProgramCommand?.RaiseCanExecuteChanged();
             _importCodexProfileCommand?.RaiseCanExecuteChanged();
-            _importCodexOllamaProfilesCommand?.RaiseCanExecuteChanged();
             _importCodexCpaTokenCommand?.RaiseCanExecuteChanged();
             _exportCodexProfileCommand?.RaiseCanExecuteChanged();
             _previewCodexProfileDiffCommand?.RaiseCanExecuteChanged();
@@ -15083,7 +13067,7 @@ namespace MyTools.ViewModels
             {
                 if (IsStatusExpired)
                 {
-                    return "已过期，请刷新后再轮换";
+                    return "已过期，请刷新账号";
                 }
 
                 if (IsStatusWarn)
@@ -15183,18 +13167,6 @@ namespace MyTools.ViewModels
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
     }
-    public class SqlProviderOption
-    {
-        public SqlProviderOption(SqlProviderKind kind, string displayName)
-        {
-            Kind = kind;
-            DisplayName = displayName ?? string.Empty;
-        }
-
-        public SqlProviderKind Kind { get; }
-        public string DisplayName { get; }
-    }
-
     public class HomeCommandItem
     {
         public string Title { get; set; }
@@ -15763,7 +13735,3 @@ namespace MyTools.ViewModels
         }
     }
 }
-
-
-
-

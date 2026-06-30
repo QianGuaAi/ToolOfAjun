@@ -63,7 +63,7 @@ namespace MyTools.ViewModels
             }
         }
 
-        private string _statusMessage = "可将当前程序的所有数据与依赖（含 ffmpeg、Codex、SQL 历史、排班数据等）导出到文件夹，便于备份或迁移到其它机器。";
+        private string _statusMessage = "可将当前程序的数据与外置依赖占位、Codex、排班数据等导出到文件夹，便于备份或迁移到其它机器。";
         public string StatusMessage
         {
             get => _statusMessage;

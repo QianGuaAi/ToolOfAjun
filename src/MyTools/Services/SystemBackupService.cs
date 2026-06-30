@@ -12,7 +12,7 @@ namespace MyTools.Services
     /// 备份结构（一份独立文件夹）：
     ///   root/
     ///     manifest.json
-    ///     App/                     程序目录下的用户数据 + NativeBinaries（含 ffmpeg）
+    ///     App/                     程序目录下的用户数据 + NativeBinaries（外置依赖占位）
     ///     LocalAppData/MyTools/    %LOCALAPPDATA%\MyTools（Schedules、holidays.json 等）
     ///     Codex/                   %USERPROFILE%\.codex\{config.toml,auth.json}
     /// </summary>
@@ -147,7 +147,7 @@ namespace MyTools.Services
                     CodexSource = CodexDir,
                     Sections = GetSectionNames(selectedSections).ToList(),
                     Files = BuildManifestFileItems(backupRoot).ToList(),
-                    Note = "MyTools 系统设置导出文件。MyTools.settings.json 与 MyTools.sqlhistory.json " +
+                    Note = "MyTools 系统设置导出文件。MyTools.settings.json " +
                            "采用 Windows DPAPI（当前用户）加密，仅在同一 Windows 账户上可解密。"
                 };
                 File.WriteAllText(
@@ -285,8 +285,7 @@ namespace MyTools.Services
                 preview.HadDpapiData = preview.Items.Any(item =>
                     item.Exists
                     && item.Section == BackupSection.Settings
-                    && (string.Equals(Path.GetFileName(item.BackupPath), "MyTools.settings.json", StringComparison.OrdinalIgnoreCase)
-                        || string.Equals(Path.GetFileName(item.BackupPath), "MyTools.sqlhistory.json", StringComparison.OrdinalIgnoreCase)));
+                    && string.Equals(Path.GetFileName(item.BackupPath), "MyTools.settings.json", StringComparison.OrdinalIgnoreCase));
                 return preview;
             });
         }
@@ -358,8 +357,7 @@ namespace MyTools.Services
                     }
 
                     if (target.Section == BackupSection.Settings
-                        && (string.Equals(Path.GetFileName(target.SourcePath), "MyTools.settings.json", StringComparison.OrdinalIgnoreCase)
-                            || string.Equals(Path.GetFileName(target.SourcePath), "MyTools.sqlhistory.json", StringComparison.OrdinalIgnoreCase)))
+                        && string.Equals(Path.GetFileName(target.SourcePath), "MyTools.settings.json", StringComparison.OrdinalIgnoreCase))
                     {
                         result.HadDpapiData = true;
                     }
@@ -413,20 +411,13 @@ namespace MyTools.Services
                     Path.Combine("App", "MyTools.settings.json"),
                     backupRoot,
                     forImport);
-                yield return CreateTarget(
-                    BackupSection.Settings,
-                    "设置与历史",
-                    Path.Combine(AppDir, "MyTools.sqlhistory.json"),
-                    Path.Combine("App", "MyTools.sqlhistory.json"),
-                    backupRoot,
-                    forImport);
             }
 
             if ((sections & BackupSection.NativeBinaries) == BackupSection.NativeBinaries)
             {
                 yield return CreateTarget(
                     BackupSection.NativeBinaries,
-                    "FFmpeg 与依赖",
+                    "外置依赖",
                     Path.Combine(AppDir, "NativeBinaries"),
                     Path.Combine("App", "NativeBinaries"),
                     backupRoot,
@@ -758,7 +749,7 @@ namespace MyTools.Services
                 case BackupSection.Codex:
                     return "Codex 当前配置";
                 case BackupSection.NativeBinaries:
-                    return "FFmpeg 与依赖";
+                    return "外置依赖";
                 default:
                     return section.ToString();
             }
