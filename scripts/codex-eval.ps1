@@ -397,8 +397,8 @@ function Assert-NativeCodexMetadataEditGuards {
             Label = "note";
             Action = "EditFirstProfileNote";
             Id = "ID_CODEX_EDIT_FIRST_NOTE";
-            MenuText = "Edit first profile note...";
-            PromptTitle = "Edit first profile note";
+            MenuText = "Edit profile note...";
+            PromptTitle = "Edit profile note";
             StructToken = "std::wstring note";
             OptionArrow = "options->note";
             OptionDot = "options.note";
@@ -412,8 +412,8 @@ function Assert-NativeCodexMetadataEditGuards {
             Label = "remark";
             Action = "EditFirstProfileRemark";
             Id = "ID_CODEX_EDIT_FIRST_REMARK";
-            MenuText = "Edit first profile remark...";
-            PromptTitle = "Edit first profile remark";
+            MenuText = "Edit profile remark...";
+            PromptTitle = "Edit profile remark";
             StructToken = "std::wstring remark";
             OptionArrow = "options->remark";
             OptionDot = "options.remark";
@@ -427,8 +427,8 @@ function Assert-NativeCodexMetadataEditGuards {
             Label = "tags";
             Action = "EditFirstProfileTags";
             Id = "ID_CODEX_EDIT_FIRST_TAGS";
-            MenuText = "Edit first profile tags...";
-            PromptTitle = "Edit first profile tags";
+            MenuText = "Edit profile tags...";
+            PromptTitle = "Edit profile tags";
             StructToken = "std::wstring tags";
             OptionArrow = "options->tags";
             OptionDot = "options.tags";
@@ -1000,10 +1000,10 @@ function Assert-NativeShellScaffold {
         @{ Name = "process"; Source = $processRunner; Tokens = @("CreateProcessW", "TerminateProcess") },
         @{ Name = "task-runner"; Source = $taskRunner; Tokens = @("std::condition_variable", "std::thread", "WorkerLoop") },
         @{ Name = "c-json"; Source = $jsonSchema; Tokens = @("mt_json_has_schema_version", '\"schema_version\"') },
-        @{ Name = "main-window-nav"; Source = $mainWindow; Tokens = @("ID_NAV_CODEX_PROFILES", "ID_CODEX_REFRESH", "ID_CODEX_DIFF_FIRST", "ID_CODEX_BACKUP_CURRENT", "ID_CODEX_APPLY_FIRST", "ID_CODEX_IMPORT_CURRENT", "ID_CODEX_RESTORE_BACKUP", "ID_CODEX_EXPORT_BOX", "ID_CODEX_IMPORT_BOX", "ID_CODEX_EXPORT_FIRST_FILES", "ID_CODEX_RENAME_FIRST", "HandleCodexProfileAction", "PrepareCodexProfileActionOptions", "PromptCodexBoxPassword", "PromptCodexBoxConflictPolicy", "PromptCodexProfileDisplayName", "PromptText", "PickCodexBoxSavePath", "PickCodexBoxOpenPath", "PickFolderPath", "TrimWide", "ContainsControlCharacter", "SecureClearWideString", "ConfirmCodexProfileWrite", "MB_YESNO", "MB_DEFBUTTON2", "SwitchModule", "Codex Profiles", "Export first profile files...", "Rename first profile...", "CodexProfileUiAction::ExportFirstProfileFiles", "CodexProfileUiAction::RenameFirstProfile", "options->output_directory", "options->new_display_name", "options->box_conflict_policy", "120 characters", "control characters", "0x9F", "FRP Tunnel (pending)") },
-        @{ Name = "modal-dialogs"; Source = $modalDialogs; Tokens = @("PromptPassword", "PromptText", "PickFolderPath", "ChooseCodexBoxConflictPolicy", "SecureClearWideString", "GetSaveFileNameW", "GetOpenFileNameW", "SHBrowseForFolderW", "SHGetPathFromIDListW", "CoInitializeEx", "COINIT_APARTMENTTHREADED", "CoTaskMemFree", "CoUninitialize", "OFN_OVERWRITEPROMPT", "OFN_FILEMUSTEXIST", "ES_PASSWORD", "EM_SETPASSWORDCHAR", "EnableWindow", "Codex profile package (*.codexbox)") },
+        @{ Name = "main-window-nav"; Source = $mainWindow; Tokens = @("ID_NAV_CODEX_PROFILES", "ID_CODEX_REFRESH", "ID_CODEX_DIFF_FIRST", "ID_CODEX_BACKUP_CURRENT", "ID_CODEX_APPLY_FIRST", "ID_CODEX_IMPORT_CURRENT", "ID_CODEX_RESTORE_BACKUP", "ID_CODEX_EXPORT_BOX", "ID_CODEX_IMPORT_BOX", "ID_CODEX_EXPORT_FIRST_FILES", "ID_CODEX_RENAME_FIRST", "HandleCodexProfileAction", "PrepareCodexProfileActionOptions", "PromptCodexProfileTarget", "ChooseCodexProfileDisplayName", "PromptCodexBoxPassword", "PromptCodexBoxConflictPolicy", "PromptCodexProfileDisplayName", "PromptText", "PickCodexBoxSavePath", "PickCodexBoxOpenPath", "PickFolderPath", "TrimWide", "ContainsControlCharacter", "SecureClearWideString", "ConfirmCodexProfileWrite", "MB_YESNO", "MB_DEFBUTTON2", "SwitchModule", "Codex Profiles", "Diff profile", "Apply profile...", "Export profile files...", "Rename profile...", "Edit profile note...", "CodexProfileUiAction::ExportFirstProfileFiles", "CodexProfileUiAction::RenameFirstProfile", "options->target_display_name", "options->output_directory", "options->new_display_name", "options->box_conflict_policy", "120 characters", "control characters", "0x9F", "FRP Tunnel (pending)") },
+        @{ Name = "modal-dialogs"; Source = $modalDialogs; Tokens = @("PromptPassword", "PromptText", "PickFolderPath", "ChooseCodexBoxConflictPolicy", "ChooseCodexProfileDisplayName", "SecureClearWideString", "GetSaveFileNameW", "GetOpenFileNameW", "SHBrowseForFolderW", "SHGetPathFromIDListW", "CoInitializeEx", "COINIT_APARTMENTTHREADED", "CoTaskMemFree", "CoUninitialize", "OFN_OVERWRITEPROMPT", "OFN_FILEMUSTEXIST", "ES_PASSWORD", "EM_SETPASSWORDCHAR", "EnableWindow", "Codex profile package (*.codexbox)", "Choose Codex profile", "LISTBOX", "LB_ADDSTRING", "LB_GETCURSEL") },
         @{ Name = "renderer-contract"; Source = $rendererHeader; Tokens = @("ModuleInfo") },
-        @{ Name = "codex-profile-scaffold"; Source = $modules; Tokens = @("LOCALAPPDATA", "USERPROFILE", "profiles.json", "active.json", "Backups", "config.toml", "auth.json", "UnprotectBase64ToUtf8", "ExtractJsonStringValues", "ExtractJsonObjectArray", "ReadHexCodeUnit", "AppendUtf8CodePoint", "ActiveDisplayName", "active profile", "Switch backup directory", "explicit menu actions", ".codexbox", "DisplayName", "Status", "LastImportedAt", "first_profile_display_name", "CodexProfileUiAction", "RunUiAction", "DiffFirstProfile", "BackupCurrentFolder", "ApplyFirstProfile", "ImportCurrentFolder", "RestoreLatestBackup", "ExportBox", "ImportBox", "ExportFirstProfileFiles", "RenameFirstProfile", "std::wstring output_directory", "std::wstring new_display_name", "options.output_directory", "options.new_display_name", "options.box_conflict_policy", "request.output_directory", "request.update_display_name", "request.new_display_name", "request.active_json_path", "request.active_display_name", "request.conflict_policy = options.box_conflict_policy", "SameDirectoryPath(options.output_directory, probe.paths.codex_home)", "Active profile marker updated", "CodexProfileExportService", "CodexProfileEditService", "ExportProfileByDisplayName", "UpdateProfileMetadata", "without exposing embedded auth/config secrets") }
+        @{ Name = "codex-profile-scaffold"; Source = $modules; Tokens = @("LOCALAPPDATA", "USERPROFILE", "profiles.json", "active.json", "Backups", "config.toml", "auth.json", "UnprotectBase64ToUtf8", "ExtractJsonStringValues", "ExtractJsonObjectArray", "ReadHexCodeUnit", "AppendUtf8CodePoint", "ActiveDisplayName", "active profile", "Switch backup directory", "explicit menu actions", ".codexbox", "DisplayName", "Status", "LastImportedAt", "first_profile_display_name", "profile_display_names", "CodexProfileUiAction", "RunUiAction", "DiffFirstProfile", "BackupCurrentFolder", "ApplyFirstProfile", "ImportCurrentFolder", "RestoreLatestBackup", "ExportBox", "ImportBox", "ExportFirstProfileFiles", "RenameFirstProfile", "std::wstring target_display_name", "std::wstring output_directory", "std::wstring new_display_name", "options.target_display_name", "options.output_directory", "options.new_display_name", "options.box_conflict_policy", "SelectedProfileTarget", "request.output_directory", "request.update_display_name", "request.new_display_name", "request.active_json_path", "request.active_display_name", "request.conflict_policy = options.box_conflict_policy", "SameDirectoryPath(options.output_directory, probe.paths.codex_home)", "Active profile marker updated", "CodexProfileExportService", "CodexProfileEditService", "ExportProfileByDisplayName", "UpdateProfileMetadata", "without exposing embedded auth/config secrets") }
     )
     foreach ($group in $requiredTokens) {
         foreach ($token in $group.Tokens) {

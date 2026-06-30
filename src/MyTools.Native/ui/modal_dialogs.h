@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 #include <windows.h>
 
@@ -24,5 +25,8 @@ bool PickCodexBoxSavePath(HWND owner, std::wstring* path);
 bool PickCodexBoxOpenPath(HWND owner, std::wstring* path);
 bool PickFolderPath(HWND owner, const std::wstring& title, std::wstring* path);
 bool ChooseCodexBoxConflictPolicy(HWND owner, CodexProfileBoxConflictPolicy* policy);
+bool ChooseCodexProfileDisplayName(HWND owner,
+                                   const std::vector<std::wstring>& display_names,
+                                   std::wstring* display_name);
 
 }  // namespace mytools

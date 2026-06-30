@@ -30,6 +30,7 @@ struct CodexProfileProbe {
     std::wstring active_display_name;
     std::wstring first_profile_display_name;
     std::wstring summary_error;
+    std::vector<std::wstring> profile_display_names;
     std::vector<std::wstring> profile_summaries;
 };
 
@@ -50,6 +51,7 @@ enum class CodexProfileUiAction {
 };
 
 struct CodexProfileActionOptions {
+    std::wstring target_display_name;
     std::wstring box_path;
     std::wstring output_directory;
     std::wstring new_display_name;

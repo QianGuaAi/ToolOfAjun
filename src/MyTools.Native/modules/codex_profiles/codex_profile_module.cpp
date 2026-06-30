@@ -448,9 +448,10 @@ bool SameDisplayName(const std::wstring& left, const std::wstring& right) {
            CompareStringOrdinal(left.c_str(), -1, right.c_str(), -1, TRUE) == CSTR_EQUAL;
 }
 
-bool FirstProfileTarget(const CodexProfileProbe& probe,
-                        std::wstring* target,
-                        std::wstring* error_message) {
+bool SelectedProfileTarget(const CodexProfileProbe& probe,
+                           const std::wstring& requested_target,
+                           std::wstring* target,
+                           std::wstring* error_message) {
     if (target == nullptr) {
         return false;
     }
@@ -461,13 +462,32 @@ bool FirstProfileTarget(const CodexProfileProbe& probe,
         return false;
     }
     if (!probe.profiles_summary_loaded || probe.profile_count == 0 ||
-        probe.first_profile_display_name.empty()) {
+        probe.profile_display_names.empty()) {
         if (error_message != nullptr) {
             *error_message = L"No readable Codex profile is available for this explicit menu action.";
         }
         return false;
     }
-    *target = probe.first_profile_display_name;
+    if (requested_target.empty()) {
+        if (error_message != nullptr) {
+            *error_message = L"No Codex profile was selected for this explicit menu action.";
+        }
+        return false;
+    }
+    const auto found = std::find_if(
+        probe.profile_display_names.begin(),
+        probe.profile_display_names.end(),
+        [&requested_target](const std::wstring& candidate) {
+            return SameDisplayName(candidate, requested_target);
+        });
+    if (found == probe.profile_display_names.end()) {
+        if (error_message != nullptr) {
+            *error_message =
+                L"The selected Codex profile is no longer available. Refresh summaries and choose again.";
+        }
+        return false;
+    }
+    *target = *found;
     return true;
 }
 
@@ -496,8 +516,9 @@ ModuleInfo CodexProfileModule::BuildModuleInfo() const {
         L"first explicit action target: " +
             (probe.first_profile_display_name.empty() ? std::wstring(L"[not available]")
                                                       : probe.first_profile_display_name),
+        L"selectable profile targets: " + std::to_wstring(probe.profile_display_names.size()),
         L"Switch backup directory: " + probe.paths.backups_dir,
-        L"explicit menu actions: refresh, diff first profile, backup current folder, import current folder, apply first profile, restore latest backup, export first profile files, rename/edit first profile metadata, .codexbox import/export",
+        L"explicit menu actions: refresh, choose profile for diff/apply/export/metadata edits, backup current folder, import current folder, restore latest backup, .codexbox import/export",
         L"Current Codex config: " + probe.paths.config_toml,
         StateLine(L"config.toml exists", probe.config_toml_exists),
         StateLine(L"auth.json exists", probe.auth_json_exists),
@@ -553,9 +574,10 @@ CodexProfileActionResult CodexProfileModule::RunUiAction(
         }
 
         case CodexProfileUiAction::DiffFirstProfile: {
-            action_result.title = L"Codex first profile diff";
+            action_result.title = L"Codex profile diff";
             std::wstring target;
-            if (!FirstProfileTarget(probe, &target, &action_result.message)) {
+            if (!SelectedProfileTarget(
+                    probe, options.target_display_name, &target, &action_result.message)) {
                 break;
             }
 
@@ -605,11 +627,12 @@ CodexProfileActionResult CodexProfileModule::RunUiAction(
         }
 
         case CodexProfileUiAction::ApplyFirstProfile: {
-            action_result.title = L"Codex first profile applied";
+            action_result.title = L"Codex profile applied";
             action_result.sensitive_write = true;
 
             std::wstring target;
-            if (!FirstProfileTarget(probe, &target, &action_result.message)) {
+            if (!SelectedProfileTarget(
+                    probe, options.target_display_name, &target, &action_result.message)) {
                 break;
             }
 
@@ -690,11 +713,12 @@ CodexProfileActionResult CodexProfileModule::RunUiAction(
         }
 
         case CodexProfileUiAction::ExportFirstProfileFiles: {
-            action_result.title = L"Codex first profile files exported";
+            action_result.title = L"Codex profile files exported";
             action_result.sensitive_write = true;
 
             std::wstring target;
-            if (!FirstProfileTarget(probe, &target, &action_result.message)) {
+            if (!SelectedProfileTarget(
+                    probe, options.target_display_name, &target, &action_result.message)) {
                 break;
             }
             if (SameDirectoryPath(options.output_directory, probe.paths.codex_home)) {
@@ -724,15 +748,16 @@ CodexProfileActionResult CodexProfileModule::RunUiAction(
         }
 
         case CodexProfileUiAction::RenameFirstProfile: {
-            action_result.title = L"Codex first profile renamed";
+            action_result.title = L"Codex profile renamed";
             action_result.sensitive_write = true;
 
             std::wstring target;
-            if (!FirstProfileTarget(probe, &target, &action_result.message)) {
+            if (!SelectedProfileTarget(
+                    probe, options.target_display_name, &target, &action_result.message)) {
                 break;
             }
             if (SameDisplayName(target, options.new_display_name)) {
-                action_result.message = L"The new display name matches the current first profile name.";
+                action_result.message = L"The new display name matches the selected profile name.";
                 break;
             }
 
@@ -767,11 +792,12 @@ CodexProfileActionResult CodexProfileModule::RunUiAction(
         case CodexProfileUiAction::EditFirstProfileNote:
         case CodexProfileUiAction::EditFirstProfileRemark:
         case CodexProfileUiAction::EditFirstProfileTags: {
-            action_result.title = L"Codex first profile metadata updated";
+            action_result.title = L"Codex profile metadata updated";
             action_result.sensitive_write = true;
 
             std::wstring target;
-            if (!FirstProfileTarget(probe, &target, &action_result.message)) {
+            if (!SelectedProfileTarget(
+                    probe, options.target_display_name, &target, &action_result.message)) {
                 break;
             }
 
@@ -923,23 +949,28 @@ void CodexProfileModule::LoadProfileSummaries(CodexProfileProbe* probe) const {
     probe->profiles_summary_loaded = true;
     probe->profile_count = profile_objects.size();
     const size_t display_count = std::min<size_t>(profile_objects.size(), 5);
-    for (size_t index = 0; index < display_count; ++index) {
+    for (size_t index = 0; index < profile_objects.size(); ++index) {
         std::string name = ExtractFirstJsonStringValue(profile_objects[index], "DisplayName");
         if (name.empty()) {
             name = ExtractFirstJsonStringValue(profile_objects[index], "Name");
         }
+        const std::wstring wide_name = Utf8ToWide(name);
         if (probe->first_profile_display_name.empty()) {
-            const std::wstring wide_name = Utf8ToWide(name);
             if (!wide_name.empty()) {
                 probe->first_profile_display_name = wide_name;
             }
         }
-        probe->profile_summaries.push_back(
-            SummaryLine(index,
-                        name,
-                        ExtractFirstJsonStringValue(profile_objects[index], "Status"),
-                        ExtractFirstJsonStringValue(profile_objects[index], "LastImportedAt"),
-                        probe->active_display_name));
+        if (!wide_name.empty()) {
+            probe->profile_display_names.push_back(wide_name);
+        }
+        if (index < display_count) {
+            probe->profile_summaries.push_back(
+                SummaryLine(index,
+                            name,
+                            ExtractFirstJsonStringValue(profile_objects[index], "Status"),
+                            ExtractFirstJsonStringValue(profile_objects[index], "LastImportedAt"),
+                            probe->active_display_name));
+        }
     }
     if (profile_objects.size() > display_count) {
         probe->profile_summaries.push_back(L"additional profiles hidden in summary view.");

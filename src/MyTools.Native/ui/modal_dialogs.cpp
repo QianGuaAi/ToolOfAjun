@@ -11,7 +11,9 @@ namespace {
 
 constexpr wchar_t kPasswordDialogClass[] = L"AJunToolsNativePasswordDialog";
 constexpr wchar_t kConflictDialogClass[] = L"AJunToolsNativeConflictDialog";
+constexpr wchar_t kProfilePickerDialogClass[] = L"AJunToolsNativeProfilePickerDialog";
 constexpr int kEditId = 1001;
+constexpr int kProfileListId = 1002;
 constexpr int kButtonOkId = IDOK;
 constexpr int kButtonCancelId = IDCANCEL;
 constexpr int kButtonRenameId = 2001;
@@ -33,6 +35,15 @@ struct ConflictDialogState {
     HWND owner = nullptr;
     HWND window = nullptr;
     CodexProfileBoxConflictPolicy selected = CodexProfileBoxConflictPolicy::Rename;
+    bool accepted = false;
+};
+
+struct ProfilePickerDialogState {
+    HWND owner = nullptr;
+    HWND window = nullptr;
+    HWND list = nullptr;
+    std::vector<std::wstring> display_names;
+    std::wstring selected_display_name;
     bool accepted = false;
 };
 
@@ -301,6 +312,135 @@ LRESULT CALLBACK ConflictDialogProc(HWND window, UINT message, WPARAM wparam, LP
     return DefWindowProcW(window, message, wparam, lparam);
 }
 
+void FinishProfilePickerDialog(HWND window, bool accepted) {
+    auto* state =
+        reinterpret_cast<ProfilePickerDialogState*>(GetWindowLongPtrW(window, GWLP_USERDATA));
+    if (state != nullptr) {
+        state->accepted = false;
+        state->selected_display_name.clear();
+        if (accepted && state->list != nullptr) {
+            const LRESULT selected = SendMessageW(state->list, LB_GETCURSEL, 0, 0);
+            if (selected != LB_ERR) {
+                const auto index = static_cast<size_t>(selected);
+                if (index < state->display_names.size()) {
+                    state->selected_display_name = state->display_names[index];
+                    state->accepted = true;
+                }
+            }
+        }
+    }
+    DestroyWindow(window);
+}
+
+LRESULT CALLBACK ProfilePickerDialogProc(HWND window,
+                                         UINT message,
+                                         WPARAM wparam,
+                                         LPARAM lparam) {
+    auto* state =
+        reinterpret_cast<ProfilePickerDialogState*>(GetWindowLongPtrW(window, GWLP_USERDATA));
+    switch (message) {
+        case WM_CREATE: {
+            auto* create = reinterpret_cast<CREATESTRUCTW*>(lparam);
+            state = static_cast<ProfilePickerDialogState*>(create->lpCreateParams);
+            SetWindowLongPtrW(window, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(state));
+            state->window = window;
+
+            HWND prompt = CreateWindowExW(
+                0,
+                L"STATIC",
+                L"Choose the Codex profile for this action:",
+                WS_CHILD | WS_VISIBLE,
+                16,
+                16,
+                500,
+                24,
+                window,
+                nullptr,
+                nullptr,
+                nullptr);
+            state->list = CreateWindowExW(WS_EX_CLIENTEDGE,
+                                          L"LISTBOX",
+                                          L"",
+                                          WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_VSCROLL |
+                                              LBS_NOTIFY,
+                                          16,
+                                          46,
+                                          500,
+                                          160,
+                                          window,
+                                          reinterpret_cast<HMENU>(
+                                              static_cast<INT_PTR>(kProfileListId)),
+                                          nullptr,
+                                          nullptr);
+            for (const std::wstring& display_name : state->display_names) {
+                SendMessageW(state->list,
+                             LB_ADDSTRING,
+                             0,
+                             reinterpret_cast<LPARAM>(display_name.c_str()));
+            }
+            if (!state->display_names.empty()) {
+                SendMessageW(state->list, LB_SETCURSEL, 0, 0);
+            }
+
+            HWND ok = CreateWindowExW(0,
+                                      L"BUTTON",
+                                      L"OK",
+                                      WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON,
+                                      330,
+                                      224,
+                                      86,
+                                      28,
+                                      window,
+                                      reinterpret_cast<HMENU>(static_cast<INT_PTR>(kButtonOkId)),
+                                      nullptr,
+                                      nullptr);
+            HWND cancel = CreateWindowExW(0,
+                                          L"BUTTON",
+                                          L"Cancel",
+                                          WS_CHILD | WS_VISIBLE | WS_TABSTOP,
+                                          430,
+                                          224,
+                                          86,
+                                          28,
+                                          window,
+                                          reinterpret_cast<HMENU>(
+                                              static_cast<INT_PTR>(kButtonCancelId)),
+                                          nullptr,
+                                          nullptr);
+            ApplyDefaultFont(prompt);
+            ApplyDefaultFont(state->list);
+            ApplyDefaultFont(ok);
+            ApplyDefaultFont(cancel);
+            SetFocus(state->list);
+            return 0;
+        }
+
+        case WM_COMMAND:
+            if (LOWORD(wparam) == kButtonOkId) {
+                FinishProfilePickerDialog(window, true);
+                return 0;
+            }
+            if (LOWORD(wparam) == kButtonCancelId) {
+                FinishProfilePickerDialog(window, false);
+                return 0;
+            }
+            if (LOWORD(wparam) == kProfileListId && HIWORD(wparam) == LBN_DBLCLK) {
+                FinishProfilePickerDialog(window, true);
+                return 0;
+            }
+            break;
+
+        case WM_CLOSE:
+            FinishProfilePickerDialog(window, false);
+            return 0;
+
+        case WM_DESTROY:
+            SetWindowLongPtrW(window, GWLP_USERDATA, 0);
+            return 0;
+    }
+    return DefWindowProcW(window, message, wparam, lparam);
+}
+
 bool EnsurePasswordDialogClass(HINSTANCE instance) {
     WNDCLASSEXW wc{};
     wc.cbSize = sizeof(wc);
@@ -321,6 +461,20 @@ bool EnsureConflictDialogClass(HINSTANCE instance) {
     wc.lpfnWndProc = ConflictDialogProc;
     wc.hInstance = instance;
     wc.lpszClassName = kConflictDialogClass;
+    wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+    wc.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1);
+    if (RegisterClassExW(&wc) != 0 || GetLastError() == ERROR_CLASS_ALREADY_EXISTS) {
+        return true;
+    }
+    return false;
+}
+
+bool EnsureProfilePickerDialogClass(HINSTANCE instance) {
+    WNDCLASSEXW wc{};
+    wc.cbSize = sizeof(wc);
+    wc.lpfnWndProc = ProfilePickerDialogProc;
+    wc.hInstance = instance;
+    wc.lpszClassName = kProfilePickerDialogClass;
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     wc.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1);
     if (RegisterClassExW(&wc) != 0 || GetLastError() == ERROR_CLASS_ALREADY_EXISTS) {
@@ -473,6 +627,77 @@ bool RunConflictDialog(HWND owner, CodexProfileBoxConflictPolicy* policy) {
     return true;
 }
 
+bool RunProfilePickerDialog(HWND owner,
+                            const std::vector<std::wstring>& display_names,
+                            std::wstring* display_name) {
+    if (display_name == nullptr || display_names.empty()) {
+        return false;
+    }
+    display_name->clear();
+
+    HINSTANCE instance = GetModuleHandleW(nullptr);
+    if (!EnsureProfilePickerDialogClass(instance)) {
+        return false;
+    }
+
+    ProfilePickerDialogState state;
+    state.owner = owner;
+    state.display_names = display_names;
+
+    RECT rect{0, 0, 548, 292};
+    AdjustWindowRectEx(&rect, WS_POPUP | WS_CAPTION | WS_SYSMENU, FALSE, WS_EX_DLGMODALFRAME);
+    HWND dialog = CreateWindowExW(WS_EX_DLGMODALFRAME | WS_EX_CONTROLPARENT,
+                                  kProfilePickerDialogClass,
+                                  L"Choose Codex profile",
+                                  WS_POPUP | WS_CAPTION | WS_SYSMENU,
+                                  CW_USEDEFAULT,
+                                  CW_USEDEFAULT,
+                                  rect.right - rect.left,
+                                  rect.bottom - rect.top,
+                                  owner,
+                                  nullptr,
+                                  instance,
+                                  &state);
+    if (dialog == nullptr) {
+        return false;
+    }
+
+    CenterWindow(dialog, owner);
+    if (owner != nullptr && IsWindow(owner)) {
+        EnableWindow(owner, FALSE);
+    }
+    ShowWindow(dialog, SW_SHOW);
+    UpdateWindow(dialog);
+
+    MSG message{};
+    while (IsWindow(dialog)) {
+        const BOOL get_result = GetMessageW(&message, nullptr, 0, 0);
+        if (get_result == -1) {
+            break;
+        }
+        if (get_result == 0) {
+            PostQuitMessage(static_cast<int>(message.wParam));
+            break;
+        }
+        if (!IsDialogMessageW(dialog, &message)) {
+            TranslateMessage(&message);
+            DispatchMessageW(&message);
+        }
+    }
+
+    if (owner != nullptr && IsWindow(owner)) {
+        EnableWindow(owner, TRUE);
+        SetForegroundWindow(owner);
+    }
+
+    if (!state.accepted || state.selected_display_name.empty()) {
+        return false;
+    }
+
+    *display_name = state.selected_display_name;
+    return true;
+}
+
 bool PickCodexBoxPath(HWND owner, bool save, std::wstring* path) {
     if (path == nullptr) {
         return false;
@@ -572,6 +797,12 @@ bool PickFolderPath(HWND owner, const std::wstring& title, std::wstring* path) {
 
 bool ChooseCodexBoxConflictPolicy(HWND owner, CodexProfileBoxConflictPolicy* policy) {
     return RunConflictDialog(owner, policy);
+}
+
+bool ChooseCodexProfileDisplayName(HWND owner,
+                                   const std::vector<std::wstring>& display_names,
+                                   std::wstring* display_name) {
+    return RunProfilePickerDialog(owner, display_names, display_name);
 }
 
 }  // namespace mytools

@@ -54,6 +54,21 @@ bool ContainsControlCharacter(const std::wstring& value) {
     return false;
 }
 
+bool RequiresCodexProfileTarget(CodexProfileUiAction action) {
+    switch (action) {
+        case CodexProfileUiAction::DiffFirstProfile:
+        case CodexProfileUiAction::ApplyFirstProfile:
+        case CodexProfileUiAction::ExportFirstProfileFiles:
+        case CodexProfileUiAction::RenameFirstProfile:
+        case CodexProfileUiAction::EditFirstProfileNote:
+        case CodexProfileUiAction::EditFirstProfileRemark:
+        case CodexProfileUiAction::EditFirstProfileTags:
+            return true;
+        default:
+            return false;
+    }
+}
+
 }  // namespace
 
 MainWindow::MainWindow(const AppContext& context, Logger* logger)
@@ -277,18 +292,18 @@ void MainWindow::CreateMenuBar() {
     AppendMenuW(codex_menu, MF_STRING, ID_NAV_CODEX_PROFILES, L"Open overview");
     AppendMenuW(codex_menu, MF_STRING, ID_CODEX_REFRESH, L"Refresh summaries");
     AppendMenuW(codex_menu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(codex_menu, MF_STRING, ID_CODEX_DIFF_FIRST, L"Diff first profile");
+    AppendMenuW(codex_menu, MF_STRING, ID_CODEX_DIFF_FIRST, L"Diff profile");
     AppendMenuW(codex_menu, MF_STRING, ID_CODEX_BACKUP_CURRENT, L"Backup current .codex folder");
     AppendMenuW(codex_menu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(codex_menu, MF_STRING, ID_CODEX_APPLY_FIRST, L"Apply first profile...");
+    AppendMenuW(codex_menu, MF_STRING, ID_CODEX_APPLY_FIRST, L"Apply profile...");
     AppendMenuW(codex_menu, MF_STRING, ID_CODEX_IMPORT_CURRENT, L"Import current folder...");
     AppendMenuW(codex_menu, MF_STRING, ID_CODEX_RESTORE_BACKUP, L"Restore latest backup...");
     AppendMenuW(codex_menu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(codex_menu, MF_STRING, ID_CODEX_EXPORT_FIRST_FILES, L"Export first profile files...");
-    AppendMenuW(codex_menu, MF_STRING, ID_CODEX_RENAME_FIRST, L"Rename first profile...");
-    AppendMenuW(codex_menu, MF_STRING, ID_CODEX_EDIT_FIRST_NOTE, L"Edit first profile note...");
-    AppendMenuW(codex_menu, MF_STRING, ID_CODEX_EDIT_FIRST_REMARK, L"Edit first profile remark...");
-    AppendMenuW(codex_menu, MF_STRING, ID_CODEX_EDIT_FIRST_TAGS, L"Edit first profile tags...");
+    AppendMenuW(codex_menu, MF_STRING, ID_CODEX_EXPORT_FIRST_FILES, L"Export profile files...");
+    AppendMenuW(codex_menu, MF_STRING, ID_CODEX_RENAME_FIRST, L"Rename profile...");
+    AppendMenuW(codex_menu, MF_STRING, ID_CODEX_EDIT_FIRST_NOTE, L"Edit profile note...");
+    AppendMenuW(codex_menu, MF_STRING, ID_CODEX_EDIT_FIRST_REMARK, L"Edit profile remark...");
+    AppendMenuW(codex_menu, MF_STRING, ID_CODEX_EDIT_FIRST_TAGS, L"Edit profile tags...");
     AppendMenuW(codex_menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(codex_menu, MF_STRING, ID_CODEX_EXPORT_BOX, L"Export .codexbox...");
     AppendMenuW(codex_menu, MF_STRING, ID_CODEX_IMPORT_BOX, L"Import .codexbox...");
@@ -354,6 +369,10 @@ bool MainWindow::PrepareCodexProfileActionOptions(CodexProfileUiAction action,
     *options = CodexProfileActionOptions{};
 
     switch (action) {
+        case CodexProfileUiAction::DiffFirstProfile:
+        case CodexProfileUiAction::ApplyFirstProfile:
+            return PromptCodexProfileTarget(action, options);
+
         case CodexProfileUiAction::ExportBox:
             if (!PickCodexBoxSavePath(window_, &options->box_path)) {
                 return false;
@@ -370,25 +389,66 @@ bool MainWindow::PrepareCodexProfileActionOptions(CodexProfileUiAction action,
             return PromptCodexBoxPassword(action, &options->password);
 
         case CodexProfileUiAction::ExportFirstProfileFiles:
+            if (!PromptCodexProfileTarget(action, options)) {
+                return false;
+            }
             return PickFolderPath(window_,
                                   L"Select a folder for config.toml and auth.json export",
                                   &options->output_directory);
 
         case CodexProfileUiAction::RenameFirstProfile:
+            if (!PromptCodexProfileTarget(action, options)) {
+                return false;
+            }
             return PromptCodexProfileDisplayName(&options->new_display_name);
 
         case CodexProfileUiAction::EditFirstProfileNote:
+            if (!PromptCodexProfileTarget(action, options)) {
+                return false;
+            }
             return PromptCodexProfileMetadataText(action, &options->note);
 
         case CodexProfileUiAction::EditFirstProfileRemark:
+            if (!PromptCodexProfileTarget(action, options)) {
+                return false;
+            }
             return PromptCodexProfileMetadataText(action, &options->remark);
 
         case CodexProfileUiAction::EditFirstProfileTags:
+            if (!PromptCodexProfileTarget(action, options)) {
+                return false;
+            }
             return PromptCodexProfileMetadataText(action, &options->tags);
 
         default:
             return true;
     }
+}
+
+bool MainWindow::PromptCodexProfileTarget(CodexProfileUiAction action,
+                                          CodexProfileActionOptions* options) const {
+    if (options == nullptr || !RequiresCodexProfileTarget(action)) {
+        return false;
+    }
+
+    const CodexProfileProbe probe = codex_profiles_.ProbeLocalState();
+    if (!probe.summary_error.empty()) {
+        MessageBoxW(window_,
+                    probe.summary_error.c_str(),
+                    L"Codex Profiles",
+                    MB_OK | MB_ICONWARNING);
+        return false;
+    }
+    if (probe.profile_display_names.empty()) {
+        MessageBoxW(window_,
+                    L"No readable Codex profiles are available. Refresh summaries after importing or creating a profile.",
+                    L"Codex Profiles",
+                    MB_OK | MB_ICONWARNING);
+        return false;
+    }
+
+    return ChooseCodexProfileDisplayName(
+        window_, probe.profile_display_names, &options->target_display_name);
 }
 
 bool MainWindow::PromptCodexBoxPassword(CodexProfileUiAction action, std::wstring* password) const {
@@ -462,8 +522,8 @@ bool MainWindow::PromptCodexProfileDisplayName(std::wstring* display_name) const
 
     std::wstring raw_display_name;
     const bool ok = PromptText(window_,
-                               L"Rename first Codex profile",
-                               L"Enter the new display name for the first readable profile:",
+                               L"Rename Codex profile",
+                               L"Enter the new display name for the selected profile:",
                                &raw_display_name);
     if (!ok) {
         return false;
@@ -500,18 +560,18 @@ bool MainWindow::PromptCodexProfileMetadataText(CodexProfileUiAction action,
     size_t max_length = 500;
     switch (action) {
         case CodexProfileUiAction::EditFirstProfileNote:
-            title = L"Edit first profile note";
-            prompt = L"Enter note text for the first readable profile. Leave empty to clear it:";
+            title = L"Edit profile note";
+            prompt = L"Enter note text for the selected profile. Leave empty to clear it:";
             max_length = 500;
             break;
         case CodexProfileUiAction::EditFirstProfileRemark:
-            title = L"Edit first profile remark";
-            prompt = L"Enter remark text for the first readable profile. Leave empty to clear it:";
+            title = L"Edit profile remark";
+            prompt = L"Enter remark text for the selected profile. Leave empty to clear it:";
             max_length = 500;
             break;
         case CodexProfileUiAction::EditFirstProfileTags:
-            title = L"Edit first profile tags";
-            prompt = L"Enter tags for the first readable profile. Leave empty to clear them:";
+            title = L"Edit profile tags";
+            prompt = L"Enter tags for the selected profile. Leave empty to clear them:";
             max_length = 200;
             break;
         default:
@@ -541,7 +601,7 @@ bool MainWindow::ConfirmCodexProfileWrite(CodexProfileUiAction action) const {
     switch (action) {
         case CodexProfileUiAction::ApplyFirstProfile:
             message =
-                L"This will back up the current .codex folder, then overwrite config.toml and auth.json with the first readable profile. Continue?";
+                L"This will back up the current .codex folder, then overwrite config.toml and auth.json with a profile you choose. Continue?";
             break;
         case CodexProfileUiAction::ImportCurrentFolder:
             message =
@@ -553,23 +613,23 @@ bool MainWindow::ConfirmCodexProfileWrite(CodexProfileUiAction action) const {
             break;
         case CodexProfileUiAction::ExportFirstProfileFiles:
             message =
-                L"This will decrypt the first readable Codex profile in memory and export config.toml/auth.json to a folder you choose. Continue?";
+                L"This will decrypt a Codex profile you choose in memory and export config.toml/auth.json to a folder you choose. Continue?";
             break;
         case CodexProfileUiAction::RenameFirstProfile:
             message =
-                L"This will update the display name of the first readable Codex profile in the local DPAPI-protected library. Continue?";
+                L"This will update the display name of a Codex profile you choose in the local DPAPI-protected library. Continue?";
             break;
         case CodexProfileUiAction::EditFirstProfileNote:
             message =
-                L"This will update the note of the first readable Codex profile in the local DPAPI-protected library. Continue?";
+                L"This will update the note of a Codex profile you choose in the local DPAPI-protected library. Continue?";
             break;
         case CodexProfileUiAction::EditFirstProfileRemark:
             message =
-                L"This will update the remark of the first readable Codex profile in the local DPAPI-protected library. Continue?";
+                L"This will update the remark of a Codex profile you choose in the local DPAPI-protected library. Continue?";
             break;
         case CodexProfileUiAction::EditFirstProfileTags:
             message =
-                L"This will update the tags of the first readable Codex profile in the local DPAPI-protected library. Continue?";
+                L"This will update the tags of a Codex profile you choose in the local DPAPI-protected library. Continue?";
             break;
         case CodexProfileUiAction::ExportBox:
             message =

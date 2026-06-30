@@ -31,6 +31,8 @@ private:
     void HandleCodexProfileAction(CodexProfileUiAction action);
     bool PrepareCodexProfileActionOptions(CodexProfileUiAction action,
                                           CodexProfileActionOptions* options) const;
+    bool PromptCodexProfileTarget(CodexProfileUiAction action,
+                                  CodexProfileActionOptions* options) const;
     bool PromptCodexBoxPassword(CodexProfileUiAction action, std::wstring* password) const;
     bool PromptCodexBoxConflictPolicy(CodexProfileBoxConflictPolicy* policy) const;
     bool PromptCodexProfileDisplayName(std::wstring* display_name) const;

@@ -1,4 +1,10 @@
 # 开发记录
+## [2026-06-30] Native Codex .codexbox 导入冲突策略选择收口
+- Native Codex Profiles 的 `Import .codexbox...` 已从固定自动重命名收口为导入前显式选择同名冲突策略：主窗口先确认、选择 `.codexbox` 文件，再弹出 Rename / Skip / Replace 三按钮策略框，用户取消策略选择时不会继续导入。
+- 主窗口只收集冲突策略、路径和密码，并通过 `CodexProfileModule::RunUiAction()` 传递 `box_conflict_policy`；`CodexProfileBoxService::ImportBox()` 负责执行 Rename / Skip / Replace 并保留 renamed/skipped/replaced 统计，UI 不直接处理 `CDXB`、PBKDF2、AES-CBC、HMAC 或档案库写入。
+- 同步状态已记录到 `docs\功能说明.md`、`docs\程序逻辑.md`、`docs\场景驱动开发\控件交互逻辑说明.md` 和 `src\MyTools.Native\README.md`；开发记录中较早的“自动重命名 / 冲突选择弹框待迁移”仅代表当时历史状态。
+- 验证：`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\native-eval.ps1 -Quick` 通过；`powershell -NoProfile -ExecutionPolicy Bypass -File scripts\codex-eval.ps1 -Quick` 通过；`git diff --check` 无格式错误。
+
 ## [2026-06-30] Native Codex active profile 改名同步
 - `Rename first profile...` 不再因目标是当前 active profile 而直接阻断；改名 action 会把 `active_json_path` 与当前 `active_display_name` 传给 `CodexProfileEditService::UpdateProfileMetadata()`。
 - `CodexProfileEditService` 在写回 DPAPI 保护的 `profiles.json` 后，如果目标档案原本是 active profile，会继续通过 `FileSystem::WriteUtf8FileAtomic()` 更新 `active.json` 的 `ActiveDisplayName`，并保留其它字段；若 `active.json` 同步失败，会返回“profiles 已改名但 active.json 未同步”的局部失败提示。
